@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QFrame
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QFrame, QScrollArea, QSizePolicy
 )
 from PySide6.QtCore import Signal, Qt
 from frontend_desktop.views.components.game_grid import GameGrid
@@ -9,22 +9,44 @@ class StatCard(QFrame):
     def __init__(self, title: str, value: str, icon: str = "🎮", parent=None):
         super().__init__(parent)
         self.setProperty("class", "stat-card")
+        self.setFixedHeight(62)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(4)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(10)
 
+        # Ícone em badge compacto
+        icon_box = QFrame()
+        icon_box.setProperty("class", "stat-icon-box")
+        icon_box.setFixedSize(38, 38)
+        icon_layout = QVBoxLayout(icon_box)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon_layout.setAlignment(Qt.AlignCenter)
+        
         icon_label = QLabel(icon)
         icon_label.setProperty("class", "yearbook-icon")
-        layout.addWidget(icon_label)
+        icon_label.setAlignment(Qt.AlignCenter)
+        icon_layout.addWidget(icon_label)
+        
+        layout.addWidget(icon_box)
+
+        # Informações de Valor e Rótulo
+        info_layout = QVBoxLayout()
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(1)
+        info_layout.setAlignment(Qt.AlignVCenter)
 
         self.val_label = QLabel(value)
         self.val_label.setProperty("class", "stat-value")
-        layout.addWidget(self.val_label)
+        info_layout.addWidget(self.val_label)
 
         title_label = QLabel(title)
         title_label.setProperty("class", "stat-label")
-        layout.addWidget(title_label)
+        info_layout.addWidget(title_label)
+
+        layout.addLayout(info_layout)
+        layout.addStretch()
 
     def set_value(self, val: str):
         self.val_label.setText(val)
@@ -34,19 +56,38 @@ class YearbookView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("yearbookView")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.current_year = 2026
         self.init_ui()
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(16)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(12)
 
-        # Cabeçalho do Anuário com Seletor de Ano
+        # Scroll Area geral para a página do Anuário
+        scroll = QScrollArea()
+        scroll.setObjectName("yearbookScrollArea")
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        container = QWidget()
+        container.setObjectName("yearbookScrollContainer")
+        container.setAttribute(Qt.WA_StyledBackground, True)
+        
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(12, 10, 12, 16)
+        container_layout.setSpacing(14)
+        container_layout.setAlignment(Qt.AlignTop)
+
+        # 1. Cabeçalho do Anuário com Seletor de Ano
         header = QHBoxLayout()
-        title = QLabel("📊 Anuário Gamer")
-        title.setProperty("class", "yearbook-title")
-        header.addWidget(title)
+        header.setContentsMargins(4, 0, 4, 0)
+        
+        header_title = QLabel("Resumo do Ano")
+        header_title.setProperty("class", "section-header")
+        header.addWidget(header_title)
 
         header.addStretch()
 
@@ -59,10 +100,11 @@ class YearbookView(QWidget):
         self.year_combo.currentIndexChanged.connect(self.on_year_changed)
         header.addWidget(self.year_combo)
 
-        layout.addLayout(header)
+        container_layout.addLayout(header)
 
-        # Métricas / Stat Cards
+        # 2. Métricas / Stat Cards (Barra compacta com margens laterais)
         stats_layout = QHBoxLayout()
+        stats_layout.setContentsMargins(0, 0, 0, 0)
         stats_layout.setSpacing(12)
 
         self.card_finished = StatCard("Jogos Zerados", "0", "🎮")
@@ -75,17 +117,34 @@ class YearbookView(QWidget):
         stats_layout.addWidget(self.card_hours)
         stats_layout.addWidget(self.card_avg)
 
-        layout.addLayout(stats_layout)
+        container_layout.addLayout(stats_layout)
 
-        # Subtítulo da Lista
-        sub_label = QLabel("Jogos Finalizados no Ano")
-        sub_label.setProperty("class", "yearbook-subtitle")
-        layout.addWidget(sub_label)
+        # 3. Seção Estruturada dos Jogos Finalizados (Sem vácuo vertical)
+        self.games_section = QFrame()
+        self.games_section.setObjectName("yearbookGamesSection")
+        self.games_section.setProperty("class", "game-section-card")
+        self.games_section.setAttribute(Qt.WA_StyledBackground, True)
 
-        # Grid dos Jogos do Ano
+        sec_layout = QVBoxLayout(self.games_section)
+        sec_layout.setContentsMargins(14, 14, 14, 14)
+        sec_layout.setSpacing(12)
+        sec_layout.setAlignment(Qt.AlignTop)
+
+        self.sub_label = QLabel("🏆 Jogos Finalizados")
+        self.sub_label.setProperty("class", "section-header")
+        sec_layout.addWidget(self.sub_label)
+
         self.game_grid = GameGrid()
         self.game_grid.game_selected.connect(self.game_selected.emit)
-        layout.addWidget(self.game_grid)
+        sec_layout.addWidget(self.game_grid)
+
+        container_layout.addWidget(self.games_section)
+
+        # Adiciona stretch ao final para ancorar tudo no topo sem vácuo
+        container_layout.addStretch()
+
+        scroll.setWidget(container)
+        main_layout.addWidget(scroll)
 
     def load_data(self):
         try:
@@ -113,13 +172,18 @@ class YearbookView(QWidget):
     def load_year(self, year: int):
         try:
             summary = api_client.get_yearbook(year)
-            self.card_finished.set_value(str(summary.get("total_games_finished", 0)))
-            self.card_platinums.set_value(str(summary.get("total_platinums", 0)))
-            self.card_hours.set_value(f"{summary.get('total_hours_played', 0)}h")
-            
+            fin_count = summary.get("total_games_finished", 0)
+            plat_count = summary.get("total_platinums", 0)
+            hours_count = summary.get("total_hours_played", 0)
             avg = summary.get("average_score")
-            self.card_avg.set_value(f"{avg}/10" if avg is not None else "N/A")
 
-            self.game_grid.set_games(summary.get("games", []))
+            self.card_finished.set_value(str(fin_count))
+            self.card_platinums.set_value(str(plat_count))
+            self.card_hours.set_value(f"{int(hours_count)}h")
+            self.card_avg.set_value(f"{avg:.1f}/10" if avg is not None else "N/A")
+
+            games = summary.get("games", [])
+            self.sub_label.setText(f"🏆 Jogos Finalizados em {year} ({len(games)} {'jogo' if len(games) == 1 else 'jogos'})")
+            self.game_grid.set_games(games)
         except Exception as e:
             print(f"Erro ao carregar dados do ano {year}:", e)

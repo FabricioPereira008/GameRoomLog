@@ -96,7 +96,7 @@ class Sidebar(QWidget):
         self.button_group.idClicked.connect(self.on_nav_clicked)
 
         # Versão no rodapé
-        version_label = QLabel("v0.0.4 • Linux Native")
+        version_label = QLabel("v0.0.5 • Linux Native")
         version_label.setObjectName("appVersion")
         main_layout.addWidget(version_label)
 

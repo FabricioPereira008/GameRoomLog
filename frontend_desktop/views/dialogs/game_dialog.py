@@ -144,26 +144,32 @@ class GameDialog(QDialog):
         score_layout.addWidget(self.spin_diff)
         form_layout.addRow(make_label("Avaliação:"), score_layout)
 
-        # 9. Datas (Finalização e Platina)
-        dates_layout = QHBoxLayout()
+        # 9. Datas (Finalização e Platina automáticas conforme o Status)
+        self.dates_widget = QWidget()
+        dates_layout = QHBoxLayout(self.dates_widget)
+        dates_layout.setContentsMargins(0, 0, 0, 0)
         dates_layout.setSpacing(8)
-        self.chk_finish_date = QCheckBox("Zerou em:")
+
+        self.lbl_finish_date = QLabel("Zerou em:")
         self.date_finish = QDateEdit(QDate.currentDate())
         self.date_finish.setCalendarPopup(True)
-        self.date_finish.setEnabled(False)
-        self.chk_finish_date.toggled.connect(self.date_finish.setEnabled)
 
-        self.chk_plat_date = QCheckBox("Platinou em:")
+        self.lbl_plat_date = QLabel("Platinou em:")
         self.date_plat = QDateEdit(QDate.currentDate())
         self.date_plat.setCalendarPopup(True)
-        self.date_plat.setEnabled(False)
-        self.chk_plat_date.toggled.connect(self.date_plat.setEnabled)
 
-        dates_layout.addWidget(self.chk_finish_date)
+        dates_layout.addWidget(self.lbl_finish_date)
         dates_layout.addWidget(self.date_finish)
-        dates_layout.addWidget(self.chk_plat_date)
+        dates_layout.addWidget(self.lbl_plat_date)
         dates_layout.addWidget(self.date_plat)
-        form_layout.addRow(make_label("Datas:"), dates_layout)
+        dates_layout.addStretch()
+
+        self.dates_label = make_label("Datas:")
+        form_layout.addRow(self.dates_label, self.dates_widget)
+
+        self.combo_status.currentTextChanged.connect(self.on_status_changed)
+        self.on_status_changed(self.combo_status.currentText())
+
 
         # 10. Tipo de Jogada e Campo Condicional de Rejogada
         play_layout = QHBoxLayout()
@@ -279,6 +285,25 @@ class GameDialog(QDialog):
 
         main_layout.addLayout(btn_box)
 
+    def on_status_changed(self, status: str):
+        if status == "Zerado":
+            self.dates_label.setVisible(True)
+            self.dates_widget.setVisible(True)
+            self.lbl_finish_date.setVisible(True)
+            self.date_finish.setVisible(True)
+            self.lbl_plat_date.setVisible(False)
+            self.date_plat.setVisible(False)
+        elif status == "Platinado":
+            self.dates_label.setVisible(True)
+            self.dates_widget.setVisible(True)
+            self.lbl_finish_date.setVisible(True)
+            self.date_finish.setVisible(True)
+            self.lbl_plat_date.setVisible(True)
+            self.date_plat.setVisible(True)
+        else:
+            self.dates_label.setVisible(False)
+            self.dates_widget.setVisible(False)
+
     def on_play_type_changed(self):
         is_replay = self.combo_play_type.currentText() == "Rejogada"
         self.lbl_play_count.setVisible(is_replay)
@@ -365,13 +390,14 @@ class GameDialog(QDialog):
             fdate = QDate.fromString(self.game_data["finish_date"], "yyyy-MM-dd")
             if fdate.isValid():
                 self.date_finish.setDate(fdate)
-                self.chk_finish_date.setChecked(True)
 
         if self.game_data.get("platinum_date"):
             pdate = QDate.fromString(self.game_data["platinum_date"], "yyyy-MM-dd")
             if pdate.isValid():
                 self.date_plat.setDate(pdate)
-                self.chk_plat_date.setChecked(True)
+
+        self.on_status_changed(self.combo_status.currentText())
+
 
         # Play type e Play count
         play_type = self.game_data.get("play_type", "Primeira Jogada")
@@ -558,17 +584,20 @@ class GameDialog(QDialog):
         genre_id = self.combo_genre.currentData()
         payload["genre_ids"] = [genre_id] if genre_id else []
 
-        if self.chk_finish_date.isChecked():
+        st = self.combo_status.currentText()
+        if st == "Zerado":
             payload["finish_date"] = self.date_finish.date().toString("yyyy-MM-dd")
             payload["completion_year"] = self.date_finish.date().year()
+            payload["platinum_date"] = None
+        elif st == "Platinado":
+            payload["finish_date"] = self.date_finish.date().toString("yyyy-MM-dd")
+            payload["platinum_date"] = self.date_plat.date().toString("yyyy-MM-dd")
+            payload["completion_year"] = (self.date_plat.date() or self.date_finish.date()).year()
         else:
             payload["finish_date"] = None
+            payload["platinum_date"] = None
             payload["completion_year"] = None
 
-        if self.chk_plat_date.isChecked():
-            payload["platinum_date"] = self.date_plat.date().toString("yyyy-MM-dd")
-        else:
-            payload["platinum_date"] = None
 
         try:
             if self.is_edit:

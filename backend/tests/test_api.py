@@ -34,7 +34,7 @@ client = TestClient(app)
 def test_read_root():
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.0.4"
+    assert response.json()["version"] == "0.0.5"
 
 def test_create_and_list_genre_details():
     res = client.post("/api/v1/genres/", json={"name": "RPG", "color": "#E53E3E"})

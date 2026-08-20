@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QScrollArea, QGridLayout, QFrame, QMessageBox, QInputDialog, QColorDialog
+    QScrollArea, QGridLayout, QFrame, QMessageBox, QInputDialog, QColorDialog, QSizePolicy
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
@@ -17,13 +17,14 @@ class ManageItemCard(QFrame):
         self.item_data = item_data
         self.setProperty("class", "manage-card")
         self.setCursor(Qt.PointingHandCursor)
-        self.setFixedWidth(260)
+        self.setMinimumWidth(230)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.init_ui()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
 
         # Cabeçalho do Card
         header = QHBoxLayout()
@@ -162,12 +163,12 @@ class ManagementView(QWidget):
         # Scroll Area com Grid de Cards
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         self.container = QWidget()
         self.grid_layout = QGridLayout(self.container)
-        self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.grid_layout.setSpacing(14)
+        self.grid_layout.setContentsMargins(10, 10, 10, 10)
+        self.grid_layout.setSpacing(16)
         self.grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
 
         scroll.setWidget(self.container)
@@ -203,7 +204,7 @@ class ManagementView(QWidget):
             self.grid_layout.addWidget(empty, 0, 0)
             return
 
-        cols = 3
+        cols = 4
         for idx, itm in enumerate(filtered):
             card = ManageItemCard(self.category_type, itm)
             card.clicked.connect(self.category_selected.emit)

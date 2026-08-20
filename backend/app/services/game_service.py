@@ -93,9 +93,14 @@ class GameService:
             if dev:
                 data["developer"] = dev.name
 
-        # Se preencheu finish_date mas não completion_year, calcula o ano
-        if data.get("finish_date") and not data.get("completion_year"):
-            data["completion_year"] = data["finish_date"].year
+        # Se preencheu finish_date ou platinum_date mas não completion_year, calcula o ano
+        if not data.get("completion_year"):
+            if data.get("finish_date"):
+                data["completion_year"] = data["finish_date"].year
+            elif data.get("platinum_date"):
+                data["completion_year"] = data["platinum_date"].year
+            elif data.get("status") in [GameStatus.ZERADO, GameStatus.PLATINADO]:
+                data["completion_year"] = date.today().year
 
         db_game = Game(**data)
 
@@ -130,9 +135,13 @@ class GameService:
         for key, value in update_data.items():
             setattr(db_game, key, value)
 
-        if "finish_date" in update_data and update_data["finish_date"]:
-            if "completion_year" not in update_data or not update_data["completion_year"]:
-                db_game.completion_year = update_data["finish_date"].year
+        # Atualiza completion_year automaticamente
+        if db_game.finish_date:
+            db_game.completion_year = db_game.finish_date.year
+        elif db_game.platinum_date:
+            db_game.completion_year = db_game.platinum_date.year
+        elif db_game.status in [GameStatus.ZERADO, GameStatus.PLATINADO] and not db_game.completion_year:
+            db_game.completion_year = date.today().year
 
         if genre_ids is not None:
             genres = db.query(Genre).filter(Genre.id.in_(genre_ids)).all()
@@ -141,6 +150,7 @@ class GameService:
         db.commit()
         db.refresh(db_game)
         return db_game
+
 
     @staticmethod
     def delete_game(db: Session, game_id: int) -> bool:

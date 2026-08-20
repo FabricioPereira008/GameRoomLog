@@ -88,7 +88,7 @@ class SettingsView(QWidget):
         about_layout = QVBoxLayout(about_group)
 
         info_label = QLabel(
-            "<b>GameRoomLog</b> v0.0.4<br>"
+            "<b>GameRoomLog</b> v0.0.5<br>"
             "Ambiente: Linux (CachyOS KDE Plasma)<br>"
             "Arquitetura: FastAPI Backend (REST) + PySide6 Desktop (Qt6)<br>"
             "Desenvolvido sob medida para gerenciamento avançado de Backlog e Anuário Gamer."

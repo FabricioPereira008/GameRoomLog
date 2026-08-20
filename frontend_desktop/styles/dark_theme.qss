@@ -316,11 +316,27 @@ QLabel[class="card-meta"] {
     color: #94a3b8;
 }
 
-QFrame[class="stat-card"], QFrame[class="manage-card"] {
+QFrame[class="stat-card"] {
     background-color: #161824;
     border: 1px solid #282c3f;
     border-radius: 10px;
-    padding: 12px;
+}
+
+QFrame[class="stat-card"]:hover {
+    border: 1px solid #7f5af066;
+    background-color: #1a1d2c;
+}
+
+QFrame[class="stat-icon-box"] {
+    background-color: #202436;
+    border: 1px solid #2f354d;
+    border-radius: 8px;
+}
+
+QFrame[class="manage-card"] {
+    background-color: #161824;
+    border: 1px solid #282c3f;
+    border-radius: 10px;
 }
 
 QFrame[class="manage-card"]:hover {
@@ -329,17 +345,19 @@ QFrame[class="manage-card"]:hover {
 }
 
 QLabel[class="stat-value"] {
-    font-size: 22px;
+    font-size: 19px;
     font-weight: 800;
     color: #2cb67d;
 }
 
 QLabel[class="stat-label"] {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
     color: #94a3b8;
     text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
+
 
 /* ========================================================================= */
 /* TABELA                                                                    */

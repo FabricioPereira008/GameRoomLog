@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from backend.app.models.game import Game, GameStatus
 from backend.app.schemas.stats import YearbookSummary, StatusCounts, OverallStats
 from backend.app.schemas.game import GameResponse
@@ -8,9 +8,12 @@ from backend.app.schemas.game import GameResponse
 class StatsService:
     @staticmethod
     def get_yearbook(db: Session, year: int) -> YearbookSummary:
-        # Jogos finalizados ou platinados no ano especificado
+        # Jogos finalizados no ano especificado (baseado estritamente no ano em que foi zerado)
         games = db.query(Game).filter(
-            Game.completion_year == year,
+            or_(
+                func.strftime("%Y", Game.finish_date) == str(year),
+                (Game.finish_date.is_(None) & (Game.completion_year == year))
+            ),
             Game.status.in_([GameStatus.ZERADO, GameStatus.PLATINADO])
         ).order_by(Game.finish_date.desc().nullslast()).all()
 
@@ -59,13 +62,25 @@ class StatsService:
         ).scalar()
         total_hours = float(hours_res) if hours_res else 0.0
 
-        # Anos disponíveis que têm jogos zerados
-        years_query = db.query(Game.completion_year).filter(
+        # Anos disponíveis baseados estritamente na finalização do jogo (finish_date / completion_year)
+        years_query = db.query(func.strftime("%Y", Game.finish_date)).filter(
+            Game.finish_date.isnot(None),
+            Game.status.in_([GameStatus.ZERADO, GameStatus.PLATINADO])
+        ).distinct().all()
+        available_years = [int(y[0]) for y in years_query if y[0]]
+
+        # Complementar com completion_year para casos sem finish_date explícito
+        cy_query = db.query(Game.completion_year).filter(
             Game.completion_year.isnot(None),
             Game.status.in_([GameStatus.ZERADO, GameStatus.PLATINADO])
-        ).distinct().order_by(Game.completion_year.desc()).all()
-        
-        available_years = [y[0] for y in years_query if y[0] is not None]
+        ).distinct().all()
+        for cy in cy_query:
+            if cy[0] and cy[0] not in available_years:
+                available_years.append(cy[0])
+
+        available_years.sort(reverse=True)
+        if not available_years:
+            available_years = [2026]
 
         return OverallStats(
             status_counts=status_counts,

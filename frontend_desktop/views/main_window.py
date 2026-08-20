@@ -143,7 +143,7 @@ class MainWindow(QMainWindow):
 
         # Barra de status
         self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("Pronto • GameRoomLog v0.0.4 Online")
+        self.statusBar().showMessage("Pronto • GameRoomLog v0.0.5 Online")
 
     def switch_view(self, index: int):
         self.previous_nav_index = index
@@ -196,13 +196,16 @@ class MainWindow(QMainWindow):
             queue_games = [g for g in games if g.get("status") in ["Fila", "Pausado"]]
             disponiveis_games = [g for g in games if g.get("status") == "Disponível"]
             
-            # Zerados inclui Zerados e Platinados na aba de zerados
+            # Zerados (Zerados + Platinados) ordenados por data de finalização (mais recente -> mais antigo)
             zerados_games = [g for g in games if g.get("status") in ["Zerado", "Platinado"]]
+            zerados_games.sort(key=lambda g: g.get("finish_date") or "", reverse=True)
             
-            # Platinados inclui apenas Platinados
+            # Platinados ordenados por data de platina (mais recente -> mais antigo)
             platinados_games = [g for g in games if g.get("status") == "Platinado"]
+            platinados_games.sort(key=lambda g: g.get("platinum_date") or g.get("finish_date") or "", reverse=True)
             
             wishlist_games = [g for g in games if g.get("status") == "Lista de Desejos"]
+
 
             # Atualizar views
             self.view_game_room.set_games(now_games, next_games, queue_games, zerados_games, platinados_games)
