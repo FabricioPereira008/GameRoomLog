@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from frontend_desktop.views.components.sidebar import Sidebar
 from frontend_desktop.views.components.game_room_view import GameRoomView
-from frontend_desktop.views.components.game_grid import GameGrid
+from frontend_desktop.views.components.game_grid import GameGrid, ScrollableGameGrid
 from frontend_desktop.views.components.game_table import GameTable
 from frontend_desktop.views.components.yearbook_view import YearbookView
 from frontend_desktop.views.components.management_view import ManagementView
@@ -27,6 +27,7 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         central_widget = QWidget()
         central_widget.setObjectName("centralWidget")
+        central_widget.setAttribute(Qt.WA_StyledBackground, True)
         self.setCentralWidget(central_widget)
 
         main_layout = QHBoxLayout(central_widget)
@@ -41,6 +42,8 @@ class MainWindow(QMainWindow):
 
         # 2. Área de Conteúdo à direita
         content_widget = QWidget()
+        content_widget.setObjectName("contentArea")
+        content_widget.setAttribute(Qt.WA_StyledBackground, True)
         content_layout = QVBoxLayout(content_widget)
         content_layout.setContentsMargins(20, 16, 20, 16)
         content_layout.setSpacing(12)
@@ -50,7 +53,7 @@ class MainWindow(QMainWindow):
         header_layout.setSpacing(12)
 
         self.view_title_label = QLabel("🕹️ Game Room")
-        self.view_title_label.setStyleSheet("font-size: 20px; font-weight: 800; color: #ffffff;")
+        self.view_title_label.setObjectName("viewTitle")
         header_layout.addWidget(self.view_title_label)
 
         header_layout.addStretch()
@@ -66,65 +69,70 @@ class MainWindow(QMainWindow):
         # QStackedWidget com as Telas
         self.stack = QStackedWidget()
 
-        # View 0: Game Room (Agora + Fila)
+        # View 0: Game Room (Agora + Próximos + Fila + Zerados + Platinados)
         self.view_game_room = GameRoomView()
         self.view_game_room.game_selected.connect(self.open_edit_game_dialog)
         self.stack.addWidget(self.view_game_room)
 
         # View 1: Fila de Espera
-        self.view_queue_grid = GameGrid()
+        self.view_queue_grid = ScrollableGameGrid()
         self.view_queue_grid.game_selected.connect(self.open_edit_game_dialog)
         self.stack.addWidget(self.view_queue_grid)
 
-        # View 2: Zerados (Inclui Zerados e Platinados)
-        self.view_zerados_grid = GameGrid()
+        # View 2: Disponíveis
+        self.view_disponiveis_grid = ScrollableGameGrid()
+        self.view_disponiveis_grid.game_selected.connect(self.open_edit_game_dialog)
+        self.stack.addWidget(self.view_disponiveis_grid)
+
+        # View 3: Zerados (Inclui Zerados e Platinados)
+        self.view_zerados_grid = ScrollableGameGrid()
         self.view_zerados_grid.game_selected.connect(self.open_edit_game_dialog)
         self.stack.addWidget(self.view_zerados_grid)
 
-        # View 3: Platinados (Apenas Platinados)
-        self.view_platinados_grid = GameGrid()
+        # View 4: Platinados (Apenas Platinados)
+        self.view_platinados_grid = ScrollableGameGrid()
         self.view_platinados_grid.game_selected.connect(self.open_edit_game_dialog)
         self.stack.addWidget(self.view_platinados_grid)
 
-        # View 4: Anuário
+        # View 5: Anuário
         self.view_yearbook = YearbookView()
         self.view_yearbook.game_selected.connect(self.open_edit_game_dialog)
         self.stack.addWidget(self.view_yearbook)
 
-        # View 5: Gêneros (Gerenciamento)
+        # View 6: Gêneros (Gerenciamento)
         self.view_genres = ManagementView("genre", "Gênero")
         self.view_genres.category_selected.connect(self.open_category_detail)
         self.view_genres.data_changed.connect(self.refresh_all_data)
         self.stack.addWidget(self.view_genres)
 
-        # View 6: Plataformas (Gerenciamento)
+        # View 7: Plataformas (Gerenciamento)
         self.view_platforms = ManagementView("platform", "Plataforma")
         self.view_platforms.category_selected.connect(self.open_category_detail)
         self.view_platforms.data_changed.connect(self.refresh_all_data)
         self.stack.addWidget(self.view_platforms)
 
-        # View 7: Séries / Franquias (Gerenciamento)
+        # View 8: Séries / Franquias (Gerenciamento)
         self.view_franchises = ManagementView("franchise", "Série / Franquia")
         self.view_franchises.category_selected.connect(self.open_category_detail)
         self.view_franchises.data_changed.connect(self.refresh_all_data)
         self.stack.addWidget(self.view_franchises)
 
-        # View 8: Biblioteca (Tabela Completa)
+        # View 9: Biblioteca (Tabela Completa)
         self.view_table = GameTable()
         self.view_table.game_selected.connect(self.open_edit_game_dialog)
         self.stack.addWidget(self.view_table)
 
-        # View 9: Lista de Desejos
-        self.view_wishlist_grid = GameGrid()
+        # View 10: Lista de Desejos
+        self.view_wishlist_grid = ScrollableGameGrid()
         self.view_wishlist_grid.game_selected.connect(self.open_edit_game_dialog)
         self.stack.addWidget(self.view_wishlist_grid)
 
-        # View 10: Configurações
+        # View 11: Configurações
         self.view_settings = SettingsView()
         self.view_settings.settings_changed.connect(self.refresh_all_data)
         self.stack.addWidget(self.view_settings)
 
-        # View 11: Detalhes de Categoria (Subpágina)
+        # View 12: Detalhes de Categoria (Subpágina)
         self.view_category_detail = CategoryDetailView()
         self.view_category_detail.back_requested.connect(self.return_from_category_detail)
         self.view_category_detail.game_selected.connect(self.open_edit_game_dialog)
@@ -135,7 +143,7 @@ class MainWindow(QMainWindow):
 
         # Barra de status
         self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("Pronto • GameRoomLog v0.0.3 Online")
+        self.statusBar().showMessage("Pronto • GameRoomLog v0.0.4 Online")
 
     def switch_view(self, index: int):
         self.previous_nav_index = index
@@ -143,6 +151,7 @@ class MainWindow(QMainWindow):
         titles = [
             "🕹️ Game Room",
             "📋 Fila de Espera",
+            "🟢 Jogos Disponíveis",
             "🏆 Jogos Zerados",
             "👑 Jogos Platinados",
             "📊 Anuário Gamer",
@@ -156,22 +165,22 @@ class MainWindow(QMainWindow):
         if 0 <= index < len(titles):
             self.view_title_label.setText(titles[index])
 
-        if index == 4:
+        if index == 5:
             self.view_yearbook.load_data()
-        elif index == 5:
-            self.view_genres.load_data()
         elif index == 6:
-            self.view_platforms.load_data()
+            self.view_genres.load_data()
         elif index == 7:
+            self.view_platforms.load_data()
+        elif index == 8:
             self.view_franchises.load_data()
-        elif index == 10:
+        elif index == 11:
             pass
         else:
             self.refresh_all_data()
 
     def open_category_detail(self, category_type: str, item_id: int):
         self.view_category_detail.load_category(category_type, item_id)
-        self.stack.setCurrentIndex(11)
+        self.stack.setCurrentIndex(12)
         self.view_title_label.setText("📋 Detalhes da Categoria")
 
     def return_from_category_detail(self):
@@ -181,11 +190,13 @@ class MainWindow(QMainWindow):
         try:
             games = api_client.get_games()
 
-            # Separar por categorias
-            now_games = [g for g in games if g.get("status") in ["Jogando", "Próximo", "Pausado"]]
-            queue_games = [g for g in games if g.get("status") in ["Fila", "Disponível"]]
+            # Separar por categorias com fidelidade aos status
+            now_games = [g for g in games if g.get("status") == "Jogando"]
+            next_games = [g for g in games if g.get("status") == "Próximo"]
+            queue_games = [g for g in games if g.get("status") in ["Fila", "Pausado"]]
+            disponiveis_games = [g for g in games if g.get("status") == "Disponível"]
             
-            # REQUISITO: Zerados inclui Zerados E Platinados
+            # Zerados inclui Zerados e Platinados na aba de zerados
             zerados_games = [g for g in games if g.get("status") in ["Zerado", "Platinado"]]
             
             # Platinados inclui apenas Platinados
@@ -194,23 +205,24 @@ class MainWindow(QMainWindow):
             wishlist_games = [g for g in games if g.get("status") == "Lista de Desejos"]
 
             # Atualizar views
-            self.view_game_room.set_games(now_games, queue_games)
+            self.view_game_room.set_games(now_games, next_games, queue_games, zerados_games, platinados_games)
             self.view_queue_grid.set_games(queue_games)
+            self.view_disponiveis_grid.set_games(disponiveis_games)
             self.view_zerados_grid.set_games(zerados_games)
             self.view_platinados_grid.set_games(platinados_games)
             self.view_wishlist_grid.set_games(wishlist_games)
             self.view_table.set_games(games)
 
             cur_idx = self.stack.currentIndex()
-            if cur_idx == 4:
+            if cur_idx == 5:
                 self.view_yearbook.load_data()
-            elif cur_idx == 5:
-                self.view_genres.load_data()
             elif cur_idx == 6:
-                self.view_platforms.load_data()
+                self.view_genres.load_data()
             elif cur_idx == 7:
+                self.view_platforms.load_data()
+            elif cur_idx == 8:
                 self.view_franchises.load_data()
-            elif cur_idx == 11 and self.view_category_detail.category_id:
+            elif cur_idx == 12 and self.view_category_detail.category_id:
                 self.view_category_detail.load_category(
                     self.view_category_detail.category_type,
                     self.view_category_detail.category_id
@@ -218,6 +230,8 @@ class MainWindow(QMainWindow):
 
             self.statusBar().showMessage(f"Total de jogos carregados: {len(games)}")
         except Exception as e:
+            self.statusBar().showMessage(f"Erro de conexão com a API: {e}")
+
             self.statusBar().showMessage(f"Erro de conexão com a API: {e}")
 
     def open_add_game_dialog(self):

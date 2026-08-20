@@ -1,37 +1,16 @@
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QFrame
-)
-from PySide6.QtCore import Signal, Qt
-from frontend_desktop.views.components.game_grid import GameGrid
-from frontend_desktop.views.components.game_card import GameCard
+import re
 
-class GameRoomView(QWidget):
-    game_selected = Signal(dict)
+file_path = "frontend_desktop/views/components/game_room_view.py"
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("gameRoomView")
-        self.setAttribute(Qt.WA_StyledBackground, True)
-        self.init_ui()
+with open(file_path, "r") as f:
+    content = f.read()
 
-    def init_ui(self):
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(16, 16, 16, 16)
-        main_layout.setSpacing(20)
+# We need to add Próximos, Zerados, and Platinados sections.
+# Let's completely replace the section logic inside init_ui.
 
-        # Scroll Area geral para a Game Room
-        scroll = QScrollArea()
-        scroll.setObjectName("gameRoomScrollArea")
-        scroll.setWidgetResizable(True)
+init_ui_pattern = r"(# --- SEÇÃO: AGORA \(Jogando & Próximos\) ---.*)scroll\.setWidget\(container\)"
 
-        container = QWidget()
-        container.setObjectName("gameRoomScrollContainer")
-        container.setAttribute(Qt.WA_StyledBackground, True)
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(24)
-
-        # --- FUNÇÃO HELPER PARA CRIAR SEÇÕES ---
+new_sections = """# --- FUNÇÃO HELPER PARA CRIAR SEÇÕES ---
         self.sections = {}
         
         def create_section(title, object_name):
@@ -73,10 +52,13 @@ class GameRoomView(QWidget):
         self.grid_finished.game_selected.connect(self.game_selected.emit)
         self.grid_platinum.game_selected.connect(self.game_selected.emit)
 
-        scroll.setWidget(container)
-        main_layout.addWidget(scroll)
+        """
 
-    def set_games(self, now_games: list, next_games: list, queue_games: list, finished_games: list, platinum_games: list):
+content = re.sub(init_ui_pattern, new_sections + "scroll.setWidget(container)", content, flags=re.DOTALL)
+
+# Update set_games signature
+set_games_pattern = r"def set_games\(self, now_games: list, queue_games: list\):.*?self\.queue_grid\.set_games\(queue_games\)"
+new_set_games = """def set_games(self, now_games: list, next_games: list, queue_games: list, finished_games: list, platinum_games: list):
         self.grid_now.set_games(now_games)
         self.sec_now.setVisible(bool(now_games))
         self.line_now.setVisible(bool(now_games))
@@ -95,4 +77,10 @@ class GameRoomView(QWidget):
         
         self.grid_platinum.set_games(platinum_games)
         self.sec_platinum.setVisible(bool(platinum_games))
-        self.line_platinum.setVisible(bool(platinum_games))
+        self.line_platinum.setVisible(bool(platinum_games))"""
+
+content = re.sub(set_games_pattern, new_set_games, content, flags=re.DOTALL)
+
+with open(file_path, "w") as f:
+    f.write(content)
+print("Updated game_room_view.py")

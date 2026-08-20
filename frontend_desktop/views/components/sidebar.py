@@ -10,6 +10,7 @@ class Sidebar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("sidebarWidget")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setFixedWidth(240)
         self.init_ui()
 
@@ -38,13 +39,17 @@ class Sidebar(QWidget):
 
         # Scroll área interna para os botões do menu
         scroll = QScrollArea()
+        scroll.setObjectName("sidebarScrollArea")
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { background-color: transparent; border: none; }")
-
+        
         scroll_content = QWidget()
+        scroll_content.setObjectName("sidebarNavContainer")
+        scroll_content.setAttribute(Qt.WA_StyledBackground, True)
+        
         layout = QVBoxLayout(scroll_content)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(3)
+        layout.setSpacing(6)
+
 
         # Grupo de Navegação
         self.button_group = QButtonGroup(self)
@@ -53,14 +58,15 @@ class Sidebar(QWidget):
         nav_items = [
             ("🕹️  Game Room", 0),
             ("📋  Fila de Espera", 1),
-            ("🏆  Zerados", 2),
-            ("👑  Platinados", 3),
-            ("📊  Anuário", 4),
-            ("🎨  Gêneros", 5),
-            ("🎮  Plataformas", 6),
-            ("👾  Séries / Franquias", 7),
-            ("📑  Biblioteca (Tabela)", 8),
-            ("⭐  Lista de Desejos", 9),
+            ("🟢  Disponíveis", 2),
+            ("🏆  Zerados", 3),
+            ("👑  Platinados", 4),
+            ("📊  Anuário", 5),
+            ("🎨  Gêneros", 6),
+            ("🎮  Plataformas", 7),
+            ("👾  Séries / Franquias", 8),
+            ("📑  Biblioteca (Tabela)", 9),
+            ("⭐  Lista de Desejos", 10),
         ]
 
         self.nav_buttons = []
@@ -84,14 +90,14 @@ class Sidebar(QWidget):
         self.btn_settings.setProperty("class", "nav-btn")
         self.btn_settings.setCheckable(True)
         self.btn_settings.setCursor(Qt.PointingHandCursor)
-        self.button_group.addButton(self.btn_settings, 10)
+        self.button_group.addButton(self.btn_settings, 11)
         main_layout.addWidget(self.btn_settings)
 
         self.button_group.idClicked.connect(self.on_nav_clicked)
 
         # Versão no rodapé
-        version_label = QLabel("v0.0.3 • Linux Native")
-        version_label.setStyleSheet("color: #6b7280; font-size: 10px; text-align: center; padding-top: 4px;")
+        version_label = QLabel("v0.0.4 • Linux Native")
+        version_label.setObjectName("appVersion")
         main_layout.addWidget(version_label)
 
     def on_nav_clicked(self, nav_id: int):

@@ -9,6 +9,44 @@ QMainWindow, QWidget#centralWidget {
 }
 
 /* ========================================================================= */
+/* SCROLL AREAS E PAINÉIS GERAIS                                             */
+/* ========================================================================= */
+
+QWidget#contentArea {
+    background-color: #0d0e14;
+    padding: 10px;
+}
+
+QWidget[class="game-grid-container"] {
+    background-color: #161824; /* Exemplo: fundo para a grade de jogos */
+    border: 1px solid #232738; /* Exemplo: borda ao redor dos cards */
+    border-radius: 10px;
+    padding: 12px;             /* Espaço interno entre os cards e a borda */
+}
+
+QWidget#gameRoomScrollContainer {
+    background-color: #12141d; /* Exemplo: fundo para toda a área rolavel */
+    border: 1px solid #232738; /* Exemplo: borda externa contornando as duas seções juntas */
+    border-radius: 12px;
+    padding: 16px;             /* Espaço interno para afastar os blocos da borda */
+}
+
+QFrame[class="game-section-card"] {
+    background-color: #12141d;
+    border-radius: 10px;
+    padding: 14px;
+}
+
+QScrollArea {
+    background-color: transparent;
+    border: none;
+}
+
+QWidget#scrollAreaWidgetContents {
+    background-color: transparent;
+}
+
+/* ========================================================================= */
 /* SIDEBAR                                                                   */
 /* ========================================================================= */
 
@@ -30,6 +68,12 @@ QLabel#appSubtitle {
     margin-bottom: 6px;
 }
 
+QWidget#sidebarNavContainer {
+    border: none;
+    border-radius: 8px;
+    padding: 10px;
+}
+
 /* Botões da Barra Lateral */
 QPushButton[class="nav-btn"] {
     background-color: #181b28;
@@ -40,6 +84,7 @@ QPushButton[class="nav-btn"] {
     border-radius: 6px;
     font-size: 12px;
     font-weight: 500;
+    margin: 3px 3px;
 }
 
 QPushButton[class="nav-btn"]:hover {
@@ -343,4 +388,112 @@ QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
 
 QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
     background: #7f5af0;
+}
+
+/* ========================================================================= */
+/* TEXTOS, TÍTULOS E HEADERS (EXTRAÍDOS DO PYTHON)                           */
+/* ========================================================================= */
+
+QLabel#viewTitle {
+    font-size: 20px;
+    font-weight: 800;
+    color: #ffffff;
+}
+
+QLabel[class="view-title-large"] {
+    font-size: 22px;
+    font-weight: 800;
+    color: #ffffff;
+}
+
+QLabel[class="view-title-xl"] {
+    font-size: 24px;
+    font-weight: 800;
+    color: #ffffff;
+}
+
+QLabel[class="section-header"] {
+    font-size: 17px;
+    font-weight: bold;
+    color: #fffffe;
+}
+
+QLabel[class="section-header-small"] {
+    font-size: 15px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-top: 8px;
+}
+
+QFrame[class="divider-line"] {
+    background-color: #23232a;
+    max-height: 1px;
+}
+
+QLabel[class="empty-state-text"] {
+    color: #72757e;
+    font-size: 14px;
+    padding: 20px;
+}
+
+QLabel#appVersion {
+    color: #6b7280;
+    font-size: 10px;
+    text-align: center;
+    padding-top: 4px;
+}
+
+/* ========================================================================= */
+/* CARDS DE GERENCIAMENTO (PLATAFORMAS, GÊNEROS) E SETTINGS                  */
+/* ========================================================================= */
+
+QLabel[class="manage-card-title"] {
+    font-size: 15px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+QLabel[class="manage-card-count"] {
+    color: #9ca3af;
+    font-size: 11px;
+}
+
+QGroupBox[class="settings-group"] {
+    font-weight: bold;
+    color: #a5b4fc;
+    font-size: 14px;
+    margin-top: 10px;
+    padding-top: 15px;
+}
+
+QLabel[class="settings-desc"] {
+    color: #9ca3af;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+/* ========================================================================= */
+/* ANUÁRIO (YEARBOOK)                                                        */
+/* ========================================================================= */
+
+QLabel[class="yearbook-icon"] {
+    font-size: 20px;
+}
+
+QLabel[class="yearbook-title"] {
+    font-size: 20px;
+    font-weight: bold;
+    color: #fffffe;
+}
+
+QLabel[class="yearbook-year"] {
+    color: #94a1b2;
+    font-weight: bold;
+}
+
+QLabel[class="yearbook-subtitle"] {
+    font-size: 15px;
+    font-weight: bold;
+    color: #fffffe;
+    margin-top: 10px;
 }

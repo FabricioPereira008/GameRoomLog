@@ -28,12 +28,12 @@ class ManageItemCard(QFrame):
         # Cabeçalho do Card
         header = QHBoxLayout()
         name_label = QLabel(self.item_data.get("name", ""))
-        name_label.setStyleSheet("font-size: 15px; font-weight: bold; color: #ffffff;")
+        name_label.setProperty("class", "manage-card-title")
         header.addWidget(name_label)
         header.addStretch()
 
         if self.category_type == "genre":
-            color = self.item_data.get("color", "#4A5568")
+            color = self.item_data.get("color", "#4f46e5")
             color_dot = QLabel("   ")
             color_dot.setStyleSheet(f"background-color: {color}; border-radius: 6px; border: 1px solid #ffffff44;")
             header.addWidget(color_dot)
@@ -43,7 +43,7 @@ class ManageItemCard(QFrame):
         # Contador de Jogos
         count = self.item_data.get("games_count", 0)
         count_label = QLabel(f"🎮 {count} {'jogo cadastrado' if count == 1 else 'jogos cadastrados'} (Clique para ver)")
-        count_label.setStyleSheet("color: #9ca3af; font-size: 11px;")
+        count_label.setProperty("class", "manage-card-count")
         layout.addWidget(count_label)
 
         # Botões de Ação
@@ -80,7 +80,7 @@ class ManageItemCard(QFrame):
 
         try:
             if self.category_type == "genre":
-                color = self.item_data.get("color", "#4A5568")
+                color = self.item_data.get("color", "#4f46e5")
                 qcolor = QColorDialog.getColor(QColor(color), self, "Escolha a cor da tag")
                 if qcolor.isValid():
                     color = qcolor.name()
@@ -162,7 +162,7 @@ class ManagementView(QWidget):
         # Scroll Area com Grid de Cards
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { background-color: transparent; border: none; }")
+        
 
         self.container = QWidget()
         self.grid_layout = QGridLayout(self.container)
@@ -199,7 +199,7 @@ class ManagementView(QWidget):
 
         if not filtered:
             empty = QLabel(f"Nenhum registro encontrado em {self.title}.")
-            empty.setStyleSheet("color: #9ca3af; font-size: 13px; padding: 20px;")
+            empty.setProperty("class", "empty-state-text")
             self.grid_layout.addWidget(empty, 0, 0)
             return
 
@@ -224,7 +224,7 @@ class ManagementView(QWidget):
 
         try:
             if self.category_type == "genre":
-                color = "#4A5568"
+                color = "#4f46e5"
                 qcolor = QColorDialog.getColor(QColor(color), self, "Escolha a cor da tag")
                 if qcolor.isValid():
                     color = qcolor.name()

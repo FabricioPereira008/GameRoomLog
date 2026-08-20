@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
-from PIL import Image
+from PIL import Image, ImageFilter
 from backend.app.core.config import settings
 
 router = APIRouter()
@@ -20,6 +20,57 @@ class CoverUrlRequest(BaseModel):
 class AutoCoverRequest(BaseModel):
     title: str
     api_key: Optional[str] = None
+
+def process_cover_image(img_bytes: bytes) -> tuple[bytes, str]:
+    """Processa a imagem baixada para garantir que se encaixe perfeitamente no padrão vertical 600x900."""
+    try:
+        img = Image.open(io.BytesIO(img_bytes))
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGBA")
+        else:
+            img = img.convert("RGB")
+
+        w, h = img.size
+        current_ratio = w / h  # 600x900 -> 0.6667
+
+        # Se já estiver em formato retrato proporcional (ex: 0.55 a 0.78), mantém o original
+        if 0.55 <= current_ratio <= 0.78:
+            out_io = io.BytesIO()
+            img.convert("RGB").save(out_io, format="JPEG", quality=92)
+            return out_io.getvalue(), ".jpg"
+
+        # Se a imagem for horizontal (ex: 460x215 do Steam Header), cria um poster 600x900 centralizado
+        target_w, target_h = 600, 900
+        
+        # Fundo: versão borrada da própria arte
+        bg = img.resize((target_w, target_h), Image.Resampling.BILINEAR)
+        bg = bg.filter(ImageFilter.GaussianBlur(radius=25))
+        # Escurece levemente o fundo para destacar o centro
+        dark_overlay = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 80))
+        bg = Image.alpha_composite(bg.convert("RGBA"), dark_overlay)
+
+        # Arte central: redimensiona mantendo a proporção exata
+        fit_scale = target_w / w
+        fit_w = target_w
+        fit_h = int(h * fit_scale)
+        if fit_h > target_h:
+            fit_scale = target_h / h
+            fit_h = target_h
+            fit_w = int(w * fit_scale)
+
+        fg = img.resize((fit_w, fit_h), Image.Resampling.LANCZOS)
+        
+        paste_x = (target_w - fit_w) // 2
+        paste_y = (target_h - fit_h) // 2
+
+        bg.paste(fg, (paste_x, paste_y), fg if fg.mode == "RGBA" else None)
+
+        out_io = io.BytesIO()
+        bg.convert("RGB").save(out_io, format="JPEG", quality=92)
+        return out_io.getvalue(), ".jpg"
+    except Exception as e:
+        print("Erro ao processar imagem com Pillow:", e)
+        return img_bytes, ".jpg"
 
 @router.post("/cover")
 async def upload_cover(file: UploadFile = File(...)):
@@ -43,24 +94,11 @@ async def upload_cover(file: UploadFile = File(...)):
     }
 
 async def save_image_from_bytes(img_bytes: bytes) -> str:
-    try:
-        img = Image.open(io.BytesIO(img_bytes))
-        img_format = img.format.lower() if img.format else "jpeg"
-        if img_format == "jpeg":
-            ext = ".jpg"
-        elif img_format == "png":
-            ext = ".png"
-        elif img_format == "webp":
-            ext = ".webp"
-        else:
-            ext = ".jpg"
-    except Exception:
-        raise HTTPException(status_code=400, detail="Arquivo baixado não é uma imagem válida.")
-
+    processed_bytes, ext = process_cover_image(img_bytes)
     filename = f"{uuid.uuid4()}{ext}"
     destination = settings.COVERS_DIR / filename
     with open(destination, "wb") as f:
-        f.write(img_bytes)
+        f.write(processed_bytes)
     return filename
 
 @router.post("/cover-url")
@@ -96,7 +134,7 @@ async def auto_search_cover(payload: AutoCoverRequest):
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
     async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
-        # --- 1. TENTATIVA: SteamGridDB (Se tiver chave API configurada) ---
+        # --- 1. TENTATIVA: SteamGridDB (Priorizando formato vertical 600x900) ---
         if api_key:
             try:
                 sgdb_headers = {"Authorization": f"Bearer {api_key}"}
@@ -107,25 +145,39 @@ async def auto_search_cover(payload: AutoCoverRequest):
                     data = search_res.json().get("data", [])
                     if data:
                         game_id = data[0].get("id")
-                        # Buscar grids horizontais ou gerais
-                        grids_url = f"https://www.steamgriddb.com/api/v2/grids/game/{game_id}?dimensions=600x900,920x430,460x215"
+                        # Buscar primeiro dimensões verticais 600x900
+                        grids_url = f"https://www.steamgriddb.com/api/v2/grids/game/{game_id}?dimensions=600x900"
                         grids_res = await client.get(grids_url, headers=sgdb_headers)
-                        if grids_res.status_code == 200:
-                            grids = grids_res.json().get("data", [])
-                            if grids:
-                                img_url = grids[0].get("url")
-                                img_resp = await client.get(img_url, headers=headers)
-                                if img_resp.status_code == 200:
-                                    filename = await save_image_from_bytes(img_resp.content)
-                                    return {
-                                        "filename": filename,
-                                        "url": f"/api/v1/uploads/cover/{filename}",
-                                        "source": "SteamGridDB"
-                                    }
+                        if grids_res.status_code == 200 and grids_res.json().get("data"):
+                            grids = grids_res.json().get("data")
+                            img_url = grids[0].get("url")
+                            img_resp = await client.get(img_url, headers=headers)
+                            if img_resp.status_code == 200:
+                                filename = await save_image_from_bytes(img_resp.content)
+                                return {
+                                    "filename": filename,
+                                    "url": f"/api/v1/uploads/cover/{filename}",
+                                    "source": "SteamGridDB (600x900)"
+                                }
+                        
+                        # Fallback no SGDB para outras dimensões
+                        grids_url_any = f"https://www.steamgriddb.com/api/v2/grids/game/{game_id}"
+                        grids_res_any = await client.get(grids_url_any, headers=sgdb_headers)
+                        if grids_res_any.status_code == 200 and grids_res_any.json().get("data"):
+                            grids = grids_res_any.json().get("data")
+                            img_url = grids[0].get("url")
+                            img_resp = await client.get(img_url, headers=headers)
+                            if img_resp.status_code == 200:
+                                filename = await save_image_from_bytes(img_resp.content)
+                                return {
+                                    "filename": filename,
+                                    "url": f"/api/v1/uploads/cover/{filename}",
+                                    "source": "SteamGridDB"
+                                }
             except Exception as e:
                 print("SteamGridDB search failed, falling back to Steam Store:", e)
 
-        # --- 2. TENTATIVA: Steam Store Public Search (Sem chave, oficial) ---
+        # --- 2. TENTATIVA: Steam Store Public Search (Priorizando library_600x900 vertical) ---
         try:
             encoded_title = urllib.parse.quote(title)
             steam_search_url = f"https://store.steampowered.com/api/storesearch/?term={encoded_title}&l=portuguese&cc=BR"
@@ -134,34 +186,28 @@ async def auto_search_cover(payload: AutoCoverRequest):
                 items = resp.json().get("items", [])
                 if items:
                     app_id = items[0].get("id")
-                    # Tentar capa em alta resolução library_600x900 ou header
                     candidate_urls = [
+                        f"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{app_id}/library_600x900_2x.jpg",
+                        f"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{app_id}/library_600x900.jpg",
+                        f"https://steamcdn-a.akamaihd.net/steam/apps/{app_id}/library_600x900_2x.jpg",
+                        f"https://steamcdn-a.akamaihd.net/steam/apps/{app_id}/library_600x900.jpg",
                         f"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{app_id}/header.jpg",
-                        f"https://cdn.akamai.steamstatic.com/steam/apps/{app_id}/header.jpg",
-                        items[0].get("tiny_image", "")
+                        f"https://cdn.akamai.steamstatic.com/steam/apps/{app_id}/header.jpg"
                     ]
                     for img_url in candidate_urls:
-                        if not img_url:
+                        try:
+                            img_resp = await client.get(img_url, headers=headers)
+                            if img_resp.status_code == 200 and len(img_resp.content) > 1500:
+                                filename = await save_image_from_bytes(img_resp.content)
+                                return {
+                                    "filename": filename,
+                                    "url": f"/api/v1/uploads/cover/{filename}",
+                                    "source": "Steam Store"
+                                }
+                        except Exception:
                             continue
-                        img_resp = await client.get(img_url, headers=headers)
-                        if img_resp.status_code == 200 and len(img_resp.content) > 1000:
-                            filename = await save_image_from_bytes(img_resp.content)
-                            return {
-                                "filename": filename,
-                                "url": f"/api/v1/uploads/cover/{filename}",
-                                "source": "Steam Store"
-                            }
         except Exception as e:
             print("Steam Store search failed:", e)
-
-        # --- 3. TENTATIVA: RAWG Open Game Search (Sem chave ou fallback público) ---
-        try:
-            # Busca de imagem pública via DuckDuckGo imagens limpa
-            ddg_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(title + ' game cover horizontal')}"
-            ddg_resp = await client.get(ddg_url, headers=headers)
-            # Se não encontrar, levanta 404
-        except Exception:
-            pass
 
     raise HTTPException(
         status_code=404,

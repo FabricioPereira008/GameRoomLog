@@ -3,7 +3,7 @@ from typing import Optional
 
 class GenreBase(BaseModel):
     name: str
-    color: Optional[str] = "#4A5568"
+    color: Optional[str] = "#4f46e5"
 
 class GenreCreate(GenreBase):
     pass

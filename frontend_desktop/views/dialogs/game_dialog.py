@@ -35,7 +35,7 @@ class GameDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("QScrollArea { background-color: transparent; border: none; }")
+        
 
         container = QWidget()
         form_layout = QFormLayout(container)
@@ -220,10 +220,33 @@ class GameDialog(QDialog):
         cover_layout.addWidget(self.btn_select_cover)
         form_layout.addRow(make_label("Capa do Jogo:"), cover_layout)
 
-        # Status da Capa
-        self.lbl_cover_status = QLabel("Nenhuma imagem" if not self.cover_filename else f"✓ Imagem: {self.cover_filename}")
-        self.lbl_cover_status.setStyleSheet("color: #2cb67d; font-size: 11px;")
-        form_layout.addRow("", self.lbl_cover_status)
+        # Status da Capa e Preview Visual
+        cover_preview_layout = QHBoxLayout()
+        self.lbl_cover_preview = QLabel()
+        self.lbl_cover_preview.setFixedSize(120, 180)
+        self.lbl_cover_preview.setStyleSheet("background-color: #161824; border: 1.5px dashed #3c435f; border-radius: 6px;")
+        self.lbl_cover_preview.setAlignment(Qt.AlignCenter)
+        self.lbl_cover_preview.setText("Sem\nCapa")
+        
+        preview_info_layout = QVBoxLayout()
+        self.lbl_cover_status = QLabel("Nenhuma imagem selecionada")
+        self.lbl_cover_status.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        self.lbl_cover_status.setWordWrap(True)
+        
+        self.btn_edit_cover = QPushButton("✂️ Ajustar Recorte")
+        self.btn_edit_cover.setProperty("class", "small-btn")
+        self.btn_edit_cover.setVisible(False)
+        self.btn_edit_cover.clicked.connect(self.open_image_cropper)
+        
+        preview_info_layout.addWidget(self.lbl_cover_status)
+        preview_info_layout.addWidget(self.btn_edit_cover)
+        preview_info_layout.addStretch()
+        
+        cover_preview_layout.addWidget(self.lbl_cover_preview)
+        cover_preview_layout.addLayout(preview_info_layout)
+        cover_preview_layout.addStretch()
+        
+        form_layout.addRow("", cover_preview_layout)
 
         # 13. Anotações
         self.input_notes = QTextEdit()
@@ -361,6 +384,8 @@ class GameDialog(QDialog):
         self.chk_favorite.setChecked(bool(self.game_data.get("is_favorite")))
         self.input_notes.setText(self.game_data.get("notes") or "")
 
+        self.update_cover_preview()
+
     def auto_search_cover(self):
         title = self.input_title.text().strip()
         if not title:
@@ -380,11 +405,11 @@ class GameDialog(QDialog):
         if filename:
             self.cover_filename = filename
             self.lbl_cover_status.setText(f"✓ Capa baixada com sucesso: {filename[:12]}...")
-            self.lbl_cover_status.setStyleSheet("color: #2cb67d;")
-            QMessageBox.information(self, "Sucesso", f"Capa para '{title}' encontrada e salva com sucesso!")
+            self.lbl_cover_status.setStyleSheet("color: #2cb67d; font-size: 11px;")
+            self.update_cover_preview()
         else:
             self.lbl_cover_status.setText("Capa não encontrada automaticamente.")
-            self.lbl_cover_status.setStyleSheet("color: #f87171;")
+            self.lbl_cover_status.setStyleSheet("color: #fc8181; font-size: 11px;")
             QMessageBox.warning(
                 self, "Não Encontrado",
                 f"Não foi possível encontrar automaticamente uma capa para '{title}'.\nVocê pode colar o link direto da imagem pelo botão 'Link / URL'."
@@ -399,7 +424,9 @@ class GameDialog(QDialog):
             if filename:
                 self.cover_filename = filename
                 self.lbl_cover_status.setText(f"✓ Imagem: {filename[:12]}...")
-                self.lbl_cover_status.setStyleSheet("color: #2cb67d;")
+                self.lbl_cover_status.setStyleSheet("color: #2cb67d; font-size: 11px;")
+                self.update_cover_preview()
+                self.open_image_cropper()
             else:
                 QMessageBox.warning(self, "Erro", "Não foi possível enviar a imagem.")
 
@@ -410,10 +437,75 @@ class GameDialog(QDialog):
             if filename:
                 self.cover_filename = filename
                 self.lbl_cover_status.setText(f"✓ Baixado: {filename[:12]}...")
-                self.lbl_cover_status.setStyleSheet("color: #2cb67d;")
-                QMessageBox.information(self, "Sucesso", "Imagem baixada e salva com sucesso!")
+                self.lbl_cover_status.setStyleSheet("color: #2cb67d; font-size: 11px;")
+                self.update_cover_preview()
+                self.open_image_cropper()
             else:
                 QMessageBox.warning(self, "Erro", "Não foi possível baixar a imagem do link fornecido.")
+
+    def update_cover_preview(self):
+        if not self.cover_filename:
+            return
+            
+        import os
+        from PySide6.QtGui import QPainter, QPainterPath
+        
+        storage_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+            "backend", "storage", "covers", self.cover_filename
+        )
+        if os.path.exists(storage_path):
+            pixmap = QPixmap(storage_path)
+            if not pixmap.isNull():
+                scaled = pixmap.scaled(120, 180, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+                
+                # Arredondar cantos do preview
+                rounded = QPixmap(120, 180)
+                rounded.fill(Qt.transparent)
+                painter = QPainter(rounded)
+                painter.setRenderHint(QPainter.Antialiasing)
+                path = QPainterPath()
+                path.addRoundedRect(0, 0, 120, 180, 6, 6)
+                painter.setClipPath(path)
+                
+                # Centraliza a imagem no painel recortado
+                x_offset = (120 - scaled.width()) // 2
+                y_offset = (180 - scaled.height()) // 2
+                painter.drawPixmap(x_offset, y_offset, scaled)
+                painter.end()
+                
+                self.lbl_cover_preview.setPixmap(rounded)
+                self.btn_edit_cover.setVisible(True)
+
+    def open_image_cropper(self):
+        if not self.cover_filename:
+            return
+            
+        import os
+        storage_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+            "backend", "storage", "covers", self.cover_filename
+        )
+        if not os.path.exists(storage_path):
+            return
+
+        from frontend_desktop.views.dialogs.image_cropper_dialog import ImageCropperDialog
+        
+        dialog = ImageCropperDialog(storage_path, self)
+        if dialog.exec() == QDialog.Accepted and dialog.cropped_filepath:
+            # Upload da imagem cortada para o servidor substituir a antiga logicamente
+            crop_filename = api_client.upload_cover(dialog.cropped_filepath)
+            if crop_filename:
+                self.cover_filename = crop_filename
+                self.update_cover_preview()
+                self.lbl_cover_status.setText(f"✓ Recorte salvo: {crop_filename[:12]}...")
+                
+                # Cleanup: deletar temp file local se quiser
+                try:
+                    os.remove(dialog.cropped_filepath)
+                except:
+                    pass
+
 
     def add_new_platform(self):
         name, ok = QInputDialog.getText(self, "Nova Plataforma", "Nome da plataforma:")

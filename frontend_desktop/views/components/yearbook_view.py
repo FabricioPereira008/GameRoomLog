@@ -15,7 +15,7 @@ class StatCard(QFrame):
         layout.setSpacing(4)
 
         icon_label = QLabel(icon)
-        icon_label.setStyleSheet("font-size: 20px;")
+        icon_label.setProperty("class", "yearbook-icon")
         layout.addWidget(icon_label)
 
         self.val_label = QLabel(value)
@@ -45,13 +45,13 @@ class YearbookView(QWidget):
         # Cabeçalho do Anuário com Seletor de Ano
         header = QHBoxLayout()
         title = QLabel("📊 Anuário Gamer")
-        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #fffffe;")
+        title.setProperty("class", "yearbook-title")
         header.addWidget(title)
 
         header.addStretch()
 
         year_label = QLabel("Ano:")
-        year_label.setStyleSheet("color: #94a1b2; font-weight: bold;")
+        year_label.setProperty("class", "yearbook-year")
         header.addWidget(year_label)
 
         self.year_combo = QComboBox()
@@ -79,7 +79,7 @@ class YearbookView(QWidget):
 
         # Subtítulo da Lista
         sub_label = QLabel("Jogos Finalizados no Ano")
-        sub_label.setStyleSheet("font-size: 15px; font-weight: bold; color: #fffffe; margin-top: 10px;")
+        sub_label.setProperty("class", "yearbook-subtitle")
         layout.addWidget(sub_label)
 
         # Grid dos Jogos do Ano

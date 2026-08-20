@@ -19,12 +19,12 @@ class SettingsView(QWidget):
         main_layout.setAlignment(Qt.AlignTop)
 
         title = QLabel("⚙️ Configurações do Aplicativo")
-        title.setStyleSheet("font-size: 22px; font-weight: 800; color: #ffffff;")
+        title.setProperty("class", "view-title-large")
         main_layout.addWidget(title)
 
         # --- SEÇÃO 1: TAMANHO DOS CARDS ---
         size_group = QGroupBox("Tamanho de Exibição dos Cards")
-        size_group.setStyleSheet("QGroupBox { font-weight: bold; color: #a5b4fc; font-size: 14px; margin-top: 10px; padding-top: 15px; }")
+        size_group.setProperty("class", "settings-group")
         size_layout = QVBoxLayout(size_group)
         size_layout.setSpacing(10)
 
@@ -55,7 +55,7 @@ class SettingsView(QWidget):
 
         # --- SEÇÃO 2: INTEGRAÇÃO STEAMGRIDDB ---
         sgdb_group = QGroupBox("Repositório de Capas (SteamGridDB)")
-        sgdb_group.setStyleSheet("QGroupBox { font-weight: bold; color: #a5b4fc; font-size: 14px; margin-top: 10px; padding-top: 15px; }")
+        sgdb_group.setProperty("class", "settings-group")
         sgdb_layout = QVBoxLayout(sgdb_group)
         sgdb_layout.setSpacing(10)
 
@@ -63,7 +63,7 @@ class SettingsView(QWidget):
             "A API pública da Steam é usada por padrão. Para buscar automaticamente capas de jogos exclusivos de consoles (Switch, 3DS, PS5, Emuladores), insira sua API Key gratuita do SteamGridDB."
         )
         sgdb_desc.setWordWrap(True)
-        sgdb_desc.setStyleSheet("color: #9ca3af; font-size: 12px;")
+        sgdb_desc.setProperty("class", "settings-desc")
         sgdb_layout.addWidget(sgdb_desc)
 
         key_layout = QHBoxLayout()
@@ -84,16 +84,16 @@ class SettingsView(QWidget):
 
         # --- SEÇÃO 3: SOBRE O SISTEMA ---
         about_group = QGroupBox("Sobre o Sistema")
-        about_group.setStyleSheet("QGroupBox { font-weight: bold; color: #a5b4fc; font-size: 14px; margin-top: 10px; padding-top: 15px; }")
+        about_group.setProperty("class", "settings-group")
         about_layout = QVBoxLayout(about_group)
 
         info_label = QLabel(
-            "<b>GameRoomLog</b> v0.0.3<br>"
+            "<b>GameRoomLog</b> v0.0.4<br>"
             "Ambiente: Linux (CachyOS KDE Plasma)<br>"
             "Arquitetura: FastAPI Backend (REST) + PySide6 Desktop (Qt6)<br>"
             "Desenvolvido sob medida para gerenciamento avançado de Backlog e Anuário Gamer."
         )
-        info_label.setStyleSheet("color: #cbd5e1; font-size: 12px; line-height: 1.6;")
+        info_label.setProperty("class", "settings-desc")
         about_layout.addWidget(info_label)
 
         main_layout.addWidget(about_group)

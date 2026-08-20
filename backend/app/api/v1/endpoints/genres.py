@@ -46,7 +46,7 @@ def create_genre(genre_in: GenreCreate, db: Session = Depends(get_db)):
     existing = db.query(Genre).filter(Genre.name.ilike(genre_in.name.strip())).first()
     if existing:
         return existing
-    db_genre = Genre(name=genre_in.name.strip(), color=genre_in.color or "#4A5568")
+    db_genre = Genre(name=genre_in.name.strip(), color=genre_in.color or "#4f46e5")
     db.add(db_genre)
     db.commit()
     db.refresh(db_genre)
