@@ -12,4 +12,5 @@ class FranchiseUpdate(BaseModel):
 
 class FranchiseResponse(FranchiseBase):
     id: int
+    games_count: Optional[int] = 0
     model_config = ConfigDict(from_attributes=True)

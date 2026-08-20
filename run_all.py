@@ -6,7 +6,8 @@ from pathlib import Path
 
 def main():
     root_dir = Path(__file__).resolve().parent
-    python_exec = sys.executable
+    venv_python = root_dir / "venv" / "bin" / "python"
+    python_exec = str(venv_python) if venv_python.exists() else sys.executable
 
     # Iniciar backend em subprocesso
     print("Iniciando o servidor Backend (FastAPI)...")

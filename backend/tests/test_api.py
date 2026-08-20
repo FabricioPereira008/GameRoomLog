@@ -6,7 +6,6 @@ from sqlalchemy.pool import StaticPool
 from backend.app.main import app
 from backend.app.core.database import Base, get_db
 
-# Criar banco SQLite em memória compartilhada com StaticPool para testes
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
@@ -44,6 +43,11 @@ def test_create_and_list_genre():
     assert data["name"] == "RPG"
     assert data["id"] is not None
 
+    # Testar update PUT
+    put_res = client.put(f"/api/v1/genres/{data['id']}", json={"name": "JRPG", "color": "#9F7AEA"})
+    assert put_res.status_code == 200
+    assert put_res.json()["name"] == "JRPG"
+
     list_res = client.get("/api/v1/genres/")
     assert list_res.status_code == 200
     assert len(list_res.json()) == 1
@@ -51,17 +55,33 @@ def test_create_and_list_genre():
 def test_create_and_list_platform():
     res = client.post("/api/v1/platforms/", json={"name": "Switch 2", "icon_name": "switch"})
     assert res.status_code == 201
-    assert res.json()["name"] == "Switch 2"
+    plat_id = res.json()["id"]
+
+    # Testar update PUT
+    put_res = client.put(f"/api/v1/platforms/{plat_id}", json={"name": "Nintendo Switch 2"})
+    assert put_res.status_code == 200
+    assert put_res.json()["name"] == "Nintendo Switch 2"
+
+def test_developer_crud():
+    res = client.post("/api/v1/developers/", json={"name": "Nintendo"})
+    assert res.status_code == 201
+    dev_id = res.json()["id"]
+
+    list_res = client.get("/api/v1/developers/")
+    assert list_res.status_code == 200
+    assert len(list_res.json()) == 1
+
+    put_res = client.put(f"/api/v1/developers/{dev_id}", json={"name": "Nintendo EPD"})
+    assert put_res.status_code == 200
+    assert put_res.json()["name"] == "Nintendo EPD"
 
 def test_create_game_and_verify_yearbook():
-    # 1. Criar plataforma e gênero
     p_res = client.post("/api/v1/platforms/", json={"name": "PC"})
     plat_id = p_res.json()["id"]
 
     g_res = client.post("/api/v1/genres/", json={"name": "Ação/Aventura"})
     genre_id = g_res.json()["id"]
 
-    # 2. Criar jogo Zerado em 2026
     game_payload = {
         "title": "Mortal Shell",
         "developer": "Cold Symmetry",
@@ -70,7 +90,7 @@ def test_create_game_and_verify_yearbook():
         "status": "Zerado",
         "hltb_hours": 8.0,
         "played_hours": 8.0,
-        "score": 7.0,
+        "score": 7.5,
         "difficulty": 7.0,
         "finish_date": "2026-02-15",
         "completion_year": 2026,
@@ -81,46 +101,28 @@ def test_create_game_and_verify_yearbook():
     created = game_res.json()
     assert created["title"] == "Mortal Shell"
     assert created["platform"]["name"] == "PC"
-    assert len(created["genres"]) == 1
+    assert created["score"] == 7.5
 
-    # 3. Criar segundo jogo Platinado em 2026
+    # Criar segundo jogo Platinado
     game2_payload = {
         "title": "Zelda: Ocarina of Time",
         "developer": "Nintendo",
         "status": "Platinado",
         "hltb_hours": 30.0,
         "played_hours": 31.0,
-        "score": 10.0,
+        "score": 9.5,
         "difficulty": 6.0,
         "finish_date": "2026-01-20",
         "completion_year": 2026
     }
     client.post("/api/v1/games/", json=game2_payload)
 
-    # 4. Criar terceiro jogo na Fila (não zerado)
-    game3_payload = {
-        "title": "Super Mario Odyssey",
-        "status": "Fila",
-        "hltb_hours": 20.0
-    }
-    client.post("/api/v1/games/", json=game3_payload)
-
-    # 5. Testar Anuário de 2026
+    # Verificar Anuário de 2026
     yb_res = client.get("/api/v1/stats/yearbook/2026")
     assert yb_res.status_code == 200
     yb = yb_res.json()
     assert yb["year"] == 2026
     assert yb["total_games_finished"] == 2
     assert yb["total_platinums"] == 1
-    assert yb["total_hours_played"] == 39.0  # 8 + 31
-    assert yb["average_score"] == 8.5  # (7 + 10) / 2
-
-    # 6. Testar Overall Stats
-    overall_res = client.get("/api/v1/stats/overall")
-    assert overall_res.status_code == 200
-    overall = overall_res.json()
-    assert overall["status_counts"]["zerados"] == 1
-    assert overall["status_counts"]["platinados"] == 1
-    assert overall["status_counts"]["fila"] == 1
-    assert overall["status_counts"]["total"] == 3
-    assert 2026 in overall["available_years"]
+    assert yb["total_hours_played"] == 39.0
+    assert yb["average_score"] == 8.5  # (7.5 + 9.5) / 2

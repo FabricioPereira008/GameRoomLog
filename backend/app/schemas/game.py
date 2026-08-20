@@ -5,10 +5,12 @@ from backend.app.models.game import GameStatus, PlayType, GameFormat
 from backend.app.schemas.genre import GenreResponse
 from backend.app.schemas.platform import PlatformResponse
 from backend.app.schemas.franchise import FranchiseResponse
+from backend.app.schemas.developer import DeveloperResponse
 
 class GameBase(BaseModel):
     title: str
     developer: Optional[str] = None
+    developer_id: Optional[int] = None
     platform_id: Optional[int] = None
     franchise_id: Optional[int] = None
     status: GameStatus = GameStatus.DISPONIVEL
@@ -32,6 +34,7 @@ class GameCreate(GameBase):
 class GameUpdate(BaseModel):
     title: Optional[str] = None
     developer: Optional[str] = None
+    developer_id: Optional[int] = None
     platform_id: Optional[int] = None
     franchise_id: Optional[int] = None
     status: Optional[GameStatus] = None
@@ -56,6 +59,7 @@ class GameResponse(GameBase):
     updated_at: datetime
     platform: Optional[PlatformResponse] = None
     franchise: Optional[FranchiseResponse] = None
+    developer_rel: Optional[DeveloperResponse] = None
     genres: List[GenreResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

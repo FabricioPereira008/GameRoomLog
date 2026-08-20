@@ -22,6 +22,7 @@ class ApiClient:
         status: Optional[str] = None,
         platform_id: Optional[int] = None,
         genre_id: Optional[int] = None,
+        franchise_id: Optional[int] = None,
         completion_year: Optional[int] = None,
         is_favorite: Optional[bool] = None,
         search: Optional[str] = None,
@@ -34,6 +35,8 @@ class ApiClient:
             params["platform_id"] = platform_id
         if genre_id:
             params["genre_id"] = genre_id
+        if franchise_id:
+            params["franchise_id"] = franchise_id
         if completion_year:
             params["completion_year"] = completion_year
         if is_favorite is not None:
@@ -66,7 +69,7 @@ class ApiClient:
         r = requests.delete(self._url(f"games/{game_id}"), timeout=5)
         return r.status_code == 204
 
-    # --- UPLOAD DE CAPA ---
+    # --- UPLOAD E DOWNLOAD DE CAPA ---
     def upload_cover(self, file_path: str) -> Optional[str]:
         path = Path(file_path)
         if not path.exists():
@@ -76,6 +79,12 @@ class ApiClient:
             r = requests.post(self._url("uploads/cover"), files=files, timeout=10)
             if r.status_code == 200:
                 return r.json().get("filename")
+        return None
+
+    def upload_cover_url(self, url: str) -> Optional[str]:
+        r = requests.post(self._url("uploads/cover-url"), json={"url": url}, timeout=15)
+        if r.status_code == 200:
+            return r.json().get("filename")
         return None
 
     # --- GÊNEROS ---
@@ -89,6 +98,15 @@ class ApiClient:
         r.raise_for_status()
         return r.json()
 
+    def update_genre(self, genre_id: int, name: str, color: str) -> Dict[str, Any]:
+        r = requests.put(self._url(f"genres/{genre_id}"), json={"name": name, "color": color}, timeout=5)
+        r.raise_for_status()
+        return r.json()
+
+    def delete_genre(self, genre_id: int) -> bool:
+        r = requests.delete(self._url(f"genres/{genre_id}"), timeout=5)
+        return r.status_code == 204
+
     # --- PLATAFORMAS ---
     def get_platforms(self) -> List[Dict[str, Any]]:
         r = requests.get(self._url("platforms/"), timeout=5)
@@ -100,6 +118,15 @@ class ApiClient:
         r.raise_for_status()
         return r.json()
 
+    def update_platform(self, platform_id: int, name: str, icon_name: Optional[str] = None) -> Dict[str, Any]:
+        r = requests.put(self._url(f"platforms/{platform_id}"), json={"name": name, "icon_name": icon_name}, timeout=5)
+        r.raise_for_status()
+        return r.json()
+
+    def delete_platform(self, platform_id: int) -> bool:
+        r = requests.delete(self._url(f"platforms/{platform_id}"), timeout=5)
+        return r.status_code == 204
+
     # --- FRANQUIAS ---
     def get_franchises(self) -> List[Dict[str, Any]]:
         r = requests.get(self._url("franchises/"), timeout=5)
@@ -110,6 +137,35 @@ class ApiClient:
         r = requests.post(self._url("franchises/"), json={"name": name}, timeout=5)
         r.raise_for_status()
         return r.json()
+
+    def update_franchise(self, franchise_id: int, name: str) -> Dict[str, Any]:
+        r = requests.put(self._url(f"franchises/{franchise_id}"), json={"name": name}, timeout=5)
+        r.raise_for_status()
+        return r.json()
+
+    def delete_franchise(self, franchise_id: int) -> bool:
+        r = requests.delete(self._url(f"franchises/{franchise_id}"), timeout=5)
+        return r.status_code == 204
+
+    # --- DESENVOLVEDORAS ---
+    def get_developers(self) -> List[Dict[str, Any]]:
+        r = requests.get(self._url("developers/"), timeout=5)
+        r.raise_for_status()
+        return r.json()
+
+    def create_developer(self, name: str) -> Dict[str, Any]:
+        r = requests.post(self._url("developers/"), json={"name": name}, timeout=5)
+        r.raise_for_status()
+        return r.json()
+
+    def update_developer(self, dev_id: int, name: str) -> Dict[str, Any]:
+        r = requests.put(self._url(f"developers/{dev_id}"), json={"name": name}, timeout=5)
+        r.raise_for_status()
+        return r.json()
+
+    def delete_developer(self, dev_id: int) -> bool:
+        r = requests.delete(self._url(f"developers/{dev_id}"), timeout=5)
+        return r.status_code == 204
 
     # --- ESTATÍSTICAS E ANUÁRIO ---
     def get_yearbook(self, year: int) -> Dict[str, Any]:

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, desc, asc
 from backend.app.models.game import Game, GameStatus, game_genres
 from backend.app.models.genre import Genre
+from backend.app.models.developer import Developer
 from backend.app.schemas.game import GameCreate, GameUpdate
 
 class GameService:
@@ -22,6 +23,7 @@ class GameService:
         query = db.query(Game).options(
             joinedload(Game.platform),
             joinedload(Game.franchise),
+            joinedload(Game.developer_rel),
             joinedload(Game.genres)
         )
 
@@ -68,6 +70,7 @@ class GameService:
         return db.query(Game).options(
             joinedload(Game.platform),
             joinedload(Game.franchise),
+            joinedload(Game.developer_rel),
             joinedload(Game.genres)
         ).filter(Game.id == game_id).first()
 
@@ -75,6 +78,21 @@ class GameService:
     def create_game(db: Session, game_in: GameCreate) -> Game:
         data = game_in.model_dump(exclude={"genre_ids"})
         
+        # Sincronizar Developer se fornecido como string
+        dev_name = (data.get("developer") or "").strip()
+        if dev_name and not data.get("developer_id"):
+            dev = db.query(Developer).filter(Developer.name.ilike(dev_name)).first()
+            if not dev:
+                dev = Developer(name=dev_name)
+                db.add(dev)
+                db.flush()
+            data["developer_id"] = dev.id
+            data["developer"] = dev.name
+        elif data.get("developer_id"):
+            dev = db.query(Developer).filter(Developer.id == data["developer_id"]).first()
+            if dev:
+                data["developer"] = dev.name
+
         # Se preencheu finish_date mas não completion_year, calcula o ano
         if data.get("finish_date") and not data.get("completion_year"):
             data["completion_year"] = data["finish_date"].year
@@ -99,10 +117,19 @@ class GameService:
         update_data = game_in.model_dump(exclude_unset=True)
         genre_ids = update_data.pop("genre_ids", None)
 
+        dev_name = (update_data.get("developer") or "").strip()
+        if dev_name and not update_data.get("developer_id"):
+            dev = db.query(Developer).filter(Developer.name.ilike(dev_name)).first()
+            if not dev:
+                dev = Developer(name=dev_name)
+                db.add(dev)
+                db.flush()
+            update_data["developer_id"] = dev.id
+            update_data["developer"] = dev.name
+
         for key, value in update_data.items():
             setattr(db_game, key, value)
 
-        # Atualizar completion_year se finish_date foi alterada
         if "finish_date" in update_data and update_data["finish_date"]:
             if "completion_year" not in update_data or not update_data["completion_year"]:
                 db_game.completion_year = update_data["finish_date"].year

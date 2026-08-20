@@ -44,6 +44,7 @@ class Game(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(200), nullable=False, index=True)
     developer = Column(String(150), nullable=True)
+    developer_id = Column(Integer, ForeignKey("developers.id"), nullable=True)
     
     # Chaves estrangeiras
     platform_id = Column(Integer, ForeignKey("platforms.id"), nullable=True)
@@ -51,13 +52,13 @@ class Game(Base):
 
     # Status e Imagens
     status = Column(SQLEnum(GameStatus), default=GameStatus.DISPONIVEL, nullable=False, index=True)
-    cover_image = Column(String(300), nullable=True)  # Nome do arquivo ou caminho
+    cover_image = Column(String(300), nullable=True)
     
-    # Tempo e Estimativas
+    # Tempo e Estimativas (salvos como float no banco, inteiros na UI)
     hltb_hours = Column(Float, nullable=True, default=0.0)
     played_hours = Column(Float, nullable=True, default=0.0)
 
-    # Avaliação e Dificuldade (1-10)
+    # Avaliação e Dificuldade (0-10)
     score = Column(Float, nullable=True)
     difficulty = Column(Float, nullable=True)
 
@@ -79,4 +80,5 @@ class Game(Base):
     # Relacionamentos
     platform = relationship("Platform", back_populates="games")
     franchise = relationship("Franchise", back_populates="games")
+    developer_rel = relationship("Developer", back_populates="games")
     genres = relationship("Genre", secondary="game_genres", back_populates="games")

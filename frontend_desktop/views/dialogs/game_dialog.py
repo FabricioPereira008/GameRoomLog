@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, QComboBox,
-    QDoubleSpinBox, QDateEdit, QTextEdit, QPushButton, QLabel, QFileDialog,
-    QCheckBox, QMessageBox, QScrollArea, QWidget, QInputDialog
+    QSpinBox, QDoubleSpinBox, QDateEdit, QTextEdit, QPushButton, QLabel, QFileDialog,
+    QCheckBox, QMessageBox, QScrollArea, QWidget, QInputDialog, QCompleter
 )
-from PySide6.QtCore import Qt, QDate
+from PySide6.QtCore import Qt, QDate, QStringListModel
 from PySide6.QtGui import QPixmap
 from datetime import date
 from frontend_desktop.api_client.client import api_client
@@ -16,7 +16,7 @@ class GameDialog(QDialog):
         self.cover_filename = self.game_data.get("cover_image")
 
         self.setWindowTitle("Editar Jogo" if self.is_edit else "Novo Jogo")
-        self.resize(550, 680)
+        self.resize(580, 720)
         self.init_ui()
         self.load_options()
         self.populate_data()
@@ -26,7 +26,7 @@ class GameDialog(QDialog):
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(14)
 
-        # Scroll área para formulários longos
+        # Scroll área
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("background-color: transparent; border: none;")
@@ -41,10 +41,12 @@ class GameDialog(QDialog):
         self.input_title.setPlaceholderText("Ex: The Legend of Zelda: Tears of the Kingdom")
         form_layout.addRow("Título *:", self.input_title)
 
-        # 2. Desenvolvedora
-        self.input_developer = QLineEdit()
-        self.input_developer.setPlaceholderText("Ex: Nintendo EPD")
-        form_layout.addRow("Desenvolvedora:", self.input_developer)
+        # 2. Desenvolvedora (Combobox Editável com Autocomplete)
+        self.combo_developer = QComboBox()
+        self.combo_developer.setEditable(True)
+        self.combo_developer.setInsertPolicy(QComboBox.NoInsert)
+        self.combo_developer.lineEdit().setPlaceholderText("Selecione ou digite a desenvolvedora...")
+        form_layout.addRow("Desenvolvedora:", self.combo_developer)
 
         # 3. Status
         self.combo_status = QComboBox()
@@ -58,60 +60,65 @@ class GameDialog(QDialog):
         self.combo_platform = QComboBox()
         btn_add_plat = QPushButton("+")
         btn_add_plat.setFixedWidth(30)
+        btn_add_plat.setProperty("class", "small-btn")
         btn_add_plat.setToolTip("Adicionar nova plataforma")
         btn_add_plat.clicked.connect(self.add_new_platform)
         plat_layout.addWidget(self.combo_platform)
         plat_layout.addWidget(btn_add_plat)
         form_layout.addRow("Plataforma:", plat_layout)
 
-        # 5. Franquia
+        # 5. Franquia / Série
         fran_layout = QHBoxLayout()
         self.combo_franchise = QComboBox()
         btn_add_fran = QPushButton("+")
         btn_add_fran.setFixedWidth(30)
+        btn_add_fran.setProperty("class", "small-btn")
         btn_add_fran.setToolTip("Adicionar nova franquia")
         btn_add_fran.clicked.connect(self.add_new_franchise)
         fran_layout.addWidget(self.combo_franchise)
         fran_layout.addWidget(btn_add_fran)
         form_layout.addRow("Franquia / Série:", fran_layout)
 
-        # 6. Gênero Principal
+        # 6. Gênero
         gen_layout = QHBoxLayout()
         self.combo_genre = QComboBox()
         btn_add_gen = QPushButton("+")
         btn_add_gen.setFixedWidth(30)
+        btn_add_gen.setProperty("class", "small-btn")
         btn_add_gen.setToolTip("Adicionar novo gênero")
         btn_add_gen.clicked.connect(self.add_new_genre)
         gen_layout.addWidget(self.combo_genre)
         gen_layout.addWidget(btn_add_gen)
         form_layout.addRow("Gênero:", gen_layout)
 
-        # 7. Horas (HLTB e Jogadas)
+        # 7. Horas (Inteiros)
         hours_layout = QHBoxLayout()
-        self.spin_hltb = QDoubleSpinBox()
-        self.spin_hltb.setRange(0, 9999)
+        self.spin_hltb = QSpinBox()
+        self.spin_hltb.setRange(0, 99999)
         self.spin_hltb.setSuffix(" h")
         
-        self.spin_played = QDoubleSpinBox()
-        self.spin_played.setRange(0, 9999)
+        self.spin_played = QSpinBox()
+        self.spin_played.setRange(0, 99999)
         self.spin_played.setSuffix(" h")
 
         hours_layout.addWidget(QLabel("HLTB:"))
         hours_layout.addWidget(self.spin_hltb)
         hours_layout.addWidget(QLabel("Jogadas:"))
         hours_layout.addWidget(self.spin_played)
-        form_layout.addRow("Tempo:", hours_layout)
+        form_layout.addRow("Tempo Estimado/Jogado:", hours_layout)
 
-        # 8. Nota e Dificuldade (0 a 10)
+        # 8. Avaliação (0.0 a 10.0 com 1 decimal)
         score_layout = QHBoxLayout()
         self.spin_score = QDoubleSpinBox()
         self.spin_score.setRange(0, 10)
-        self.spin_score.setSingleStep(0.5)
+        self.spin_score.setDecimals(1)
+        self.spin_score.setSingleStep(0.1)
         self.spin_score.setSpecialValueText("Sem nota")
 
         self.spin_diff = QDoubleSpinBox()
         self.spin_diff.setRange(0, 10)
-        self.spin_diff.setSingleStep(0.5)
+        self.spin_diff.setDecimals(1)
+        self.spin_diff.setSingleStep(0.1)
         self.spin_diff.setSpecialValueText("Sem nota")
 
         score_layout.addWidget(QLabel("Nota (0-10):"))
@@ -140,35 +147,59 @@ class GameDialog(QDialog):
         dates_layout.addWidget(self.date_plat)
         form_layout.addRow("Datas:", dates_layout)
 
-        # 10. Tipo e Formato
-        extra_layout = QHBoxLayout()
+        # 10. Tipo de Jogada e Campo Condicional de Rejogada
+        play_layout = QHBoxLayout()
         self.combo_play_type = QComboBox()
         self.combo_play_type.addItems(["Primeira Jogada", "Rejogada"])
+        self.combo_play_type.currentIndexChanged.connect(self.on_play_type_changed)
 
+        self.lbl_play_count = QLabel("Nº da Jogada:")
+        self.spin_play_count = QSpinBox()
+        self.spin_play_count.setRange(2, 99)
+        self.spin_play_count.setSuffix("ª Vez")
+        self.spin_play_count.setValue(2)
+
+        # Esconder por padrão
+        self.lbl_play_count.setVisible(False)
+        self.spin_play_count.setVisible(False)
+
+        play_layout.addWidget(self.combo_play_type)
+        play_layout.addWidget(self.lbl_play_count)
+        play_layout.addWidget(self.spin_play_count)
+        play_layout.addStretch()
+        form_layout.addRow("Tipo de Jogada:", play_layout)
+
+        # 11. Formato e Favorito
+        format_layout = QHBoxLayout()
         self.combo_format = QComboBox()
         self.combo_format.addItems(["Digital", "Físico", "Emulado"])
+        self.chk_favorite = QCheckBox("⭐ Marcar como Favorito")
+        format_layout.addWidget(self.combo_format)
+        format_layout.addWidget(self.chk_favorite)
+        form_layout.addRow("Formato:", format_layout)
 
-        self.chk_favorite = QCheckBox("⭐ Favorito")
-
-        extra_layout.addWidget(self.combo_play_type)
-        extra_layout.addWidget(self.combo_format)
-        extra_layout.addWidget(self.chk_favorite)
-        form_layout.addRow("Detalhes:", extra_layout)
-
-        # 11. Imagem de Capa
+        # 12. Imagem de Capa (Arquivo Local ou Link/URL)
         cover_layout = QHBoxLayout()
-        self.btn_select_cover = QPushButton("Escolher Imagem de Capa...")
+        self.btn_select_cover = QPushButton("📁 Arquivo Local...")
+        self.btn_select_cover.setProperty("class", "small-btn")
         self.btn_select_cover.clicked.connect(self.choose_cover_image)
-        self.lbl_cover_status = QLabel("Nenhuma imagem selecionada" if not self.cover_filename else "Capa definida")
-        self.lbl_cover_status.setStyleSheet("color: #72757e;")
-        cover_layout.addWidget(self.btn_select_cover)
-        cover_layout.addWidget(self.lbl_cover_status)
-        form_layout.addRow("Capa:", cover_layout)
 
-        # 12. Anotações / Review
+        self.btn_url_cover = QPushButton("🔗 Link / URL...")
+        self.btn_url_cover.setProperty("class", "small-btn")
+        self.btn_url_cover.clicked.connect(self.choose_cover_url)
+
+        self.lbl_cover_status = QLabel("Nenhuma imagem" if not self.cover_filename else "✓ Imagem salva")
+        self.lbl_cover_status.setStyleSheet("color: #9ca3af; font-size: 11px;")
+
+        cover_layout.addWidget(self.btn_select_cover)
+        cover_layout.addWidget(self.btn_url_cover)
+        cover_layout.addWidget(self.lbl_cover_status)
+        form_layout.addRow("Capa do Jogo:", cover_layout)
+
+        # 13. Anotações
         self.input_notes = QTextEdit()
-        self.input_notes.setPlaceholderText("Escreva aqui suas impressões, review ou dicas do jogo...")
-        self.input_notes.setFixedHeight(90)
+        self.input_notes.setPlaceholderText("Escreva aqui suas impressões, review ou dicas...")
+        self.input_notes.setFixedHeight(85)
         form_layout.addRow("Anotações:", self.input_notes)
 
         scroll.setWidget(container)
@@ -177,8 +208,8 @@ class GameDialog(QDialog):
         # Botões de Ação
         btn_box = QHBoxLayout()
         if self.is_edit:
-            self.btn_delete = QPushButton("🗑️ Excluir Jogo")
-            self.btn_delete.setStyleSheet("background-color: #e53e3e; color: white; border-radius: 6px; padding: 8px 12px;")
+            self.btn_delete = QPushButton("🗑️ Excluir")
+            self.btn_delete.setProperty("class", "delete-btn")
             self.btn_delete.clicked.connect(self.delete_game)
             btn_box.addWidget(self.btn_delete)
 
@@ -196,8 +227,23 @@ class GameDialog(QDialog):
 
         main_layout.addLayout(btn_box)
 
+    def on_play_type_changed(self):
+        is_replay = self.combo_play_type.currentText() == "Rejogada"
+        self.lbl_play_count.setVisible(is_replay)
+        self.spin_play_count.setVisible(is_replay)
+
     def load_options(self):
         try:
+            # Desenvolvedoras
+            self.combo_developer.clear()
+            devs = api_client.get_developers()
+            dev_names = [d["name"] for d in devs]
+            self.combo_developer.addItems(dev_names)
+            completer = QCompleter(dev_names, self)
+            completer.setCaseSensitivity(Qt.CaseInsensitive)
+            completer.setFilterMode(Qt.MatchContains)
+            self.combo_developer.setCompleter(completer)
+
             # Plataformas
             self.combo_platform.clear()
             self.combo_platform.addItem("Nenhuma", None)
@@ -223,8 +269,8 @@ class GameDialog(QDialog):
             return
 
         self.input_title.setText(self.game_data.get("title", ""))
-        self.input_developer.setText(self.game_data.get("developer") or "")
-        
+        self.combo_developer.setEditText(self.game_data.get("developer") or "")
+
         status = self.game_data.get("status")
         if status:
             idx = self.combo_status.findText(status)
@@ -252,14 +298,17 @@ class GameDialog(QDialog):
             if idx >= 0:
                 self.combo_genre.setCurrentIndex(idx)
 
-        self.spin_hltb.setValue(self.game_data.get("hltb_hours") or 0.0)
-        self.spin_played.setValue(self.game_data.get("played_hours") or 0.0)
+        # Horas (inteiros)
+        self.spin_hltb.setValue(int(self.game_data.get("hltb_hours") or 0))
+        self.spin_played.setValue(int(self.game_data.get("played_hours") or 0))
 
+        # Avaliações
         if self.game_data.get("score") is not None:
-            self.spin_score.setValue(self.game_data.get("score"))
+            self.spin_score.setValue(float(self.game_data.get("score")))
         if self.game_data.get("difficulty") is not None:
-            self.spin_diff.setValue(self.game_data.get("difficulty"))
+            self.spin_diff.setValue(float(self.game_data.get("difficulty")))
 
+        # Datas
         if self.game_data.get("finish_date"):
             fdate = QDate.fromString(self.game_data["finish_date"], "yyyy-MM-dd")
             if fdate.isValid():
@@ -272,7 +321,13 @@ class GameDialog(QDialog):
                 self.date_plat.setDate(pdate)
                 self.chk_plat_date.setChecked(True)
 
-        self.combo_play_type.setCurrentText(self.game_data.get("play_type", "Primeira Jogada"))
+        # Play type e Play count
+        play_type = self.game_data.get("play_type", "Primeira Jogada")
+        self.combo_play_type.setCurrentText(play_type)
+        if play_type == "Rejogada":
+            self.spin_play_count.setValue(self.game_data.get("play_count", 2))
+        self.on_play_type_changed()
+
         self.combo_format.setCurrentText(self.game_data.get("format", "Digital"))
         self.chk_favorite.setChecked(bool(self.game_data.get("is_favorite")))
         self.input_notes.setText(self.game_data.get("notes") or "")
@@ -285,10 +340,22 @@ class GameDialog(QDialog):
             filename = api_client.upload_cover(file_path)
             if filename:
                 self.cover_filename = filename
-                self.lbl_cover_status.setText(f"✓ Imagem carregada: {filename[:15]}...")
+                self.lbl_cover_status.setText(f"✓ Imagem: {filename[:12]}...")
                 self.lbl_cover_status.setStyleSheet("color: #2cb67d;")
             else:
                 QMessageBox.warning(self, "Erro", "Não foi possível enviar a imagem.")
+
+    def choose_cover_url(self):
+        url, ok = QInputDialog.getText(self, "Importar Capa por URL", "Cole o link/URL da imagem:")
+        if ok and url.strip():
+            filename = api_client.upload_cover_url(url.strip())
+            if filename:
+                self.cover_filename = filename
+                self.lbl_cover_status.setText(f"✓ Baixado: {filename[:12]}...")
+                self.lbl_cover_status.setStyleSheet("color: #2cb67d;")
+                QMessageBox.information(self, "Sucesso", "Imagem baixada e salva com sucesso!")
+            else:
+                QMessageBox.warning(self, "Erro", "Não foi possível baixar a imagem do link fornecido.")
 
     def add_new_platform(self):
         name, ok = QInputDialog.getText(self, "Nova Plataforma", "Nome da plataforma:")
@@ -317,17 +384,21 @@ class GameDialog(QDialog):
             QMessageBox.warning(self, "Aviso", "O título do jogo é obrigatório.")
             return
 
+        play_type = self.combo_play_type.currentText()
+        play_count = self.spin_play_count.value() if play_type == "Rejogada" else 1
+
         payload = {
             "title": title,
-            "developer": self.input_developer.text().strip() or None,
+            "developer": self.combo_developer.currentText().strip() or None,
             "status": self.combo_status.currentText(),
             "platform_id": self.combo_platform.currentData(),
             "franchise_id": self.combo_franchise.currentData(),
-            "hltb_hours": self.spin_hltb.value(),
-            "played_hours": self.spin_played.value(),
-            "score": self.spin_score.value() if self.spin_score.value() > 0 else None,
-            "difficulty": self.spin_diff.value() if self.spin_diff.value() > 0 else None,
-            "play_type": self.combo_play_type.currentText(),
+            "hltb_hours": float(self.spin_hltb.value()),
+            "played_hours": float(self.spin_played.value()),
+            "score": round(self.spin_score.value(), 1) if self.spin_score.value() > 0 else None,
+            "difficulty": round(self.spin_diff.value(), 1) if self.spin_diff.value() > 0 else None,
+            "play_type": play_type,
+            "play_count": play_count,
             "format": self.combo_format.currentText(),
             "is_favorite": self.chk_favorite.isChecked(),
             "notes": self.input_notes.toPlainText().strip() or None,
