@@ -3,7 +3,6 @@ from PySide6.QtWidgets import (
     QHeaderView, QLineEdit, QComboBox, QLabel
 )
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QColor, QBrush
 
 class GameTable(QWidget):
     game_selected = Signal(dict)
@@ -12,6 +11,8 @@ class GameTable(QWidget):
         super().__init__(parent)
         self.games = []
         self.filtered_games = []
+        self.batch_size = 50
+        self.rendered_count = 0
         self.init_ui()
 
     def init_ui(self):
@@ -37,9 +38,13 @@ class GameTable(QWidget):
         self.status_filter.currentIndexChanged.connect(self.apply_filter)
         filter_layout.addWidget(self.status_filter)
 
+        self.count_label = QLabel("0 jogos")
+        self.count_label.setProperty("class", "card-meta")
+        filter_layout.addWidget(self.count_label)
+
         layout.addLayout(filter_layout)
 
-        # Tabela
+        # Tabela com performance otimizada
         self.table = QTableWidget()
         self.table.setColumnCount(11)
         self.table.setHorizontalHeaderLabels([
@@ -47,14 +52,24 @@ class GameTable(QWidget):
             "Ano", "Nota", "Dificuldade", "Horas HLTB", "Horas Jogadas", "Tipo"
         ])
         
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        # Larguras de coluna pré-definidas (sem ResizeToContents custoso)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
         for col in range(1, 11):
-            self.table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(col, QHeaderView.Interactive)
+
+        col_widths = {
+            1: 100, 2: 130, 3: 110, 4: 140, 5: 60,
+            6: 60, 7: 75, 8: 80, 9: 80, 10: 120
+        }
+        for col, width in col_widths.items():
+            self.table.setColumnWidth(col, width)
 
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
         self.table.itemDoubleClicked.connect(self.on_row_double_clicked)
+        self.table.verticalScrollBar().valueChanged.connect(self.on_scroll)
 
         layout.addWidget(self.table)
 
@@ -79,17 +94,33 @@ class GameTable(QWidget):
 
             self.filtered_games.append(g)
 
-        self.render_table()
+        self.rendered_count = 0
+        self.table.setRowCount(0)
+        self.load_more_rows()
 
-    def render_table(self):
-        self.table.setRowCount(len(self.filtered_games))
-        for row, game in enumerate(self.filtered_games):
+    def load_more_rows(self):
+        total = len(self.filtered_games)
+        if self.rendered_count >= total:
+            self.update_count_label()
+            return
+
+        next_count = min(self.rendered_count + self.batch_size, total)
+        batch = self.filtered_games[self.rendered_count:next_count]
+
+        self.table.setUpdatesEnabled(False)
+        self.table.setSortingEnabled(False)
+
+        current_rows = self.table.rowCount()
+        self.table.setRowCount(current_rows + len(batch))
+
+        for idx, game in enumerate(batch):
+            row = current_rows + idx
+
             # 0: Jogo
             self.table.setItem(row, 0, QTableWidgetItem(game.get("title", "")))
 
             # 1: Status
-            status_item = QTableWidgetItem(game.get("status", ""))
-            self.table.setItem(row, 1, status_item)
+            self.table.setItem(row, 1, QTableWidgetItem(game.get("status", "")))
 
             # 2: Gênero
             genres = ", ".join([gen.get("name") for gen in game.get("genres", [])])
@@ -115,15 +146,31 @@ class GameTable(QWidget):
             self.table.setItem(row, 7, QTableWidgetItem(diff))
 
             # 8: HLTB
-            hltb = f"{game.get('hltb_hours')}h" if game.get("hltb_hours") else ""
+            hltb = f"{int(game.get('hltb_hours'))}h" if game.get("hltb_hours") else ""
             self.table.setItem(row, 8, QTableWidgetItem(hltb))
 
             # 9: Jogadas
-            played = f"{game.get('played_hours')}h" if game.get("played_hours") else ""
+            played = f"{int(game.get('played_hours'))}h" if game.get("played_hours") else ""
             self.table.setItem(row, 9, QTableWidgetItem(played))
 
             # 10: Tipo
             self.table.setItem(row, 10, QTableWidgetItem(game.get("play_type", "")))
+
+        self.rendered_count = next_count
+        self.table.setUpdatesEnabled(True)
+        self.update_count_label()
+
+    def on_scroll(self, value: int):
+        scroll_bar = self.table.verticalScrollBar()
+        if value >= scroll_bar.maximum() - 5:
+            self.load_more_rows()
+
+    def update_count_label(self):
+        total = len(self.filtered_games)
+        if self.rendered_count < total:
+            self.count_label.setText(f"Exibindo {self.rendered_count} de {total} jogos (Role para carregar mais)")
+        else:
+            self.count_label.setText(f"{total} jogos encontrados")
 
     def on_row_double_clicked(self, item):
         row = item.row()

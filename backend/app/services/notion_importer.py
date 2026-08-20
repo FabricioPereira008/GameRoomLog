@@ -379,10 +379,8 @@ class NotionImporterService:
                 finish_date = parse_notion_date(row.get("Data de Finalização"))
                 platinum_date = parse_notion_date(row.get("Data da Platina"))
 
-                notes = ""
-                norm_title = sanitize_filename_for_lookup(title)
-                if norm_title in md_lookup:
-                    notes = extract_markdown_notes(md_lookup[norm_title])
+                notes = None
+
 
                 # 1. Plataforma
                 platform_id = None

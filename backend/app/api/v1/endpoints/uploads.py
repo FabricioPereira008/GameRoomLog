@@ -5,12 +5,16 @@ import httpx
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 from PIL import Image, ImageFilter
 from backend.app.core.config import settings
+from backend.app.core.database import get_db
+from backend.app.models.game import Game
 
 router = APIRouter()
+
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
@@ -214,9 +218,47 @@ async def auto_search_cover(payload: AutoCoverRequest):
         detail=f"Não foi possível encontrar automaticamente uma capa para '{title}'. Tente inserir o link da imagem."
     )
 
+@router.post("/auto-cover-game/{game_id}")
+async def auto_cover_game(
+    game_id: int,
+    api_key: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Jogo não encontrado")
+
+    try:
+        res = await auto_search_cover(AutoCoverRequest(title=game.title, api_key=api_key))
+        filename = res["filename"]
+        game.cover_image = filename
+        db.commit()
+        return {
+            "success": True,
+            "game_id": game_id,
+            "title": game.title,
+            "filename": filename,
+            "source": res.get("source")
+        }
+    except HTTPException:
+        return {
+            "success": False,
+            "game_id": game_id,
+            "title": game.title,
+            "error": "Capa não encontrada"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "game_id": game_id,
+            "title": game.title,
+            "error": str(e)
+        }
+
 @router.get("/cover/{filename}")
 def get_cover(filename: str):
     file_path = settings.COVERS_DIR / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Imagem não encontrada")
     return FileResponse(file_path)
+

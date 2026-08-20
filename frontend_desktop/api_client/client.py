@@ -212,5 +212,16 @@ class ApiClient:
         r.raise_for_status()
         return r.json()
 
+    # --- CAPAS AUTOMÁTICAS ---
+    def auto_cover_game(self, game_id: int, api_key: Optional[str] = None) -> Dict[str, Any]:
+        r = requests.post(
+            self._url(f"uploads/auto-cover-game/{game_id}"),
+            params={"api_key": api_key} if api_key else {},
+            timeout=20
+        )
+        r.raise_for_status()
+        return r.json()
+
 api_client = ApiClient()
+
 
