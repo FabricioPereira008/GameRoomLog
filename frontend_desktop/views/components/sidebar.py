@@ -39,7 +39,7 @@ class Sidebar(QWidget):
         # Scroll área interna para os botões do menu
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("background-color: transparent; border: none;")
+        scroll.setStyleSheet("QScrollArea { background-color: transparent; border: none; }")
 
         scroll_content = QWidget()
         layout = QVBoxLayout(scroll_content)

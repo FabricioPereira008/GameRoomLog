@@ -162,7 +162,7 @@ class ManagementView(QWidget):
         # Scroll Area com Grid de Cards
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("background-color: transparent; border: none;")
+        scroll.setStyleSheet("QScrollArea { background-color: transparent; border: none; }")
 
         self.container = QWidget()
         self.grid_layout = QGridLayout(self.container)

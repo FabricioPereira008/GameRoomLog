@@ -8,6 +8,8 @@ from PySide6.QtGui import QPixmap
 from datetime import date
 from frontend_desktop.api_client.client import api_client
 
+from pathlib import Path
+
 class GameDialog(QDialog):
     def __init__(self, game_data: dict = None, parent=None):
         super().__init__(parent)
@@ -16,7 +18,10 @@ class GameDialog(QDialog):
         self.cover_filename = self.game_data.get("cover_image")
 
         self.setWindowTitle("Editar Jogo" if self.is_edit else "Novo Jogo")
-        self.resize(600, 720)
+        self.setFixedWidth(640)
+        self.setMinimumHeight(680)
+        self.resize(640, 720)
+
         self.init_ui()
         self.load_options()
         self.populate_data()
@@ -30,7 +35,7 @@ class GameDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("background-color: transparent; border: none;")
+        scroll.setStyleSheet("QScrollArea { background-color: transparent; border: none; }")
 
         container = QWidget()
         form_layout = QFormLayout(container)

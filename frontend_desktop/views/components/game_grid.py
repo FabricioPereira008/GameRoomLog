@@ -10,10 +10,10 @@ class GameGrid(QScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWidgetResizable(True)
-        self.setStyleSheet("background-color: transparent; border: none;")
+        self.setStyleSheet("QScrollArea { background-color: transparent; border: none; }")
         
         self.container = QWidget()
-        self.container.setStyleSheet("background-color: transparent;")
+        
         self.grid_layout = QGridLayout(self.container)
         self.grid_layout.setContentsMargins(10, 10, 10, 10)
         self.grid_layout.setSpacing(16)

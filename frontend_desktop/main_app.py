@@ -14,6 +14,7 @@ def load_stylesheet(app: QApplication):
 
 def main():
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
     app.setApplicationName("GameRoomLog")
     app.setOrganizationName("GameRoom")
 

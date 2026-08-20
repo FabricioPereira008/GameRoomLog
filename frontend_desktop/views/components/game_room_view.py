@@ -20,7 +20,7 @@ class GameRoomView(QWidget):
         # Scroll Area geral para a Game Room
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("background-color: transparent; border: none;")
+        scroll.setStyleSheet("QScrollArea { background-color: transparent; border: none; }")
 
         container = QWidget()
         container_layout = QVBoxLayout(container)
