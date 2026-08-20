@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from backend.app.core.database import get_db
 from backend.app.models.genre import Genre
-from backend.app.models.game import Game, game_genres
+from backend.app.models.game import Game, GameStatus, game_genres
 from backend.app.schemas.genre import GenreCreate, GenreUpdate, GenreResponse
 from backend.app.schemas.category_detail import CategoryDetailResponse
 from backend.app.schemas.game import GameResponse
@@ -16,7 +16,12 @@ def list_genres(db: Session = Depends(get_db)):
     genres = db.query(Genre).order_by(Genre.name.asc()).all()
     results = []
     for g in genres:
-        count = db.query(func.count(game_genres.c.game_id)).filter(game_genres.c.genre_id == g.id).scalar() or 0
+        count = db.query(func.count(game_genres.c.game_id))\
+            .join(Game, Game.id == game_genres.c.game_id)\
+            .filter(
+                game_genres.c.genre_id == g.id,
+                Game.status.in_([GameStatus.ZERADO, GameStatus.PLATINADO])
+            ).scalar() or 0
         resp = GenreResponse.model_validate(g)
         resp.games_count = count
         results.append(resp)
@@ -28,7 +33,12 @@ def get_genre_details(genre_id: int, db: Session = Depends(get_db)):
     if not genre:
         raise HTTPException(status_code=404, detail="Gênero não encontrado")
 
-    games = db.query(Game).filter(Game.genres.any(Genre.id == genre_id)).order_by(Game.title.asc()).all()
+    # Apenas jogos zerados ou platinados
+    games = db.query(Game).filter(
+        Game.genres.any(Genre.id == genre_id),
+        Game.status.in_([GameStatus.ZERADO, GameStatus.PLATINADO])
+    ).order_by(Game.finish_date.desc().nullslast(), Game.title.asc()).all()
+    
     total_hours = sum(g.played_hours or g.hltb_hours or 0.0 for g in games)
 
     return CategoryDetailResponse(
@@ -60,13 +70,10 @@ def update_genre(genre_id: int, genre_in: GenreUpdate, db: Session = Depends(get
     if genre_in.name is not None:
         db_genre.name = genre_in.name.strip()
     if genre_in.color is not None:
-        db_genre.color = genre_in.color
+        db_genre.color = genre_in.color.strip()
     db.commit()
     db.refresh(db_genre)
-    count = db.query(func.count(game_genres.c.game_id)).filter(game_genres.c.genre_id == db_genre.id).scalar() or 0
-    resp = GenreResponse.model_validate(db_genre)
-    resp.games_count = count
-    return resp
+    return db_genre
 
 @router.delete("/{genre_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_genre(genre_id: int, db: Session = Depends(get_db)):

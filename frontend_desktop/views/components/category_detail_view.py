@@ -57,11 +57,11 @@ class CategoryDetailView(QWidget):
         self.title_layout.addStretch()
         main_layout.addLayout(self.title_layout)
 
-        # Stat Cards (Total de Jogos e Total de Horas)
+        # Stat Cards (Total de Jogos Zerados e Total de Horas)
         stats_layout = QHBoxLayout()
         stats_layout.setSpacing(12)
 
-        self.card_total_games = StatCard("Jogos na Categoria", "0", "🎮")
+        self.card_total_games = StatCard("Jogos Zerados", "0", "🏆")
         self.card_total_hours = StatCard("Horas Totais Jogadas", "0h", "⏱️")
 
         stats_layout.addWidget(self.card_total_games)
@@ -71,9 +71,10 @@ class CategoryDetailView(QWidget):
         main_layout.addLayout(stats_layout)
 
         # Subtítulo da Lista de Jogos
-        section_label = QLabel("Jogos Cadastrados")
-        section_label.setProperty("class", "section-header-small")
-        main_layout.addWidget(section_label)
+        self.section_label = QLabel("🏆 Jogos Zerados / Platinados")
+        self.section_label.setProperty("class", "section-header-small")
+        main_layout.addWidget(self.section_label)
+
 
         # Grid de Cards dos Jogos
         self.game_grid = ScrollableGameGrid()

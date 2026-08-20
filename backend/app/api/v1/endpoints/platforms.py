@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from backend.app.core.database import get_db
 from backend.app.models.platform import Platform
-from backend.app.models.game import Game
+from backend.app.models.game import Game, GameStatus
 from backend.app.schemas.platform import PlatformCreate, PlatformUpdate, PlatformResponse
 from backend.app.schemas.category_detail import CategoryDetailResponse
 from backend.app.schemas.game import GameResponse
@@ -16,7 +16,10 @@ def list_platforms(db: Session = Depends(get_db)):
     platforms = db.query(Platform).order_by(Platform.name.asc()).all()
     results = []
     for p in platforms:
-        count = db.query(func.count(Game.id)).filter(Game.platform_id == p.id).scalar() or 0
+        count = db.query(func.count(Game.id)).filter(
+            Game.platform_id == p.id,
+            Game.status.in_([GameStatus.ZERADO, GameStatus.PLATINADO])
+        ).scalar() or 0
         resp = PlatformResponse.model_validate(p)
         resp.games_count = count
         results.append(resp)
@@ -28,7 +31,12 @@ def get_platform_details(platform_id: int, db: Session = Depends(get_db)):
     if not platform:
         raise HTTPException(status_code=404, detail="Plataforma não encontrada")
 
-    games = db.query(Game).filter(Game.platform_id == platform_id).order_by(Game.title.asc()).all()
+    # Apenas jogos zerados ou platinados
+    games = db.query(Game).filter(
+        Game.platform_id == platform_id,
+        Game.status.in_([GameStatus.ZERADO, GameStatus.PLATINADO])
+    ).order_by(Game.finish_date.desc().nullslast(), Game.title.asc()).all()
+    
     total_hours = sum(g.played_hours or g.hltb_hours or 0.0 for g in games)
 
     return CategoryDetailResponse(
@@ -60,13 +68,10 @@ def update_platform(platform_id: int, platform_in: PlatformUpdate, db: Session =
     if platform_in.name is not None:
         db_platform.name = platform_in.name.strip()
     if platform_in.icon_name is not None:
-        db_platform.icon_name = platform_in.icon_name
+        db_platform.icon_name = platform_in.icon_name.strip()
     db.commit()
     db.refresh(db_platform)
-    count = db.query(func.count(Game.id)).filter(Game.platform_id == db_platform.id).scalar() or 0
-    resp = PlatformResponse.model_validate(db_platform)
-    resp.games_count = count
-    return resp
+    return db_platform
 
 @router.delete("/{platform_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_platform(platform_id: int, db: Session = Depends(get_db)):

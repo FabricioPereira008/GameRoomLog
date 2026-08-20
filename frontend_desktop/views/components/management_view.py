@@ -41,11 +41,12 @@ class ManageItemCard(QFrame):
 
         layout.addLayout(header)
 
-        # Contador de Jogos
+        # Contador de Jogos Zerados
         count = self.item_data.get("games_count", 0)
-        count_label = QLabel(f"🎮 {count} {'jogo cadastrado' if count == 1 else 'jogos cadastrados'} (Clique para ver)")
+        count_label = QLabel(f"🏆 {count} {'jogo zerado' if count == 1 else 'jogos zerados'} (Clique para ver)")
         count_label.setProperty("class", "manage-card-count")
         layout.addWidget(count_label)
+
 
         # Botões de Ação
         btn_layout = QHBoxLayout()
@@ -67,7 +68,6 @@ class ManageItemCard(QFrame):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            # Se não clicou nos botões
             self.clicked.emit(self.category_type, self.item_data["id"])
         super().mousePressEvent(event)
 
@@ -134,6 +134,7 @@ class ManagementView(QWidget):
         self.category_type = category_type
         self.title = title
         self.items = []
+        self.current_cols = 4
         self.init_ui()
 
     def init_ui(self):
@@ -161,9 +162,9 @@ class ManagementView(QWidget):
         layout.addLayout(header)
 
         # Scroll Area com Grid de Cards
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         self.container = QWidget()
         self.grid_layout = QGridLayout(self.container)
@@ -171,8 +172,17 @@ class ManagementView(QWidget):
         self.grid_layout.setSpacing(16)
         self.grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
 
-        scroll.setWidget(self.container)
-        layout.addWidget(scroll)
+        self.scroll.setWidget(self.container)
+        layout.addWidget(self.scroll)
+
+    def calculate_cols(self) -> int:
+        available_width = self.scroll.width()
+        if available_width <= 200:
+            available_width = self.width()
+        if available_width <= 200:
+            available_width = 1200
+        cols = max(2, (available_width - 32) // (250 + 16))
+        return cols
 
     def load_data(self):
         try:
@@ -204,7 +214,8 @@ class ManagementView(QWidget):
             self.grid_layout.addWidget(empty, 0, 0)
             return
 
-        cols = 4
+        self.current_cols = self.calculate_cols()
+        cols = self.current_cols
         for idx, itm in enumerate(filtered):
             card = ManageItemCard(self.category_type, itm)
             card.clicked.connect(self.category_selected.emit)
@@ -213,6 +224,12 @@ class ManagementView(QWidget):
             row = idx // cols
             col = idx % cols
             self.grid_layout.addWidget(card, row, col)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        new_cols = self.calculate_cols()
+        if new_cols != self.current_cols:
+            self.render_items()
 
     def on_item_changed(self):
         self.load_data()

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from backend.app.core.database import get_db
 from backend.app.models.developer import Developer
-from backend.app.models.game import Game
+from backend.app.models.game import Game, GameStatus
 from backend.app.schemas.developer import DeveloperCreate, DeveloperUpdate, DeveloperResponse
 
 router = APIRouter()
@@ -15,7 +15,8 @@ def list_developers(db: Session = Depends(get_db)):
     results = []
     for d in devs:
         count = db.query(func.count(Game.id)).filter(
-            (Game.developer_id == d.id) | (Game.developer.ilike(d.name))
+            ((Game.developer_id == d.id) | (Game.developer.ilike(d.name))),
+            Game.status.in_([GameStatus.ZERADO, GameStatus.PLATINADO])
         ).scalar() or 0
         resp = DeveloperResponse.model_validate(d)
         resp.games_count = count
