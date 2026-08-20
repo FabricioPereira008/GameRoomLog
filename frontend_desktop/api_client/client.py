@@ -202,4 +202,15 @@ class ApiClient:
         r.raise_for_status()
         return r.json()
 
+    # --- IMPORTAÇÃO DO NOTION ---
+    def import_notion(self, folder_path: str, auto_fetch_covers: bool = True) -> Dict[str, Any]:
+        r = requests.post(
+            self._url("imports/notion"),
+            json={"folder_path": folder_path, "auto_fetch_covers": auto_fetch_covers},
+            timeout=120
+        )
+        r.raise_for_status()
+        return r.json()
+
 api_client = ApiClient()
+

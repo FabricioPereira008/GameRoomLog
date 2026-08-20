@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from backend.app.api.v1.endpoints import games, genres, platforms, franchises, developers, stats, uploads
+from backend.app.api.v1.endpoints import games, genres, platforms, franchises, developers, stats, uploads, imports
 
 api_router = APIRouter()
 
@@ -10,3 +10,4 @@ api_router.include_router(franchises.router, prefix="/franchises", tags=["Franqu
 api_router.include_router(developers.router, prefix="/developers", tags=["Desenvolvedoras"])
 api_router.include_router(stats.router, prefix="/stats", tags=["Estatísticas"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["Uploads"])
+api_router.include_router(imports.router, prefix="/imports", tags=["Importações"])

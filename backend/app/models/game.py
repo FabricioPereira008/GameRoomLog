@@ -71,6 +71,8 @@ class Game(Base):
     play_type = Column(SQLEnum(PlayType), default=PlayType.PRIMEIRA_JOGADA, nullable=False)
     play_count = Column(Integer, default=1, nullable=False)
     format = Column(SQLEnum(GameFormat), default=GameFormat.DIGITAL, nullable=False)
+
+
     is_favorite = Column(Boolean, default=False, nullable=False)
     notes = Column(Text, nullable=True)
 

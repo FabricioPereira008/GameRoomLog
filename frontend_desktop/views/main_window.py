@@ -130,7 +130,9 @@ class MainWindow(QMainWindow):
         # View 11: Configurações
         self.view_settings = SettingsView()
         self.view_settings.settings_changed.connect(self.refresh_all_data)
+        self.view_settings.data_imported.connect(self.refresh_all_data)
         self.stack.addWidget(self.view_settings)
+
 
         # View 12: Detalhes de Categoria (Subpágina)
         self.view_category_detail = CategoryDetailView()
@@ -143,7 +145,7 @@ class MainWindow(QMainWindow):
 
         # Barra de status
         self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("Pronto • GameRoomLog v0.0.5 Online")
+        self.statusBar().showMessage("Pronto • GameRoomLog v0.1.0 Online")
 
     def switch_view(self, index: int):
         self.previous_nav_index = index
