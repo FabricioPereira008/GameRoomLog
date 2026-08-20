@@ -6,6 +6,8 @@ from backend.app.core.database import get_db
 from backend.app.models.franchise import Franchise
 from backend.app.models.game import Game
 from backend.app.schemas.franchise import FranchiseCreate, FranchiseUpdate, FranchiseResponse
+from backend.app.schemas.category_detail import CategoryDetailResponse
+from backend.app.schemas.game import GameResponse
 
 router = APIRouter()
 
@@ -19,6 +21,24 @@ def list_franchises(db: Session = Depends(get_db)):
         resp.games_count = count
         results.append(resp)
     return results
+
+@router.get("/{franchise_id}/details", response_model=CategoryDetailResponse)
+def get_franchise_details(franchise_id: int, db: Session = Depends(get_db)):
+    franchise = db.query(Franchise).filter(Franchise.id == franchise_id).first()
+    if not franchise:
+        raise HTTPException(status_code=404, detail="Franquia não encontrada")
+
+    games = db.query(Game).filter(Game.franchise_id == franchise_id).order_by(Game.title.asc()).all()
+    total_hours = sum(g.played_hours or g.hltb_hours or 0.0 for g in games)
+
+    return CategoryDetailResponse(
+        id=franchise.id,
+        name=franchise.name,
+        category_type="franchise",
+        total_games=len(games),
+        total_hours_played=round(total_hours, 1),
+        games=[GameResponse.model_validate(g) for g in games]
+    )
 
 @router.post("/", response_model=FranchiseResponse, status_code=status.HTTP_201_CREATED)
 def create_franchise(franchise_in: FranchiseCreate, db: Session = Depends(get_db)):

@@ -87,9 +87,23 @@ class ApiClient:
             return r.json().get("filename")
         return None
 
+    def auto_search_cover(self, title: str, api_key: Optional[str] = None) -> Optional[str]:
+        payload = {"title": title}
+        if api_key:
+            payload["api_key"] = api_key
+        r = requests.post(self._url("uploads/auto-cover"), json=payload, timeout=15)
+        if r.status_code == 200:
+            return r.json().get("filename")
+        return None
+
     # --- GÊNEROS ---
     def get_genres(self) -> List[Dict[str, Any]]:
         r = requests.get(self._url("genres/"), timeout=5)
+        r.raise_for_status()
+        return r.json()
+
+    def get_genre_details(self, genre_id: int) -> Dict[str, Any]:
+        r = requests.get(self._url(f"genres/{genre_id}/details"), timeout=5)
         r.raise_for_status()
         return r.json()
 
@@ -113,6 +127,11 @@ class ApiClient:
         r.raise_for_status()
         return r.json()
 
+    def get_platform_details(self, platform_id: int) -> Dict[str, Any]:
+        r = requests.get(self._url(f"platforms/{platform_id}/details"), timeout=5)
+        r.raise_for_status()
+        return r.json()
+
     def create_platform(self, name: str, icon_name: Optional[str] = None) -> Dict[str, Any]:
         r = requests.post(self._url("platforms/"), json={"name": name, "icon_name": icon_name}, timeout=5)
         r.raise_for_status()
@@ -130,6 +149,11 @@ class ApiClient:
     # --- FRANQUIAS ---
     def get_franchises(self) -> List[Dict[str, Any]]:
         r = requests.get(self._url("franchises/"), timeout=5)
+        r.raise_for_status()
+        return r.json()
+
+    def get_franchise_details(self, franchise_id: int) -> Dict[str, Any]:
+        r = requests.get(self._url(f"franchises/{franchise_id}/details"), timeout=5)
         r.raise_for_status()
         return r.json()
 

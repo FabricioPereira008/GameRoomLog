@@ -6,6 +6,8 @@ from backend.app.core.database import get_db
 from backend.app.models.genre import Genre
 from backend.app.models.game import Game, game_genres
 from backend.app.schemas.genre import GenreCreate, GenreUpdate, GenreResponse
+from backend.app.schemas.category_detail import CategoryDetailResponse
+from backend.app.schemas.game import GameResponse
 
 router = APIRouter()
 
@@ -19,6 +21,25 @@ def list_genres(db: Session = Depends(get_db)):
         resp.games_count = count
         results.append(resp)
     return results
+
+@router.get("/{genre_id}/details", response_model=CategoryDetailResponse)
+def get_genre_details(genre_id: int, db: Session = Depends(get_db)):
+    genre = db.query(Genre).filter(Genre.id == genre_id).first()
+    if not genre:
+        raise HTTPException(status_code=404, detail="Gênero não encontrado")
+
+    games = db.query(Game).filter(Game.genres.any(Genre.id == genre_id)).order_by(Game.title.asc()).all()
+    total_hours = sum(g.played_hours or g.hltb_hours or 0.0 for g in games)
+
+    return CategoryDetailResponse(
+        id=genre.id,
+        name=genre.name,
+        category_type="genre",
+        color=genre.color,
+        total_games=len(games),
+        total_hours_played=round(total_hours, 1),
+        games=[GameResponse.model_validate(g) for g in games]
+    )
 
 @router.post("/", response_model=GenreResponse, status_code=status.HTTP_201_CREATED)
 def create_genre(genre_in: GenreCreate, db: Session = Depends(get_db)):

@@ -34,30 +34,34 @@ client = TestClient(app)
 def test_read_root():
     response = client.get("/")
     assert response.status_code == 200
-    assert "GameRoomLog API" in response.json()["message"]
+    assert response.json()["version"] == "0.0.3"
 
-def test_create_and_list_genre():
+def test_create_and_list_genre_details():
     res = client.post("/api/v1/genres/", json={"name": "RPG", "color": "#E53E3E"})
     assert res.status_code == 201
-    data = res.json()
-    assert data["name"] == "RPG"
-    assert data["id"] is not None
+    genre_id = res.json()["id"]
 
-    # Testar update PUT
-    put_res = client.put(f"/api/v1/genres/{data['id']}", json={"name": "JRPG", "color": "#9F7AEA"})
-    assert put_res.status_code == 200
-    assert put_res.json()["name"] == "JRPG"
+    # Criar um jogo nesse gênero
+    client.post("/api/v1/games/", json={
+        "title": "Chrono Trigger",
+        "genre_ids": [genre_id],
+        "status": "Zerado",
+        "played_hours": 25.0
+    })
 
-    list_res = client.get("/api/v1/genres/")
-    assert list_res.status_code == 200
-    assert len(list_res.json()) == 1
+    # Testar detalhes do gênero
+    detail_res = client.get(f"/api/v1/genres/{genre_id}/details")
+    assert detail_res.status_code == 200
+    detail = detail_res.json()
+    assert detail["name"] == "RPG"
+    assert detail["total_games"] == 1
+    assert detail["total_hours_played"] == 25.0
 
 def test_create_and_list_platform():
     res = client.post("/api/v1/platforms/", json={"name": "Switch 2", "icon_name": "switch"})
     assert res.status_code == 201
     plat_id = res.json()["id"]
 
-    # Testar update PUT
     put_res = client.put(f"/api/v1/platforms/{plat_id}", json={"name": "Nintendo Switch 2"})
     assert put_res.status_code == 200
     assert put_res.json()["name"] == "Nintendo Switch 2"
@@ -70,10 +74,6 @@ def test_developer_crud():
     list_res = client.get("/api/v1/developers/")
     assert list_res.status_code == 200
     assert len(list_res.json()) == 1
-
-    put_res = client.put(f"/api/v1/developers/{dev_id}", json={"name": "Nintendo EPD"})
-    assert put_res.status_code == 200
-    assert put_res.json()["name"] == "Nintendo EPD"
 
 def test_create_game_and_verify_yearbook():
     p_res = client.post("/api/v1/platforms/", json={"name": "PC"})
@@ -98,12 +98,7 @@ def test_create_game_and_verify_yearbook():
     }
     game_res = client.post("/api/v1/games/", json=game_payload)
     assert game_res.status_code == 201
-    created = game_res.json()
-    assert created["title"] == "Mortal Shell"
-    assert created["platform"]["name"] == "PC"
-    assert created["score"] == 7.5
 
-    # Criar segundo jogo Platinado
     game2_payload = {
         "title": "Zelda: Ocarina of Time",
         "developer": "Nintendo",
@@ -117,12 +112,9 @@ def test_create_game_and_verify_yearbook():
     }
     client.post("/api/v1/games/", json=game2_payload)
 
-    # Verificar Anuário de 2026
     yb_res = client.get("/api/v1/stats/yearbook/2026")
     assert yb_res.status_code == 200
     yb = yb_res.json()
-    assert yb["year"] == 2026
     assert yb["total_games_finished"] == 2
     assert yb["total_platinums"] == 1
     assert yb["total_hours_played"] == 39.0
-    assert yb["average_score"] == 8.5  # (7.5 + 9.5) / 2

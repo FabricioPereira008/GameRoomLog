@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QDateEdit, QTextEdit, QPushButton, QLabel, QFileDialog,
     QCheckBox, QMessageBox, QScrollArea, QWidget, QInputDialog, QCompleter
 )
-from PySide6.QtCore import Qt, QDate, QStringListModel
+from PySide6.QtCore import Qt, QDate, QSettings
 from PySide6.QtGui import QPixmap
 from datetime import date
 from frontend_desktop.api_client.client import api_client
@@ -16,7 +16,7 @@ class GameDialog(QDialog):
         self.cover_filename = self.game_data.get("cover_image")
 
         self.setWindowTitle("Editar Jogo" if self.is_edit else "Novo Jogo")
-        self.resize(580, 720)
+        self.resize(600, 720)
         self.init_ui()
         self.load_options()
         self.populate_data()
@@ -26,9 +26,10 @@ class GameDialog(QDialog):
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(14)
 
-        # Scroll área
+        # Scroll área vertical (desabilitando scroll horizontal)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setStyleSheet("background-color: transparent; border: none;")
 
         container = QWidget()
@@ -36,63 +37,73 @@ class GameDialog(QDialog):
         form_layout.setSpacing(12)
         form_layout.setLabelAlignment(Qt.AlignRight)
 
+        # Helper para estilizar labels do formulário
+        def make_label(text: str) -> QLabel:
+            lbl = QLabel(text)
+            lbl.setProperty("class", "form-label")
+            return lbl
+
         # 1. Título
         self.input_title = QLineEdit()
         self.input_title.setPlaceholderText("Ex: The Legend of Zelda: Tears of the Kingdom")
-        form_layout.addRow("Título *:", self.input_title)
+        form_layout.addRow(make_label("Título *:"), self.input_title)
 
         # 2. Desenvolvedora (Combobox Editável com Autocomplete)
         self.combo_developer = QComboBox()
         self.combo_developer.setEditable(True)
         self.combo_developer.setInsertPolicy(QComboBox.NoInsert)
         self.combo_developer.lineEdit().setPlaceholderText("Selecione ou digite a desenvolvedora...")
-        form_layout.addRow("Desenvolvedora:", self.combo_developer)
+        form_layout.addRow(make_label("Desenvolvedora:"), self.combo_developer)
 
         # 3. Status
         self.combo_status = QComboBox()
         statuses = ["Disponível", "Fila", "Próximo", "Jogando", "Pausado", "Zerado", "Platinado", "Lista de Desejos", "Desisti"]
         for s in statuses:
             self.combo_status.addItem(s, s)
-        form_layout.addRow("Status:", self.combo_status)
+        form_layout.addRow(make_label("Status:"), self.combo_status)
 
         # 4. Plataforma
         plat_layout = QHBoxLayout()
+        plat_layout.setSpacing(6)
         self.combo_platform = QComboBox()
         btn_add_plat = QPushButton("+")
-        btn_add_plat.setFixedWidth(30)
+        btn_add_plat.setFixedWidth(32)
         btn_add_plat.setProperty("class", "small-btn")
         btn_add_plat.setToolTip("Adicionar nova plataforma")
         btn_add_plat.clicked.connect(self.add_new_platform)
         plat_layout.addWidget(self.combo_platform)
         plat_layout.addWidget(btn_add_plat)
-        form_layout.addRow("Plataforma:", plat_layout)
+        form_layout.addRow(make_label("Plataforma:"), plat_layout)
 
         # 5. Franquia / Série
         fran_layout = QHBoxLayout()
+        fran_layout.setSpacing(6)
         self.combo_franchise = QComboBox()
         btn_add_fran = QPushButton("+")
-        btn_add_fran.setFixedWidth(30)
+        btn_add_fran.setFixedWidth(32)
         btn_add_fran.setProperty("class", "small-btn")
         btn_add_fran.setToolTip("Adicionar nova franquia")
         btn_add_fran.clicked.connect(self.add_new_franchise)
         fran_layout.addWidget(self.combo_franchise)
         fran_layout.addWidget(btn_add_fran)
-        form_layout.addRow("Franquia / Série:", fran_layout)
+        form_layout.addRow(make_label("Franquia / Série:"), fran_layout)
 
         # 6. Gênero
         gen_layout = QHBoxLayout()
+        gen_layout.setSpacing(6)
         self.combo_genre = QComboBox()
         btn_add_gen = QPushButton("+")
-        btn_add_gen.setFixedWidth(30)
+        btn_add_gen.setFixedWidth(32)
         btn_add_gen.setProperty("class", "small-btn")
         btn_add_gen.setToolTip("Adicionar novo gênero")
         btn_add_gen.clicked.connect(self.add_new_genre)
         gen_layout.addWidget(self.combo_genre)
         gen_layout.addWidget(btn_add_gen)
-        form_layout.addRow("Gênero:", gen_layout)
+        form_layout.addRow(make_label("Gênero:"), gen_layout)
 
         # 7. Horas (Inteiros)
         hours_layout = QHBoxLayout()
+        hours_layout.setSpacing(8)
         self.spin_hltb = QSpinBox()
         self.spin_hltb.setRange(0, 99999)
         self.spin_hltb.setSuffix(" h")
@@ -105,10 +116,11 @@ class GameDialog(QDialog):
         hours_layout.addWidget(self.spin_hltb)
         hours_layout.addWidget(QLabel("Jogadas:"))
         hours_layout.addWidget(self.spin_played)
-        form_layout.addRow("Tempo Estimado/Jogado:", hours_layout)
+        form_layout.addRow(make_label("Tempo:"), hours_layout)
 
         # 8. Avaliação (0.0 a 10.0 com 1 decimal)
         score_layout = QHBoxLayout()
+        score_layout.setSpacing(8)
         self.spin_score = QDoubleSpinBox()
         self.spin_score.setRange(0, 10)
         self.spin_score.setDecimals(1)
@@ -125,10 +137,11 @@ class GameDialog(QDialog):
         score_layout.addWidget(self.spin_score)
         score_layout.addWidget(QLabel("Dificuldade (0-10):"))
         score_layout.addWidget(self.spin_diff)
-        form_layout.addRow("Avaliação:", score_layout)
+        form_layout.addRow(make_label("Avaliação:"), score_layout)
 
         # 9. Datas (Finalização e Platina)
         dates_layout = QHBoxLayout()
+        dates_layout.setSpacing(8)
         self.chk_finish_date = QCheckBox("Zerou em:")
         self.date_finish = QDateEdit(QDate.currentDate())
         self.date_finish.setCalendarPopup(True)
@@ -145,10 +158,11 @@ class GameDialog(QDialog):
         dates_layout.addWidget(self.date_finish)
         dates_layout.addWidget(self.chk_plat_date)
         dates_layout.addWidget(self.date_plat)
-        form_layout.addRow("Datas:", dates_layout)
+        form_layout.addRow(make_label("Datas:"), dates_layout)
 
         # 10. Tipo de Jogada e Campo Condicional de Rejogada
         play_layout = QHBoxLayout()
+        play_layout.setSpacing(8)
         self.combo_play_type = QComboBox()
         self.combo_play_type.addItems(["Primeira Jogada", "Rejogada"])
         self.combo_play_type.currentIndexChanged.connect(self.on_play_type_changed)
@@ -159,7 +173,6 @@ class GameDialog(QDialog):
         self.spin_play_count.setSuffix("ª Vez")
         self.spin_play_count.setValue(2)
 
-        # Esconder por padrão
         self.lbl_play_count.setVisible(False)
         self.spin_play_count.setVisible(False)
 
@@ -167,40 +180,51 @@ class GameDialog(QDialog):
         play_layout.addWidget(self.lbl_play_count)
         play_layout.addWidget(self.spin_play_count)
         play_layout.addStretch()
-        form_layout.addRow("Tipo de Jogada:", play_layout)
+        form_layout.addRow(make_label("Tipo de Jogada:"), play_layout)
 
         # 11. Formato e Favorito
         format_layout = QHBoxLayout()
+        format_layout.setSpacing(12)
         self.combo_format = QComboBox()
         self.combo_format.addItems(["Digital", "Físico", "Emulado"])
-        self.chk_favorite = QCheckBox("⭐ Marcar como Favorito")
+        self.chk_favorite = QCheckBox("⭐ Favorito")
         format_layout.addWidget(self.combo_format)
         format_layout.addWidget(self.chk_favorite)
-        form_layout.addRow("Formato:", format_layout)
+        format_layout.addStretch()
+        form_layout.addRow(make_label("Formato:"), format_layout)
 
-        # 12. Imagem de Capa (Arquivo Local ou Link/URL)
+        # 12. Imagem de Capa (Arquivo Local, Link/URL ou Busca Automática)
         cover_layout = QHBoxLayout()
-        self.btn_select_cover = QPushButton("📁 Arquivo Local...")
-        self.btn_select_cover.setProperty("class", "small-btn")
-        self.btn_select_cover.clicked.connect(self.choose_cover_image)
+        cover_layout.setSpacing(6)
+
+        self.btn_auto_cover = QPushButton("🤖 Buscar Automático")
+        self.btn_auto_cover.setProperty("class", "small-btn")
+        self.btn_auto_cover.setToolTip("Pesquisa e baixa a capa automaticamente pelo título do jogo")
+        self.btn_auto_cover.clicked.connect(self.auto_search_cover)
 
         self.btn_url_cover = QPushButton("🔗 Link / URL...")
         self.btn_url_cover.setProperty("class", "small-btn")
         self.btn_url_cover.clicked.connect(self.choose_cover_url)
 
-        self.lbl_cover_status = QLabel("Nenhuma imagem" if not self.cover_filename else "✓ Imagem salva")
-        self.lbl_cover_status.setStyleSheet("color: #9ca3af; font-size: 11px;")
+        self.btn_select_cover = QPushButton("📁 Arquivo...")
+        self.btn_select_cover.setProperty("class", "small-btn")
+        self.btn_select_cover.clicked.connect(self.choose_cover_image)
 
-        cover_layout.addWidget(self.btn_select_cover)
+        cover_layout.addWidget(self.btn_auto_cover)
         cover_layout.addWidget(self.btn_url_cover)
-        cover_layout.addWidget(self.lbl_cover_status)
-        form_layout.addRow("Capa do Jogo:", cover_layout)
+        cover_layout.addWidget(self.btn_select_cover)
+        form_layout.addRow(make_label("Capa do Jogo:"), cover_layout)
+
+        # Status da Capa
+        self.lbl_cover_status = QLabel("Nenhuma imagem" if not self.cover_filename else f"✓ Imagem: {self.cover_filename}")
+        self.lbl_cover_status.setStyleSheet("color: #2cb67d; font-size: 11px;")
+        form_layout.addRow("", self.lbl_cover_status)
 
         # 13. Anotações
         self.input_notes = QTextEdit()
         self.input_notes.setPlaceholderText("Escreva aqui suas impressões, review ou dicas...")
         self.input_notes.setFixedHeight(85)
-        form_layout.addRow("Anotações:", self.input_notes)
+        form_layout.addRow(make_label("Anotações:"), self.input_notes)
 
         scroll.setWidget(container)
         main_layout.addWidget(scroll)
@@ -208,7 +232,7 @@ class GameDialog(QDialog):
         # Botões de Ação
         btn_box = QHBoxLayout()
         if self.is_edit:
-            self.btn_delete = QPushButton("🗑️ Excluir")
+            self.btn_delete = QPushButton("🗑️ Excluir Jogo")
             self.btn_delete.setProperty("class", "delete-btn")
             self.btn_delete.clicked.connect(self.delete_game)
             btn_box.addWidget(self.btn_delete)
@@ -298,7 +322,7 @@ class GameDialog(QDialog):
             if idx >= 0:
                 self.combo_genre.setCurrentIndex(idx)
 
-        # Horas (inteiros)
+        # Horas
         self.spin_hltb.setValue(int(self.game_data.get("hltb_hours") or 0))
         self.spin_played.setValue(int(self.game_data.get("played_hours") or 0))
 
@@ -331,6 +355,35 @@ class GameDialog(QDialog):
         self.combo_format.setCurrentText(self.game_data.get("format", "Digital"))
         self.chk_favorite.setChecked(bool(self.game_data.get("is_favorite")))
         self.input_notes.setText(self.game_data.get("notes") or "")
+
+    def auto_search_cover(self):
+        title = self.input_title.text().strip()
+        if not title:
+            QMessageBox.warning(self, "Aviso", "Digite o título do jogo antes de buscar a capa.")
+            return
+
+        self.btn_auto_cover.setEnabled(False)
+        self.btn_auto_cover.setText("Buscando...")
+        self.lbl_cover_status.setText("Pesquisando nos repositórios...")
+
+        sgdb_key = QSettings("GameRoom", "GameRoomLog").value("steamgriddb_key", "")
+        filename = api_client.auto_search_cover(title, api_key=sgdb_key if sgdb_key else None)
+
+        self.btn_auto_cover.setEnabled(True)
+        self.btn_auto_cover.setText("🤖 Buscar Automático")
+
+        if filename:
+            self.cover_filename = filename
+            self.lbl_cover_status.setText(f"✓ Capa baixada com sucesso: {filename[:12]}...")
+            self.lbl_cover_status.setStyleSheet("color: #2cb67d;")
+            QMessageBox.information(self, "Sucesso", f"Capa para '{title}' encontrada e salva com sucesso!")
+        else:
+            self.lbl_cover_status.setText("Capa não encontrada automaticamente.")
+            self.lbl_cover_status.setStyleSheet("color: #f87171;")
+            QMessageBox.warning(
+                self, "Não Encontrado",
+                f"Não foi possível encontrar automaticamente uma capa para '{title}'.\nVocê pode colar o link direto da imagem pelo botão 'Link / URL'."
+            )
 
     def choose_cover_image(self):
         file_path, _ = QFileDialog.getOpenFileName(

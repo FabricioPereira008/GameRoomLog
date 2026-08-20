@@ -7,14 +7,16 @@ from PySide6.QtGui import QColor
 from frontend_desktop.api_client.client import api_client
 
 class ManageItemCard(QFrame):
+    clicked = Signal(str, int)  # category_type, item_id
     edited = Signal()
     deleted = Signal()
 
     def __init__(self, category_type: str, item_data: dict, parent=None):
         super().__init__(parent)
-        self.category_type = category_type  # 'genre', 'platform', 'franchise', 'developer'
+        self.category_type = category_type
         self.item_data = item_data
         self.setProperty("class", "manage-card")
+        self.setCursor(Qt.PointingHandCursor)
         self.setFixedWidth(260)
         self.init_ui()
 
@@ -40,8 +42,8 @@ class ManageItemCard(QFrame):
 
         # Contador de Jogos
         count = self.item_data.get("games_count", 0)
-        count_label = QLabel(f"🎮 {count} {'jogo cadastrado' if count == 1 else 'jogos cadastrados'}")
-        count_label.setStyleSheet("color: #9ca3af; font-size: 12px;")
+        count_label = QLabel(f"🎮 {count} {'jogo cadastrado' if count == 1 else 'jogos cadastrados'} (Clique para ver)")
+        count_label.setStyleSheet("color: #9ca3af; font-size: 11px;")
         layout.addWidget(count_label)
 
         # Botões de Ação
@@ -62,6 +64,12 @@ class ManageItemCard(QFrame):
 
         layout.addLayout(btn_layout)
 
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            # Se não clicou nos botões
+            self.clicked.emit(self.category_type, self.item_data["id"])
+        super().mousePressEvent(event)
+
     def on_edit(self):
         item_id = self.item_data["id"]
         current_name = self.item_data["name"]
@@ -73,7 +81,6 @@ class ManageItemCard(QFrame):
         try:
             if self.category_type == "genre":
                 color = self.item_data.get("color", "#4A5568")
-                # Opção de trocar cor
                 qcolor = QColorDialog.getColor(QColor(color), self, "Escolha a cor da tag")
                 if qcolor.isValid():
                     color = qcolor.name()
@@ -118,11 +125,12 @@ class ManageItemCard(QFrame):
 
 
 class ManagementView(QWidget):
+    category_selected = Signal(str, int)  # category_type, item_id
     data_changed = Signal()
 
     def __init__(self, category_type: str, title: str, parent=None):
         super().__init__(parent)
-        self.category_type = category_type  # 'genre', 'platform', 'franchise', 'developer'
+        self.category_type = category_type
         self.title = title
         self.items = []
         self.init_ui()
@@ -180,7 +188,6 @@ class ManagementView(QWidget):
             print(f"Erro ao carregar {self.category_type}:", e)
 
     def render_items(self):
-        # Limpar grid
         while self.grid_layout.count():
             item = self.grid_layout.takeAt(0)
             widget = item.widget()
@@ -199,6 +206,7 @@ class ManagementView(QWidget):
         cols = 3
         for idx, itm in enumerate(filtered):
             card = ManageItemCard(self.category_type, itm)
+            card.clicked.connect(self.category_selected.emit)
             card.edited.connect(self.on_item_changed)
             card.deleted.connect(self.on_item_changed)
             row = idx // cols

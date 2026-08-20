@@ -9,6 +9,8 @@ from frontend_desktop.views.components.game_grid import GameGrid
 from frontend_desktop.views.components.game_table import GameTable
 from frontend_desktop.views.components.yearbook_view import YearbookView
 from frontend_desktop.views.components.management_view import ManagementView
+from frontend_desktop.views.components.category_detail_view import CategoryDetailView
+from frontend_desktop.views.components.settings_view import SettingsView
 from frontend_desktop.views.dialogs.game_dialog import GameDialog
 from frontend_desktop.api_client.client import api_client
 
@@ -16,8 +18,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("GameRoomLog — Backlog & Anuário Gamer")
-        self.resize(1240, 780)
+        self.resize(1260, 790)
         self.setMinimumSize(980, 640)
+        self.previous_nav_index = 0
         self.init_ui()
         self.refresh_all_data()
 
@@ -39,8 +42,8 @@ class MainWindow(QMainWindow):
         # 2. Área de Conteúdo à direita
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
-        content_layout.setContentsMargins(20, 18, 20, 16)
-        content_layout.setSpacing(14)
+        content_layout.setContentsMargins(20, 16, 20, 16)
+        content_layout.setSpacing(12)
 
         # Cabeçalho Superior
         header_layout = QHBoxLayout()
@@ -60,7 +63,7 @@ class MainWindow(QMainWindow):
 
         content_layout.addLayout(header_layout)
 
-        # QStackedWidget com as 10 Telas
+        # QStackedWidget com as Telas
         self.stack = QStackedWidget()
 
         # View 0: Game Room (Agora + Fila)
@@ -73,12 +76,12 @@ class MainWindow(QMainWindow):
         self.view_queue_grid.game_selected.connect(self.open_edit_game_dialog)
         self.stack.addWidget(self.view_queue_grid)
 
-        # View 2: Zerados
+        # View 2: Zerados (Inclui Zerados e Platinados)
         self.view_zerados_grid = GameGrid()
         self.view_zerados_grid.game_selected.connect(self.open_edit_game_dialog)
         self.stack.addWidget(self.view_zerados_grid)
 
-        # View 3: Platinados
+        # View 3: Platinados (Apenas Platinados)
         self.view_platinados_grid = GameGrid()
         self.view_platinados_grid.game_selected.connect(self.open_edit_game_dialog)
         self.stack.addWidget(self.view_platinados_grid)
@@ -90,16 +93,19 @@ class MainWindow(QMainWindow):
 
         # View 5: Gêneros (Gerenciamento)
         self.view_genres = ManagementView("genre", "Gênero")
+        self.view_genres.category_selected.connect(self.open_category_detail)
         self.view_genres.data_changed.connect(self.refresh_all_data)
         self.stack.addWidget(self.view_genres)
 
         # View 6: Plataformas (Gerenciamento)
         self.view_platforms = ManagementView("platform", "Plataforma")
+        self.view_platforms.category_selected.connect(self.open_category_detail)
         self.view_platforms.data_changed.connect(self.refresh_all_data)
         self.stack.addWidget(self.view_platforms)
 
         # View 7: Séries / Franquias (Gerenciamento)
         self.view_franchises = ManagementView("franchise", "Série / Franquia")
+        self.view_franchises.category_selected.connect(self.open_category_detail)
         self.view_franchises.data_changed.connect(self.refresh_all_data)
         self.stack.addWidget(self.view_franchises)
 
@@ -113,14 +119,26 @@ class MainWindow(QMainWindow):
         self.view_wishlist_grid.game_selected.connect(self.open_edit_game_dialog)
         self.stack.addWidget(self.view_wishlist_grid)
 
+        # View 10: Configurações
+        self.view_settings = SettingsView()
+        self.view_settings.settings_changed.connect(self.refresh_all_data)
+        self.stack.addWidget(self.view_settings)
+
+        # View 11: Detalhes de Categoria (Subpágina)
+        self.view_category_detail = CategoryDetailView()
+        self.view_category_detail.back_requested.connect(self.return_from_category_detail)
+        self.view_category_detail.game_selected.connect(self.open_edit_game_dialog)
+        self.stack.addWidget(self.view_category_detail)
+
         content_layout.addWidget(self.stack)
         main_layout.addWidget(content_widget)
 
-        # Barra de status no rodapé
+        # Barra de status
         self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("Pronto • Conectado à API local")
+        self.statusBar().showMessage("Pronto • GameRoomLog v0.0.3 Online")
 
     def switch_view(self, index: int):
+        self.previous_nav_index = index
         self.stack.setCurrentIndex(index)
         titles = [
             "🕹️ Game Room",
@@ -132,21 +150,32 @@ class MainWindow(QMainWindow):
             "🎮 Gerenciar Plataformas",
             "👾 Gerenciar Séries / Franquias",
             "📑 Biblioteca de Jogos (Tabela)",
-            "⭐ Lista de Desejos"
+            "⭐ Lista de Desejos",
+            "⚙️ Configurações"
         ]
         if 0 <= index < len(titles):
             self.view_title_label.setText(titles[index])
 
-        if index == 4:  # Anuário
+        if index == 4:
             self.view_yearbook.load_data()
-        elif index == 5:  # Gêneros
+        elif index == 5:
             self.view_genres.load_data()
-        elif index == 6:  # Plataformas
+        elif index == 6:
             self.view_platforms.load_data()
-        elif index == 7:  # Franquias
+        elif index == 7:
             self.view_franchises.load_data()
+        elif index == 10:
+            pass
         else:
             self.refresh_all_data()
+
+    def open_category_detail(self, category_type: str, item_id: int):
+        self.view_category_detail.load_category(category_type, item_id)
+        self.stack.setCurrentIndex(11)
+        self.view_title_label.setText("📋 Detalhes da Categoria")
+
+    def return_from_category_detail(self):
+        self.switch_view(self.previous_nav_index)
 
     def refresh_all_data(self):
         try:
@@ -155,8 +184,13 @@ class MainWindow(QMainWindow):
             # Separar por categorias
             now_games = [g for g in games if g.get("status") in ["Jogando", "Próximo", "Pausado"]]
             queue_games = [g for g in games if g.get("status") in ["Fila", "Disponível"]]
-            zerados_games = [g for g in games if g.get("status") == "Zerado"]
+            
+            # REQUISITO: Zerados inclui Zerados E Platinados
+            zerados_games = [g for g in games if g.get("status") in ["Zerado", "Platinado"]]
+            
+            # Platinados inclui apenas Platinados
             platinados_games = [g for g in games if g.get("status") == "Platinado"]
+            
             wishlist_games = [g for g in games if g.get("status") == "Lista de Desejos"]
 
             # Atualizar views
@@ -176,6 +210,11 @@ class MainWindow(QMainWindow):
                 self.view_platforms.load_data()
             elif cur_idx == 7:
                 self.view_franchises.load_data()
+            elif cur_idx == 11 and self.view_category_detail.category_id:
+                self.view_category_detail.load_category(
+                    self.view_category_detail.category_type,
+                    self.view_category_detail.category_id
+                )
 
             self.statusBar().showMessage(f"Total de jogos carregados: {len(games)}")
         except Exception as e:

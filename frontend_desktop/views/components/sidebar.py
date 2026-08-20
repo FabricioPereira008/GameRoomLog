@@ -15,8 +15,8 @@ class Sidebar(QWidget):
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 16, 12, 16)
-        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(12, 14, 12, 14)
+        main_layout.setSpacing(6)
 
         # Cabeçalho do App
         title = QLabel("🎮 Game Room")
@@ -34,9 +34,9 @@ class Sidebar(QWidget):
         self.btn_add.clicked.connect(self.add_game_requested.emit)
         main_layout.addWidget(self.btn_add)
 
-        main_layout.addSpacing(10)
+        main_layout.addSpacing(6)
 
-        # Scroll área interna para os botões do menu se a janela for pequena
+        # Scroll área interna para os botões do menu
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("background-color: transparent; border: none;")
@@ -44,7 +44,7 @@ class Sidebar(QWidget):
         scroll_content = QWidget()
         layout = QVBoxLayout(scroll_content)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(3)
 
         # Grupo de Navegação
         self.button_group = QButtonGroup(self)
@@ -79,11 +79,19 @@ class Sidebar(QWidget):
         scroll.setWidget(scroll_content)
         main_layout.addWidget(scroll)
 
+        # Botão de Configurações fixo na parte inferior
+        self.btn_settings = QPushButton("⚙️  Configurações")
+        self.btn_settings.setProperty("class", "nav-btn")
+        self.btn_settings.setCheckable(True)
+        self.btn_settings.setCursor(Qt.PointingHandCursor)
+        self.button_group.addButton(self.btn_settings, 10)
+        main_layout.addWidget(self.btn_settings)
+
         self.button_group.idClicked.connect(self.on_nav_clicked)
 
         # Versão no rodapé
-        version_label = QLabel("v0.0.2 • Linux Native")
-        version_label.setStyleSheet("color: #6b7280; font-size: 10px; text-align: center; padding-top: 6px;")
+        version_label = QLabel("v0.0.3 • Linux Native")
+        version_label.setStyleSheet("color: #6b7280; font-size: 10px; text-align: center; padding-top: 4px;")
         main_layout.addWidget(version_label)
 
     def on_nav_clicked(self, nav_id: int):
