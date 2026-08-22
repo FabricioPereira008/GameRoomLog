@@ -5,6 +5,18 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.2.3] - 2026-08-22
+### Adicionado
+- Campo de busca instantânea por título nas páginas Game Room, Fila, Disponíveis, Zerados e Platinados.
+- Painel de filtros avançados retrátil (Gênero, Desenvolvedora, Plataforma, Franquia e Tempo HLTB).
+- Badge de contagem e destaque visual para filtros ativos no botão de alternância.
+- Campos Franquia/Série e Gênero editáveis com autocompletar e auto-criação no GameDialog.
+- Suíte de testes unitários para o sistema de busca e painel de filtros.
+
+### Modificado
+- Limpeza automática de busca e filtros ao navegar pela Sidebar.
+- Estilização do Dark Theme para suporte a formulários de busca e filtros.
+
 ## [0.2.2] - 2026-08-22
 ### Adicionado
 - Suíte completa de 31 testes automatizados (Backend, Frontend isolado e Testes de Performance).

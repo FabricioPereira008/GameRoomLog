@@ -1,8 +1,11 @@
 from PySide6.QtWidgets import (
-    QWidget, QScrollArea, QGridLayout, QVBoxLayout, QLabel, QSizePolicy
+    QWidget, QScrollArea, QGridLayout, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QSizePolicy
 )
 from PySide6.QtCore import Signal, Qt, QSettings, QTimer
 from frontend_desktop.views.components.game_card import GameCard, LoadMoreCard
+from frontend_desktop.views.components.filter_panel import FilterPanel
+
+
 
 class GameGrid(QWidget):
     """Grid adaptativa e de alta performance com colunas dinâmicas e carregamento sob demanda."""
@@ -228,25 +231,87 @@ class GameGrid(QWidget):
         self.game_selected.emit(game_data)
 
 
-class ScrollableGameGrid(QScrollArea):
-    """Container com barra de rolagem e carregamento suave antecipado garantindo tela cheia preenchida."""
+class ScrollableGameGrid(QWidget):
+    """Container com campo de busca integrado, painel de filtros retrátil, barra de rolagem e carregamento suave antecipado."""
     game_selected = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setObjectName("gameGridScrollArea")
-        self.setProperty("class", "game-grid")
-        self.setWidgetResizable(True)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setObjectName("scrollableGameGridWrapper")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.all_games_source = []
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(10)
+
+        # Barra Superior: Pesquisa por Título + Botão de Filtro
+        top_bar_layout = QHBoxLayout()
+        top_bar_layout.setContentsMargins(0, 0, 0, 0)
+        top_bar_layout.setSpacing(10)
+
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("🔍 Buscar jogos por título...")
+        self.search_input.setClearButtonEnabled(True)
+        self.search_input.setProperty("class", "search-input")
+        self.search_input.textChanged.connect(self.on_search_changed)
+        top_bar_layout.addWidget(self.search_input)
+
+        self.filter_panel = FilterPanel()
+        self.filter_panel.filters_changed.connect(self.apply_filter)
+        top_bar_layout.addWidget(self.filter_panel.btn_toggle)
+
+        main_layout.addLayout(top_bar_layout)
+        main_layout.addWidget(self.filter_panel)
+
+        # Área de Rolagem
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setObjectName("gameGridScrollArea")
+        self.scroll_area.setProperty("class", "game-grid")
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         self.grid = GameGrid(mode="infinite")
         self.grid.game_selected.connect(self.game_selected.emit)
-        self.setWidget(self.grid)
+        self.scroll_area.setWidget(self.grid)
 
-        self.verticalScrollBar().valueChanged.connect(self.on_scroll)
+        self.scroll_area.verticalScrollBar().valueChanged.connect(self.on_scroll)
+        main_layout.addWidget(self.scroll_area)
 
     def set_games(self, games: list):
-        self.grid.set_games(games)
+        self.all_games_source = list(games)
+        self.apply_filter()
+
+    def set_filter_options(self, genres: list, developers: list, platforms: list, franchises: list):
+        self.filter_panel.set_options(genres, developers, platforms, franchises)
+
+    def on_search_changed(self, text: str):
+        self.apply_filter()
+
+    def clear_search(self):
+        self.search_input.blockSignals(True)
+        self.search_input.clear()
+        self.search_input.blockSignals(False)
+        self.apply_filter()
+
+    def clear_filters(self):
+        self.search_input.blockSignals(True)
+        self.search_input.clear()
+        self.search_input.blockSignals(False)
+        self.filter_panel.clear_filters()
+
+
+    def apply_filter(self):
+        query = self.search_input.text().strip().lower()
+        filtered = []
+        for g in self.all_games_source:
+            if query and query not in (g.get("title") or "").lower():
+                continue
+            if not self.filter_panel.matches(g):
+                continue
+            filtered.append(g)
+        
+        self.grid.set_games(filtered)
         QTimer.singleShot(50, self.ensure_viewport_filled)
 
     def ensure_viewport_filled(self):
@@ -254,40 +319,46 @@ class ScrollableGameGrid(QScrollArea):
         if not self.grid.games or self.grid.rendered_count >= len(self.grid.games):
             return
 
-        scroll_bar = self.verticalScrollBar()
-        # Se a barra de rolagem não tem alcance para rolar e ainda existem jogos não exibidos
+        scroll_bar = self.scroll_area.verticalScrollBar()
         loop_guard = 0
         while scroll_bar.maximum() <= 100 and self.grid.rendered_count < len(self.grid.games) and loop_guard < 10:
             loop_guard += 1
             prev_rendered = self.grid.rendered_count
             self.grid.load_more_cards()
-            self.widget().adjustSize()
+            self.scroll_area.widget().adjustSize()
             if self.grid.rendered_count == prev_rendered:
                 break
 
     def update_game(self, game_data: dict):
+        game_id = game_data.get("id")
+        for idx, g in enumerate(self.all_games_source):
+            if g.get("id") == game_id:
+                self.all_games_source[idx] = game_data
+                break
         return self.grid.update_game(game_data)
 
     def remove_game(self, game_id: int):
+        self.all_games_source = [g for g in self.all_games_source if g.get("id") != game_id]
         res = self.grid.remove_game(game_id)
         QTimer.singleShot(50, self.ensure_viewport_filled)
         return res
 
     def insert_game(self, index: int, game_data: dict):
-        self.grid.insert_game(index, game_data)
+        self.all_games_source.insert(index, game_data)
+        query = self.search_input.text().strip().lower()
+        if (not query or query in (game_data.get("title") or "").lower()) and self.filter_panel.matches(game_data):
+            self.grid.insert_game(index, game_data)
 
     def on_scroll(self, value: int):
         if self.grid.is_loading:
             return
-        scroll_bar = self.verticalScrollBar()
-        # Dispara quando faltar 500px ou passar de 60% do scroll
+        scroll_bar = self.scroll_area.verticalScrollBar()
         if value >= scroll_bar.maximum() * 0.60 or value >= scroll_bar.maximum() - 500:
             self.grid.load_more_cards()
 
     def wheelEvent(self, event):
         super().wheelEvent(event)
-        # Se o usuário tentar rolar quando ainda não atingiu altura de scrollbar, carrega mais
-        if self.verticalScrollBar().maximum() == 0 and self.grid.rendered_count < len(self.grid.games):
+        if self.scroll_area.verticalScrollBar().maximum() == 0 and self.grid.rendered_count < len(self.grid.games):
             self.grid.load_more_cards()
 
     def showEvent(self, event):
@@ -298,3 +369,5 @@ class ScrollableGameGrid(QScrollArea):
         super().resizeEvent(event)
         self.grid.relayout_cards()
         QTimer.singleShot(100, self.ensure_viewport_filled)
+
+

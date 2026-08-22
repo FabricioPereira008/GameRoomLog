@@ -1,8 +1,9 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QFrame
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QFrame, QLineEdit
 )
 from PySide6.QtCore import Signal, Qt
 from frontend_desktop.views.components.game_grid import GameGrid
+from frontend_desktop.views.components.filter_panel import FilterPanel
 
 class GameRoomView(QWidget):
     game_selected = Signal(dict)
@@ -11,12 +12,38 @@ class GameRoomView(QWidget):
         super().__init__(parent)
         self.setObjectName("gameRoomView")
         self.setAttribute(Qt.WA_StyledBackground, True)
+        
+        self.all_now_games = []
+        self.all_next_games = []
+        self.all_queue_games = []
+        self.all_finished_games = []
+        self.all_platinum_games = []
+        
         self.init_ui()
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(16, 16, 16, 16)
-        main_layout.setSpacing(20)
+        main_layout.setSpacing(12)
+
+        # Barra Superior: Pesquisa por Título + Botão de Filtro
+        top_bar_layout = QHBoxLayout()
+        top_bar_layout.setContentsMargins(0, 0, 0, 0)
+        top_bar_layout.setSpacing(10)
+
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("🔍 Buscar jogos por título no Game Room...")
+        self.search_input.setClearButtonEnabled(True)
+        self.search_input.setProperty("class", "search-input")
+        self.search_input.textChanged.connect(self.on_search_changed)
+        top_bar_layout.addWidget(self.search_input)
+
+        self.filter_panel = FilterPanel()
+        self.filter_panel.filters_changed.connect(self.apply_filter)
+        top_bar_layout.addWidget(self.filter_panel.btn_toggle)
+
+        main_layout.addLayout(top_bar_layout)
+        main_layout.addWidget(self.filter_panel)
 
         # Scroll Area geral para a Game Room
         self.scroll = QScrollArea()
@@ -76,28 +103,80 @@ class GameRoomView(QWidget):
         main_layout.addWidget(self.scroll)
 
     def set_games(self, now_games: list, next_games: list, queue_games: list, finished_games: list, platinum_games: list):
-        self.grid_now.set_games(now_games)
-        self.sec_now.setVisible(bool(now_games))
-        self.line_now.setVisible(bool(now_games))
+        self.all_now_games = list(now_games)
+        self.all_next_games = list(next_games)
+        self.all_queue_games = list(queue_games)
+        self.all_finished_games = list(finished_games)
+        self.all_platinum_games = list(platinum_games)
+        self.apply_filter()
+
+    def set_filter_options(self, genres: list, developers: list, platforms: list, franchises: list):
+        self.filter_panel.set_options(genres, developers, platforms, franchises)
+
+    def on_search_changed(self, text: str):
+        self.apply_filter()
+
+    def clear_search(self):
+        self.search_input.blockSignals(True)
+        self.search_input.clear()
+        self.search_input.blockSignals(False)
+        self.apply_filter()
+
+    def clear_filters(self):
+        self.search_input.blockSignals(True)
+        self.search_input.clear()
+        self.search_input.blockSignals(False)
+        self.filter_panel.clear_filters()
+
+
+    def apply_filter(self):
+        query = self.search_input.text().strip().lower()
+
+        def filter_list(lst):
+            filtered = []
+            for g in lst:
+                if query and query not in (g.get("title") or "").lower():
+                    continue
+                if not self.filter_panel.matches(g):
+                    continue
+                filtered.append(g)
+            return filtered
+
+        now_f = filter_list(self.all_now_games)
+        next_f = filter_list(self.all_next_games)
+        queue_f = filter_list(self.all_queue_games)
+        finished_f = filter_list(self.all_finished_games)
+        platinum_f = filter_list(self.all_platinum_games)
+
+        self.grid_now.set_games(now_f)
+        self.sec_now.setVisible(bool(now_f))
+        self.line_now.setVisible(bool(now_f))
         
-        self.grid_next.set_games(next_games)
-        self.sec_next.setVisible(bool(next_games))
-        self.line_next.setVisible(bool(next_games))
+        self.grid_next.set_games(next_f)
+        self.sec_next.setVisible(bool(next_f))
+        self.line_next.setVisible(bool(next_f))
         
-        self.grid_queue.set_games(queue_games)
-        self.sec_queue.setVisible(bool(queue_games))
-        self.line_queue.setVisible(bool(queue_games))
+        self.grid_queue.set_games(queue_f)
+        self.sec_queue.setVisible(bool(queue_f))
+        self.line_queue.setVisible(bool(queue_f))
         
-        self.grid_finished.set_games(finished_games)
-        self.sec_finished.setVisible(bool(finished_games))
-        self.line_finished.setVisible(bool(finished_games))
+        self.grid_finished.set_games(finished_f)
+        self.sec_finished.setVisible(bool(finished_f))
+        self.line_finished.setVisible(bool(finished_f))
         
-        self.grid_platinum.set_games(platinum_games)
-        self.sec_platinum.setVisible(bool(platinum_games))
-        self.line_platinum.setVisible(bool(platinum_games))
+        self.grid_platinum.set_games(platinum_f)
+        self.sec_platinum.setVisible(bool(platinum_f))
+        self.line_platinum.setVisible(bool(platinum_f))
 
     def update_game(self, game_data: dict) -> bool:
         """Atualiza o jogo in-place em qualquer seção que ele estiver."""
+        game_id = game_data.get("id")
+        for lst in [self.all_now_games, self.all_next_games, self.all_queue_games, self.all_finished_games, self.all_platinum_games]:
+            for idx, g in enumerate(lst):
+                if g.get("id") == game_id:
+                    lst[idx] = game_data
+                    break
+
         updated = False
         for grid in [self.grid_now, self.grid_next, self.grid_queue, self.grid_finished, self.grid_platinum]:
             if grid.update_game(game_data):
@@ -106,6 +185,12 @@ class GameRoomView(QWidget):
 
     def remove_game(self, game_id: int) -> bool:
         """Remove o jogo in-place de todas as seções."""
+        self.all_now_games = [g for g in self.all_now_games if g.get("id") != game_id]
+        self.all_next_games = [g for g in self.all_next_games if g.get("id") != game_id]
+        self.all_queue_games = [g for g in self.all_queue_games if g.get("id") != game_id]
+        self.all_finished_games = [g for g in self.all_finished_games if g.get("id") != game_id]
+        self.all_platinum_games = [g for g in self.all_platinum_games if g.get("id") != game_id]
+
         removed = False
         for grid, sec, line in [
             (self.grid_now, self.sec_now, self.line_now),
@@ -122,26 +207,39 @@ class GameRoomView(QWidget):
 
     def insert_game_by_status(self, game_data: dict):
         status = game_data.get("status")
+        query = self.search_input.text().strip().lower()
+        matches_query = (not query or query in (game_data.get("title") or "").lower()) and self.filter_panel.matches(game_data)
+
         if status == "Jogando":
-            self.grid_now.insert_game(0, game_data)
-            self.sec_now.setVisible(True)
-            self.line_now.setVisible(True)
+            self.all_now_games.insert(0, game_data)
+            if matches_query:
+                self.grid_now.insert_game(0, game_data)
+                self.sec_now.setVisible(True)
+                self.line_now.setVisible(True)
         elif status == "Próximo":
-            self.grid_next.insert_game(0, game_data)
-            self.sec_next.setVisible(True)
-            self.line_next.setVisible(True)
+            self.all_next_games.insert(0, game_data)
+            if matches_query:
+                self.grid_next.insert_game(0, game_data)
+                self.sec_next.setVisible(True)
+                self.line_next.setVisible(True)
         elif status in ["Fila", "Pausado"]:
-            self.grid_queue.insert_game(0, game_data)
-            self.sec_queue.setVisible(True)
-            self.line_queue.setVisible(True)
+            self.all_queue_games.insert(0, game_data)
+            if matches_query:
+                self.grid_queue.insert_game(0, game_data)
+                self.sec_queue.setVisible(True)
+                self.line_queue.setVisible(True)
         elif status in ["Zerado", "Platinado"]:
-            self.grid_finished.insert_game(0, game_data)
-            self.sec_finished.setVisible(True)
-            self.line_finished.setVisible(True)
+            self.all_finished_games.insert(0, game_data)
+            if matches_query:
+                self.grid_finished.insert_game(0, game_data)
+                self.sec_finished.setVisible(True)
+                self.line_finished.setVisible(True)
             if status == "Platinado":
-                self.grid_platinum.insert_game(0, game_data)
-                self.sec_platinum.setVisible(True)
-                self.line_platinum.setVisible(True)
+                self.all_platinum_games.insert(0, game_data)
+                if matches_query:
+                    self.grid_platinum.insert_game(0, game_data)
+                    self.sec_platinum.setVisible(True)
+                    self.line_platinum.setVisible(True)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

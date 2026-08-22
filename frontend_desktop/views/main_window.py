@@ -145,7 +145,7 @@ class MainWindow(QMainWindow):
 
         # Barra de status
         self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("Pronto • GameRoomLog v0.2.2 Online")
+        self.statusBar().showMessage("Pronto • GameRoomLog v0.2.3 Online")
 
     def switch_view(self, index: int):
         self.previous_nav_index = index
@@ -167,6 +167,14 @@ class MainWindow(QMainWindow):
         if 0 <= index < len(titles):
             self.view_title_label.setText(titles[index])
 
+        # Limpa filtros de busca e categorias ao navegar entre as páginas
+        self.view_game_room.clear_filters()
+        self.view_queue_grid.clear_filters()
+        self.view_disponiveis_grid.clear_filters()
+        self.view_zerados_grid.clear_filters()
+        self.view_platinados_grid.clear_filters()
+        self.view_wishlist_grid.clear_filters()
+
         # Apenas recarrega dados para páginas analíticas ou dinâmicas que dependem de agregação
         if index == 5:
             self.view_yearbook.load_data()
@@ -177,6 +185,7 @@ class MainWindow(QMainWindow):
         elif index == 8:
             self.view_franchises.load_data()
         # Todas as outras páginas (Game Room, Fila, Zerados, etc.) utilizam o cache existente instantaneamente!
+
 
     def open_category_detail(self, category_type: str, item_id: int):
         self.view_category_detail.load_category(category_type, item_id)
@@ -191,6 +200,22 @@ class MainWindow(QMainWindow):
         try:
             games = api_client.get_games()
             self.all_games = games
+
+            # Carrega opções para os painéis de filtro
+            try:
+                genres = api_client.get_genres()
+                devs = api_client.get_developers()
+                platforms = api_client.get_platforms()
+                franchises = api_client.get_franchises()
+
+                for view in [
+                    self.view_game_room, self.view_queue_grid, self.view_disponiveis_grid,
+                    self.view_zerados_grid, self.view_platinados_grid, self.view_wishlist_grid
+                ]:
+                    if hasattr(view, "set_filter_options"):
+                        view.set_filter_options(genres, devs, platforms, franchises)
+            except Exception as opt_err:
+                print("Erro ao carregar opções de filtros:", opt_err)
 
             # Separar por categorias com fidelidade aos status
             now_games = [g for g in games if g.get("status") == "Jogando"]
@@ -216,6 +241,7 @@ class MainWindow(QMainWindow):
             self.view_platinados_grid.set_games(platinados_games)
             self.view_wishlist_grid.set_games(wishlist_games)
             self.view_table.set_games(games)
+
 
             cur_idx = self.stack.currentIndex()
             if cur_idx == 5:

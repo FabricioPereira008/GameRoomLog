@@ -527,3 +527,85 @@ QLabel[class="yearbook-subtitle"] {
     color: #fffffe;
     margin-top: 10px;
 }
+
+/* ========================================================================= */
+/* BARRA DE PESQUISA (SEARCH BAR)                                            */
+/* ========================================================================= */
+
+QLineEdit[class~="search-input"] {
+    background-color: #161824;
+    border: 1px solid #282c3f;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: #f1f5f9;
+    min-height: 20px;
+}
+
+QLineEdit[class~="search-input"]:hover {
+    border: 1px solid #3b4261;
+    background-color: #1a1d2c;
+}
+
+QLineEdit[class~="search-input"]:focus {
+    border: 1px solid #7c3aed;
+    background-color: #1c1f30;
+}
+
+/* ========================================================================= */
+/* PAINEL E BOTÃO DE FILTROS (FILTER PANEL)                                  */
+/* ========================================================================= */
+
+QPushButton[class~="filter-btn"] {
+    background-color: #161824;
+    border: 1px solid #282c3f;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #cbd5e1;
+    min-height: 20px;
+}
+
+QPushButton[class~="filter-btn"]:hover {
+    border: 1px solid #7c3aed;
+    background-color: #1f2233;
+    color: #ffffff;
+}
+
+QPushButton[class~="filter-btn"]:checked,
+QPushButton[class~="filter-btn-active"] {
+    background-color: #2b1f47;
+    border: 1px solid #a78bfa;
+    color: #c4b5fd;
+}
+
+QFrame[class~="filter-panel-card"] {
+    background-color: #141622;
+    border: 1px solid #232738;
+    border-radius: 10px;
+    margin-top: 4px;
+}
+
+QLabel[class~="filter-label"] {
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+QComboBox[class~="filter-combo"],
+QSpinBox[class~="filter-spin"] {
+    background-color: #1a1d2c;
+    border: 1px solid #2d3348;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: #f1f5f9;
+}
+
+QComboBox[class~="filter-combo"]:focus,
+QSpinBox[class~="filter-spin"]:focus {
+    border: 1px solid #7c3aed;
+}
+
+

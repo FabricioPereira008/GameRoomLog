@@ -34,7 +34,7 @@ client = TestClient(app)
 def test_read_root():
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.2.2"
+    assert response.json()["version"] == "0.2.3"
 
 def test_genre_crud_and_details():
     # 1. Create

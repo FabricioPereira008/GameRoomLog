@@ -82,31 +82,20 @@ class GameDialog(QDialog):
         plat_layout.addWidget(btn_add_plat)
         form_layout.addRow(make_label("Plataforma:"), plat_layout)
 
-        # 5. Franquia / Série
-        fran_layout = QHBoxLayout()
-        fran_layout.setSpacing(6)
+        # 5. Franquia / Série (Combobox Editável com Autocomplete)
         self.combo_franchise = QComboBox()
-        btn_add_fran = QPushButton("+")
-        btn_add_fran.setFixedWidth(32)
-        btn_add_fran.setProperty("class", "small-btn")
-        btn_add_fran.setToolTip("Adicionar nova franquia")
-        btn_add_fran.clicked.connect(self.add_new_franchise)
-        fran_layout.addWidget(self.combo_franchise)
-        fran_layout.addWidget(btn_add_fran)
-        form_layout.addRow(make_label("Franquia / Série:"), fran_layout)
+        self.combo_franchise.setEditable(True)
+        self.combo_franchise.setInsertPolicy(QComboBox.NoInsert)
+        self.combo_franchise.lineEdit().setPlaceholderText("Selecione ou digite a franquia/série...")
+        form_layout.addRow(make_label("Franquia / Série:"), self.combo_franchise)
 
-        # 6. Gênero
-        gen_layout = QHBoxLayout()
-        gen_layout.setSpacing(6)
+        # 6. Gênero (Combobox Editável com Autocomplete)
         self.combo_genre = QComboBox()
-        btn_add_gen = QPushButton("+")
-        btn_add_gen.setFixedWidth(32)
-        btn_add_gen.setProperty("class", "small-btn")
-        btn_add_gen.setToolTip("Adicionar novo gênero")
-        btn_add_gen.clicked.connect(self.add_new_genre)
-        gen_layout.addWidget(self.combo_genre)
-        gen_layout.addWidget(btn_add_gen)
-        form_layout.addRow(make_label("Gênero:"), gen_layout)
+        self.combo_genre.setEditable(True)
+        self.combo_genre.setInsertPolicy(QComboBox.NoInsert)
+        self.combo_genre.lineEdit().setPlaceholderText("Selecione ou digite o gênero...")
+        form_layout.addRow(make_label("Gênero:"), self.combo_genre)
+
 
         # 7. Horas (Inteiros)
         hours_layout = QHBoxLayout()
@@ -342,15 +331,23 @@ class GameDialog(QDialog):
 
             # Franquias
             self.combo_franchise.clear()
-            self.combo_franchise.addItem("Nenhuma", None)
-            for f in api_client.get_franchises():
-                self.combo_franchise.addItem(f["name"], f["id"])
+            self.franchises_list = api_client.get_franchises()
+            fran_names = [f["name"] for f in self.franchises_list]
+            self.combo_franchise.addItems(fran_names)
+            fran_completer = QCompleter(fran_names, self)
+            fran_completer.setCaseSensitivity(Qt.CaseInsensitive)
+            fran_completer.setFilterMode(Qt.MatchContains)
+            self.combo_franchise.setCompleter(fran_completer)
 
             # Gêneros
             self.combo_genre.clear()
-            self.combo_genre.addItem("Nenhum", None)
-            for g in api_client.get_genres():
-                self.combo_genre.addItem(g["name"], g["id"])
+            self.genres_list = api_client.get_genres()
+            gen_names = [g["name"] for g in self.genres_list]
+            self.combo_genre.addItems(gen_names)
+            gen_completer = QCompleter(gen_names, self)
+            gen_completer.setCaseSensitivity(Qt.CaseInsensitive)
+            gen_completer.setFilterMode(Qt.MatchContains)
+            self.combo_genre.setCompleter(gen_completer)
         except Exception as e:
             print("Erro ao carregar opções:", e)
 
@@ -377,16 +374,17 @@ class GameDialog(QDialog):
         # Franchise
         fran = self.game_data.get("franchise")
         if fran:
-            idx = self.combo_franchise.findData(fran.get("id"))
-            if idx >= 0:
-                self.combo_franchise.setCurrentIndex(idx)
+            self.combo_franchise.setEditText(fran.get("name") or "")
+        else:
+            self.combo_franchise.setEditText("")
 
         # Genre
         genres = self.game_data.get("genres", [])
         if genres:
-            idx = self.combo_genre.findData(genres[0].get("id"))
-            if idx >= 0:
-                self.combo_genre.setCurrentIndex(idx)
+            self.combo_genre.setEditText(genres[0].get("name") or "")
+        else:
+            self.combo_genre.setEditText("")
+
 
         # Horas
         self.spin_hltb.setValue(int(self.game_data.get("hltb_hours") or 0))
@@ -576,12 +574,46 @@ class GameDialog(QDialog):
         play_type = self.combo_play_type.currentText()
         play_count = self.spin_play_count.value() if play_type == "Rejogada" else 1
 
+        # Franquia / Série
+        fran_text = self.combo_franchise.currentText().strip()
+        franchise_id = None
+        if fran_text:
+            for f in getattr(self, "franchises_list", []):
+                if f.get("name", "").strip().lower() == fran_text.lower():
+                    franchise_id = f["id"]
+                    break
+            if not franchise_id:
+                try:
+                    created_f = api_client.create_franchise(fran_text)
+                    franchise_id = created_f.get("id")
+                except Exception as e:
+                    print("Erro ao auto-criar franquia:", e)
+
+        # Gênero
+        gen_text = self.combo_genre.currentText().strip()
+        genre_ids = []
+        if gen_text:
+            genre_id = None
+            for g in getattr(self, "genres_list", []):
+                if g.get("name", "").strip().lower() == gen_text.lower():
+                    genre_id = g["id"]
+                    break
+            if not genre_id:
+                try:
+                    created_g = api_client.create_genre(gen_text)
+                    genre_id = created_g.get("id")
+                except Exception as e:
+                    print("Erro ao auto-criar gênero:", e)
+            if genre_id:
+                genre_ids.append(genre_id)
+
         payload = {
             "title": title,
             "developer": self.combo_developer.currentText().strip() or None,
             "status": self.combo_status.currentText(),
             "platform_id": self.combo_platform.currentData(),
-            "franchise_id": self.combo_franchise.currentData(),
+            "franchise_id": franchise_id,
+            "genre_ids": genre_ids,
             "hltb_hours": float(self.spin_hltb.value()),
             "played_hours": float(self.spin_played.value()),
             "score": round(self.spin_score.value(), 1) if self.spin_score.value() > 0 else None,
@@ -594,8 +626,6 @@ class GameDialog(QDialog):
             "cover_image": self.cover_filename
         }
 
-        genre_id = self.combo_genre.currentData()
-        payload["genre_ids"] = [genre_id] if genre_id else []
 
         st = self.combo_status.currentText()
         if st == "Zerado":
