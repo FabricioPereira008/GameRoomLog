@@ -3,7 +3,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, Qt
 from frontend_desktop.views.components.game_grid import GameGrid
-from frontend_desktop.views.components.game_card import GameCard
 
 class GameRoomView(QWidget):
     game_selected = Signal(dict)
@@ -24,7 +23,6 @@ class GameRoomView(QWidget):
         self.scroll.setObjectName("gameRoomScrollArea")
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.scroll.verticalScrollBar().valueChanged.connect(self.on_scroll)
 
         container = QWidget()
         container.setObjectName("gameRoomScrollContainer")
@@ -47,7 +45,8 @@ class GameRoomView(QWidget):
             header.setProperty("class", "section-header")
             layout.addWidget(header)
             
-            grid = GameGrid()
+            # Grid configurado no modo 'button' para ter lote inicial de 14 e botão '+' exclusivo
+            grid = GameGrid(mode="button", initial_batch=14)
             layout.addWidget(grid)
             
             container_layout.addWidget(section)
@@ -97,12 +96,52 @@ class GameRoomView(QWidget):
         self.sec_platinum.setVisible(bool(platinum_games))
         self.line_platinum.setVisible(bool(platinum_games))
 
-    def on_scroll(self, value: int):
-        scroll_bar = self.scroll.verticalScrollBar()
-        if value >= scroll_bar.maximum() - 80:
-            self.grid_queue.load_more_cards()
-            self.grid_finished.load_more_cards()
-            self.grid_platinum.load_more_cards()
+    def update_game(self, game_data: dict) -> bool:
+        """Atualiza o jogo in-place em qualquer seção que ele estiver."""
+        updated = False
+        for grid in [self.grid_now, self.grid_next, self.grid_queue, self.grid_finished, self.grid_platinum]:
+            if grid.update_game(game_data):
+                updated = True
+        return updated
+
+    def remove_game(self, game_id: int) -> bool:
+        """Remove o jogo in-place de todas as seções."""
+        removed = False
+        for grid, sec, line in [
+            (self.grid_now, self.sec_now, self.line_now),
+            (self.grid_next, self.sec_next, self.line_next),
+            (self.grid_queue, self.sec_queue, self.line_queue),
+            (self.grid_finished, self.sec_finished, self.line_finished),
+            (self.grid_platinum, self.sec_platinum, self.line_platinum),
+        ]:
+            if grid.remove_game(game_id):
+                removed = True
+                sec.setVisible(bool(grid.games))
+                line.setVisible(bool(grid.games))
+        return removed
+
+    def insert_game_by_status(self, game_data: dict):
+        status = game_data.get("status")
+        if status == "Jogando":
+            self.grid_now.insert_game(0, game_data)
+            self.sec_now.setVisible(True)
+            self.line_now.setVisible(True)
+        elif status == "Próximo":
+            self.grid_next.insert_game(0, game_data)
+            self.sec_next.setVisible(True)
+            self.line_next.setVisible(True)
+        elif status in ["Fila", "Pausado"]:
+            self.grid_queue.insert_game(0, game_data)
+            self.sec_queue.setVisible(True)
+            self.line_queue.setVisible(True)
+        elif status in ["Zerado", "Platinado"]:
+            self.grid_finished.insert_game(0, game_data)
+            self.sec_finished.setVisible(True)
+            self.line_finished.setVisible(True)
+            if status == "Platinado":
+                self.grid_platinum.insert_game(0, game_data)
+                self.sec_platinum.setVisible(True)
+                self.line_platinum.setVisible(True)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

@@ -21,6 +21,7 @@ class MainWindow(QMainWindow):
         self.resize(1260, 790)
         self.setMinimumSize(980, 640)
         self.previous_nav_index = 0
+        self.all_games = []
         self.init_ui()
         self.refresh_all_data()
 
@@ -66,7 +67,7 @@ class MainWindow(QMainWindow):
 
         content_layout.addLayout(header_layout)
 
-        # QStackedWidget com as Telas
+        # QStackedWidget com as Telas em Cache
         self.stack = QStackedWidget()
 
         # View 0: Game Room (Agora + Próximos + Fila + Zerados + Platinados)
@@ -133,7 +134,6 @@ class MainWindow(QMainWindow):
         self.view_settings.data_imported.connect(self.refresh_all_data)
         self.stack.addWidget(self.view_settings)
 
-
         # View 12: Detalhes de Categoria (Subpágina)
         self.view_category_detail = CategoryDetailView()
         self.view_category_detail.back_requested.connect(self.return_from_category_detail)
@@ -145,7 +145,7 @@ class MainWindow(QMainWindow):
 
         # Barra de status
         self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("Pronto • GameRoomLog v0.1.3 Online")
+        self.statusBar().showMessage("Pronto • GameRoomLog v0.2.0 Online")
 
     def switch_view(self, index: int):
         self.previous_nav_index = index
@@ -167,6 +167,7 @@ class MainWindow(QMainWindow):
         if 0 <= index < len(titles):
             self.view_title_label.setText(titles[index])
 
+        # Apenas recarrega dados para páginas analíticas ou dinâmicas que dependem de agregação
         if index == 5:
             self.view_yearbook.load_data()
         elif index == 6:
@@ -175,10 +176,7 @@ class MainWindow(QMainWindow):
             self.view_platforms.load_data()
         elif index == 8:
             self.view_franchises.load_data()
-        elif index == 11:
-            pass
-        else:
-            self.refresh_all_data()
+        # Todas as outras páginas (Game Room, Fila, Zerados, etc.) utilizam o cache existente instantaneamente!
 
     def open_category_detail(self, category_type: str, item_id: int):
         self.view_category_detail.load_category(category_type, item_id)
@@ -189,8 +187,10 @@ class MainWindow(QMainWindow):
         self.switch_view(self.previous_nav_index)
 
     def refresh_all_data(self):
+        """Carregamento completo dos jogos a partir do backend."""
         try:
             games = api_client.get_games()
+            self.all_games = games
 
             # Separar por categorias com fidelidade aos status
             now_games = [g for g in games if g.get("status") == "Jogando"]
@@ -208,8 +208,7 @@ class MainWindow(QMainWindow):
             
             wishlist_games = [g for g in games if g.get("status") == "Lista de Desejos"]
 
-
-            # Atualizar views
+            # Atualizar todas as views
             self.view_game_room.set_games(now_games, next_games, queue_games, zerados_games, platinados_games)
             self.view_queue_grid.set_games(queue_games)
             self.view_disponiveis_grid.set_games(disponiveis_games)
@@ -237,14 +236,105 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.statusBar().showMessage(f"Erro de conexão com a API: {e}")
 
-            self.statusBar().showMessage(f"Erro de conexão com a API: {e}")
-
     def open_add_game_dialog(self):
         dialog = GameDialog(parent=self)
-        if dialog.exec():
-            self.refresh_all_data()
+        if dialog.exec() and dialog.saved_game:
+            self.apply_game_mutation(dialog.saved_game, is_new=True)
 
     def open_edit_game_dialog(self, game_data: dict):
         dialog = GameDialog(game_data=game_data, parent=self)
         if dialog.exec():
-            self.refresh_all_data()
+            if dialog.is_deleted:
+                self.apply_game_deletion(game_data.get("id"))
+            elif dialog.saved_game:
+                self.apply_game_mutation(dialog.saved_game, is_new=False, old_status=game_data.get("status"))
+
+    def apply_game_deletion(self, game_id: int):
+        """Remove o jogo in-place de todas as views sem recarregar telas."""
+        self.all_games = [g for g in self.all_games if g.get("id") != game_id]
+        self.view_game_room.remove_game(game_id)
+        self.view_queue_grid.remove_game(game_id)
+        self.view_disponiveis_grid.remove_game(game_id)
+        self.view_zerados_grid.remove_game(game_id)
+        self.view_platinados_grid.remove_game(game_id)
+        self.view_wishlist_grid.remove_game(game_id)
+        self.view_table.remove_game(game_id)
+        self.statusBar().showMessage(f"Jogo removido com sucesso. Total: {len(self.all_games)}")
+
+    def apply_game_mutation(self, saved_game: dict, is_new: bool = False, old_status: str = None):
+        """Aplica inserções e edições in-place sem resetar a posição de rolagem."""
+        game_id = saved_game.get("id")
+        new_status = saved_game.get("status")
+
+        if is_new:
+            self.all_games.insert(0, saved_game)
+            self.view_table.insert_game(saved_game)
+            self.view_game_room.insert_game_by_status(saved_game)
+
+            if new_status in ["Fila", "Pausado"]:
+                self.view_queue_grid.insert_game(0, saved_game)
+            elif new_status == "Disponível":
+                self.view_disponiveis_grid.insert_game(0, saved_game)
+            elif new_status in ["Zerado", "Platinado"]:
+                self.view_zerados_grid.insert_game(0, saved_game)
+                if new_status == "Platinado":
+                    self.view_platinados_grid.insert_game(0, saved_game)
+            elif new_status == "Lista de Desejos":
+                self.view_wishlist_grid.insert_game(0, saved_game)
+
+            self.statusBar().showMessage(f"Jogo '{saved_game.get('title')}' adicionado com sucesso. Total: {len(self.all_games)}")
+            return
+
+        # Edição existente
+        for i, g in enumerate(self.all_games):
+            if g.get("id") == game_id:
+                self.all_games[i] = saved_game
+                break
+
+        # Se o status não foi alterado, apenas atualiza visualmente os cards existentes
+        if old_status == new_status:
+            self.view_game_room.update_game(saved_game)
+            self.view_queue_grid.update_game(saved_game)
+            self.view_disponiveis_grid.update_game(saved_game)
+            self.view_zerados_grid.update_game(saved_game)
+            self.view_platinados_grid.update_game(saved_game)
+            self.view_wishlist_grid.update_game(saved_game)
+            self.view_table.update_game(saved_game)
+            self.statusBar().showMessage(f"Jogo '{saved_game.get('title')}' atualizado com sucesso.")
+            return
+
+        # Se o status mudou:
+        # 1. Remove dos grids antigos
+        if old_status in ["Fila", "Pausado"]:
+            self.view_queue_grid.remove_game(game_id)
+        elif old_status == "Disponível":
+            self.view_disponiveis_grid.remove_game(game_id)
+        elif old_status in ["Zerado", "Platinado"]:
+            if new_status not in ["Zerado", "Platinado"]:
+                self.view_zerados_grid.remove_game(game_id)
+            if old_status == "Platinado" and new_status != "Platinado":
+                self.view_platinados_grid.remove_game(game_id)
+        elif old_status == "Lista de Desejos":
+            self.view_wishlist_grid.remove_game(game_id)
+
+        # 2. Insere ou atualiza nos novos grids
+        if new_status in ["Fila", "Pausado"]:
+            self.view_queue_grid.insert_game(0, saved_game)
+        elif new_status == "Disponível":
+            self.view_disponiveis_grid.insert_game(0, saved_game)
+        elif new_status in ["Zerado", "Platinado"]:
+            if old_status not in ["Zerado", "Platinado"]:
+                self.view_zerados_grid.insert_game(0, saved_game)
+            else:
+                self.view_zerados_grid.update_game(saved_game)
+            if new_status == "Platinado" and old_status != "Platinado":
+                self.view_platinados_grid.insert_game(0, saved_game)
+        elif new_status == "Lista de Desejos":
+            self.view_wishlist_grid.insert_game(0, saved_game)
+
+        # 3. Atualiza Game Room e Tabela
+        self.view_game_room.remove_game(game_id)
+        self.view_game_room.insert_game_by_status(saved_game)
+        self.view_table.update_game(saved_game)
+
+        self.statusBar().showMessage(f"Jogo '{saved_game.get('title')}' movido para '{new_status}'.")

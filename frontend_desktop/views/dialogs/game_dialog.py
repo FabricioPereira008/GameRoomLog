@@ -16,6 +16,8 @@ class GameDialog(QDialog):
         self.game_data = game_data or {}
         self.is_edit = bool(game_data and game_data.get("id"))
         self.cover_filename = self.game_data.get("cover_image")
+        self.saved_game = None
+        self.is_deleted = False
 
         self.setWindowTitle("Editar Jogo" if self.is_edit else "Novo Jogo")
         self.setFixedWidth(640)
@@ -601,9 +603,10 @@ class GameDialog(QDialog):
 
         try:
             if self.is_edit:
-                api_client.update_game(self.game_data["id"], payload)
+                self.saved_game = api_client.update_game(self.game_data["id"], payload)
             else:
-                api_client.create_game(payload)
+                self.saved_game = api_client.create_game(payload)
+            self.is_deleted = False
             self.accept()
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao salvar jogo: {e}")
@@ -617,6 +620,9 @@ class GameDialog(QDialog):
         if confirm == QMessageBox.Yes:
             try:
                 api_client.delete_game(self.game_data["id"])
+                self.saved_game = self.game_data
+                self.is_deleted = True
                 self.accept()
             except Exception as e:
                 QMessageBox.critical(self, "Erro", f"Erro ao excluir jogo: {e}")
+

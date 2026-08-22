@@ -74,8 +74,65 @@ class GameTable(QWidget):
         layout.addWidget(self.table)
 
     def set_games(self, games: list):
-        self.games = games
+        self.games = list(games)
         self.apply_filter()
+
+    def update_game(self, game_data: dict) -> bool:
+        """Atualiza jogo na tabela in-place."""
+        game_id = game_data.get("id")
+        for i, g in enumerate(self.games):
+            if g.get("id") == game_id:
+                self.games[i] = game_data
+                break
+        for i, g in enumerate(self.filtered_games):
+            if g.get("id") == game_id:
+                self.filtered_games[i] = game_data
+                if i < self.rendered_count:
+                    self.update_row(i, game_data)
+                return True
+        return False
+
+    def remove_game(self, game_id: int) -> bool:
+        """Remove jogo da tabela in-place."""
+        self.games = [g for g in self.games if g.get("id") != game_id]
+        idx_in_filtered = -1
+        for i, g in enumerate(self.filtered_games):
+            if g.get("id") == game_id:
+                idx_in_filtered = i
+                break
+        if idx_in_filtered != -1:
+            self.filtered_games.pop(idx_in_filtered)
+            if idx_in_filtered < self.rendered_count:
+                self.table.removeRow(idx_in_filtered)
+                self.rendered_count -= 1
+                self.update_count_label()
+            return True
+        return False
+
+    def insert_game(self, game_data: dict):
+        """Insere jogo na tabela in-place."""
+        self.games.insert(0, game_data)
+        self.apply_filter()
+
+    def update_row(self, row: int, game: dict):
+        self.table.setItem(row, 0, QTableWidgetItem(game.get("title", "")))
+        self.table.setItem(row, 1, QTableWidgetItem(game.get("status", "")))
+        genres = ", ".join([gen.get("name") for gen in game.get("genres", [])])
+        self.table.setItem(row, 2, QTableWidgetItem(genres))
+        plat = game.get("platform", {}).get("name", "") if game.get("platform") else ""
+        self.table.setItem(row, 3, QTableWidgetItem(plat))
+        self.table.setItem(row, 4, QTableWidgetItem(game.get("developer") or ""))
+        year = str(game.get("completion_year") or "")
+        self.table.setItem(row, 5, QTableWidgetItem(year))
+        score = str(game.get("score") or "")
+        self.table.setItem(row, 6, QTableWidgetItem(score))
+        diff = str(game.get("difficulty") or "")
+        self.table.setItem(row, 7, QTableWidgetItem(diff))
+        hltb = f"{int(game.get('hltb_hours'))}h" if game.get("hltb_hours") else ""
+        self.table.setItem(row, 8, QTableWidgetItem(hltb))
+        played = f"{int(game.get('played_hours'))}h" if game.get("played_hours") else ""
+        self.table.setItem(row, 9, QTableWidgetItem(played))
+        self.table.setItem(row, 10, QTableWidgetItem(game.get("play_type", "")))
 
     def apply_filter(self):
         search_text = self.search_input.text().lower().strip()
@@ -115,46 +172,7 @@ class GameTable(QWidget):
 
         for idx, game in enumerate(batch):
             row = current_rows + idx
-
-            # 0: Jogo
-            self.table.setItem(row, 0, QTableWidgetItem(game.get("title", "")))
-
-            # 1: Status
-            self.table.setItem(row, 1, QTableWidgetItem(game.get("status", "")))
-
-            # 2: Gênero
-            genres = ", ".join([gen.get("name") for gen in game.get("genres", [])])
-            self.table.setItem(row, 2, QTableWidgetItem(genres))
-
-            # 3: Plataforma
-            plat = game.get("platform", {}).get("name", "") if game.get("platform") else ""
-            self.table.setItem(row, 3, QTableWidgetItem(plat))
-
-            # 4: Dev
-            self.table.setItem(row, 4, QTableWidgetItem(game.get("developer") or ""))
-
-            # 5: Ano
-            year = str(game.get("completion_year") or "")
-            self.table.setItem(row, 5, QTableWidgetItem(year))
-
-            # 6: Nota
-            score = str(game.get("score") or "")
-            self.table.setItem(row, 6, QTableWidgetItem(score))
-
-            # 7: Dificuldade
-            diff = str(game.get("difficulty") or "")
-            self.table.setItem(row, 7, QTableWidgetItem(diff))
-
-            # 8: HLTB
-            hltb = f"{int(game.get('hltb_hours'))}h" if game.get("hltb_hours") else ""
-            self.table.setItem(row, 8, QTableWidgetItem(hltb))
-
-            # 9: Jogadas
-            played = f"{int(game.get('played_hours'))}h" if game.get("played_hours") else ""
-            self.table.setItem(row, 9, QTableWidgetItem(played))
-
-            # 10: Tipo
-            self.table.setItem(row, 10, QTableWidgetItem(game.get("play_type", "")))
+            self.update_row(row, game)
 
         self.rendered_count = next_count
         self.table.setUpdatesEnabled(True)
@@ -162,7 +180,7 @@ class GameTable(QWidget):
 
     def on_scroll(self, value: int):
         scroll_bar = self.table.verticalScrollBar()
-        if value >= scroll_bar.maximum() - 5:
+        if value >= scroll_bar.maximum() * 0.75 or value >= scroll_bar.maximum() - 20:
             self.load_more_rows()
 
     def update_count_label(self):

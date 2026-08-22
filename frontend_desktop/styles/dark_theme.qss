@@ -305,6 +305,18 @@ QFrame[class="game-card"]:hover {
     background-color: #1c2030;
 }
 
+QFrame[class~="load-more-card"] {
+    background-color: #161824aa;
+    border: 1.5px dashed #3a405a;
+    border-radius: 10px;
+}
+
+QFrame[class~="load-more-card"]:hover {
+    border: 1.5px dashed #7f5af0;
+    background-color: #1c2034;
+}
+
+
 QLabel[class="card-title"] {
     font-size: 13px;
     font-weight: bold;
