@@ -5,6 +5,81 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt, QSettings
 from PySide6.QtGui import QPixmap, QPainter, QColor, QFont, QPainterPath
 
+_COVER_PIXMAP_CACHE = {}
+_PLACEHOLDER_CACHE = {}
+
+def get_cached_cover_pixmap(cover_image: str, target_width: int, target_height: int) -> QPixmap:
+    """Carrega, escala e arredonda a capa com cache em memória para rolagem 100% fluida."""
+    cache_key = (cover_image, target_width, target_height)
+    if cache_key in _COVER_PIXMAP_CACHE:
+        return _COVER_PIXMAP_CACHE[cache_key]
+
+    storage_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+        "backend", "storage", "covers", cover_image
+    )
+    if not os.path.exists(storage_path):
+        return None
+
+    pixmap = QPixmap(storage_path)
+    if pixmap.isNull():
+        return None
+
+    scaled = pixmap.scaled(
+        target_width, target_height,
+        Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
+    )
+    
+    rounded = QPixmap(target_width, target_height)
+    rounded.fill(Qt.transparent)
+    painter = QPainter(rounded)
+    painter.setRenderHint(QPainter.Antialiasing)
+    path = QPainterPath()
+    path.addRoundedRect(0, 0, target_width, target_height, 8, 8)
+    painter.setClipPath(path)
+    
+    x_offset = (target_width - scaled.width()) // 2
+    y_offset = (target_height - scaled.height()) // 2
+    painter.drawPixmap(x_offset, y_offset, scaled)
+    painter.end()
+
+    _COVER_PIXMAP_CACHE[cache_key] = rounded
+    return rounded
+
+def get_cached_placeholder_pixmap(target_width: int, target_height: int) -> QPixmap:
+    """Retorna placeholder padrão reutilizável."""
+    cache_key = (target_width, target_height)
+    if cache_key in _PLACEHOLDER_CACHE:
+        return _PLACEHOLDER_CACHE[cache_key]
+
+    pixmap = QPixmap(target_width, target_height)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    path = QPainterPath()
+    path.addRoundedRect(0, 0, target_width, target_height, 8, 8)
+    painter.setClipPath(path)
+    painter.fillPath(path, QColor("#151720"))
+    painter.setPen(QColor("#525875"))
+    font = QFont("Segoe UI", 16)
+    painter.setFont(font)
+    painter.drawText(pixmap.rect(), Qt.AlignCenter, "🎮")
+    painter.end()
+
+    _PLACEHOLDER_CACHE[cache_key] = pixmap
+    return pixmap
+
+def invalidate_cover_cache(cover_image: str = None):
+    """Invalida o cache de imagem se a capa for alterada."""
+    global _COVER_PIXMAP_CACHE
+    if cover_image:
+        keys_to_del = [k for k in _COVER_PIXMAP_CACHE if k[0] == cover_image]
+        for k in keys_to_del:
+            _COVER_PIXMAP_CACHE.pop(k, None)
+    else:
+        _COVER_PIXMAP_CACHE.clear()
+
+
 class GameCard(QFrame):
     clicked = Signal(dict)
 
@@ -76,7 +151,6 @@ class GameCard(QFrame):
         self.render_meta()
 
     def render_tags(self):
-        # Limpa widgets anteriores da tag
         while self.tags_layout.count():
             item = self.tags_layout.takeAt(0)
             w = item.widget()
@@ -126,6 +200,12 @@ class GameCard(QFrame):
 
     def update_data(self, new_data: dict):
         """Atualiza os dados e visual do card in-place sem recriar o widget."""
+        old_cover = self.game_data.get("cover_image")
+        new_cover = new_data.get("cover_image")
+        if old_cover != new_cover:
+            invalidate_cover_cache(old_cover)
+            invalidate_cover_cache(new_cover)
+
         self.game_data = new_data
         self.title_label.setText(new_data.get("title", "Sem Título"))
         self.render_tags()
@@ -137,49 +217,12 @@ class GameCard(QFrame):
         cover_image = self.game_data.get("cover_image")
         
         if cover_image:
-            storage_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-                "backend", "storage", "covers", cover_image
-            )
-            if os.path.exists(storage_path):
-                pixmap = QPixmap(storage_path)
-                if not pixmap.isNull():
-                    scaled = pixmap.scaled(
-                        target_width, self.cover_height,
-                        Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
-                    )
-                    
-                    rounded = QPixmap(target_width, self.cover_height)
-                    rounded.fill(Qt.transparent)
-                    painter = QPainter(rounded)
-                    painter.setRenderHint(QPainter.Antialiasing)
-                    path = QPainterPath()
-                    path.addRoundedRect(0, 0, target_width, self.cover_height, 8, 8)
-                    painter.setClipPath(path)
-                    
-                    x_offset = (target_width - scaled.width()) // 2
-                    y_offset = (self.cover_height - scaled.height()) // 2
-                    painter.drawPixmap(x_offset, y_offset, scaled)
-                    painter.end()
-                    
-                    self.cover_label.setPixmap(rounded)
-                    return
+            cached_pix = get_cached_cover_pixmap(cover_image, target_width, self.cover_height)
+            if cached_pix:
+                self.cover_label.setPixmap(cached_pix)
+                return
 
-        # Placeholder
-        pixmap = QPixmap(target_width, self.cover_height)
-        pixmap.fill(Qt.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-        path = QPainterPath()
-        path.addRoundedRect(0, 0, target_width, self.cover_height, 8, 8)
-        painter.setClipPath(path)
-        painter.fillPath(path, QColor("#151720"))
-        painter.setPen(QColor("#525875"))
-        font = QFont("Segoe UI", 16)
-        painter.setFont(font)
-        painter.drawText(pixmap.rect(), Qt.AlignCenter, "🎮")
-        painter.end()
-        self.cover_label.setPixmap(pixmap)
+        self.cover_label.setPixmap(get_cached_placeholder_pixmap(target_width, self.cover_height))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -239,7 +282,6 @@ class LoadMoreCard(QFrame):
 
         layout.addWidget(cover_box)
 
-        # Rodapé alinhado aos outros cards
         footer_label = QLabel("Mostrar mais")
         footer_label.setAlignment(Qt.AlignCenter)
         footer_label.setStyleSheet("color: #64748b; font-size: 10px;")

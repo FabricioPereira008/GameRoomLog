@@ -1,18 +1,17 @@
 from PySide6.QtWidgets import (
     QWidget, QScrollArea, QGridLayout, QVBoxLayout, QLabel, QSizePolicy
 )
-from PySide6.QtCore import Signal, Qt, QSettings
+from PySide6.QtCore import Signal, Qt, QSettings, QTimer
 from frontend_desktop.views.components.game_card import GameCard, LoadMoreCard
 
 class GameGrid(QWidget):
     """Grid adaptativa e de alta performance com colunas dinâmicas e carregamento sob demanda."""
     game_selected = Signal(dict)
 
-    def __init__(self, mode: str = "infinite", initial_batch: int = 35, parent=None):
+    def __init__(self, mode: str = "infinite", initial_batch: int = None, parent=None):
         super().__init__(parent)
         self.mode = mode  # "infinite" ou "button"
-        self.initial_batch = initial_batch if mode == "infinite" else 14
-        self.batch_size = 35 if mode == "infinite" else 14
+        self.custom_initial_batch = initial_batch
         
         self.setObjectName("gameGridContainer")
         self.setProperty("class", "game-grid-container")
@@ -29,6 +28,7 @@ class GameGrid(QWidget):
         self.load_more_btn = None
         self.rendered_count = 0
         self.current_cols = 5
+        self.is_loading = False
 
     def get_card_width(self) -> int:
         size_mode = QSettings("GameRoom", "GameRoomLog").value("card_size", "medium")
@@ -50,12 +50,29 @@ class GameGrid(QWidget):
         cols = max(2, (available_width - 16) // (card_width + spacing))
         return cols
 
+    def get_batch_size(self) -> int:
+        cols = self.current_cols or self.calculate_cols()
+        if self.mode == "button":
+            return max(14, cols * 2)
+        # Modo infinito: carrega de 2 a 3 linhas por vez conforme a largura da tela
+        return max(16, cols * 2)
+
+    def get_initial_batch(self) -> int:
+        if self.custom_initial_batch is not None:
+            return self.custom_initial_batch
+        cols = self.current_cols or self.calculate_cols()
+        if self.mode == "button":
+            return max(14, cols * 2)
+        # Modo infinito: preenche no mínimo 3 a 4 linhas na abertura para cobrir telas fullscreen
+        return max(24, cols * 4)
+
     def set_games(self, games: list):
         self.games = list(games)
         self.rendered_count = 0
         self.cards = []
         self.load_more_btn = None
         self.current_cols = self.calculate_cols()
+        self.is_loading = False
 
         # Limpa widgets anteriores
         while self.grid_layout.count():
@@ -71,13 +88,23 @@ class GameGrid(QWidget):
             self.grid_layout.addWidget(empty_label, 0, 0)
             return
 
-        self.load_more_cards()
+        initial_count = min(self.get_initial_batch(), len(self.games))
+        self.load_cards_batch(initial_count)
 
     def load_more_cards(self):
         total = len(self.games)
-        if self.rendered_count >= total and not self.load_more_btn:
+        if self.is_loading or (self.rendered_count >= total and not self.load_more_btn):
+            return
+        batch_size = self.get_batch_size()
+        next_count = min(self.rendered_count + batch_size, total)
+        self.load_cards_batch(next_count)
+
+    def load_cards_batch(self, target_count: int):
+        total = len(self.games)
+        if self.is_loading or self.rendered_count >= target_count:
             return
 
+        self.is_loading = True
         cols = self.current_cols
         
         # Remove o botão "Carregar Mais" temporariamente se ele já existir no layout
@@ -86,8 +113,7 @@ class GameGrid(QWidget):
             self.load_more_btn.deleteLater()
             self.load_more_btn = None
 
-        next_count = min(self.rendered_count + self.batch_size, total)
-        batch = self.games[self.rendered_count:next_count]
+        batch = self.games[self.rendered_count:target_count]
 
         self.setUpdatesEnabled(False)
         for idx, game in enumerate(batch):
@@ -99,7 +125,7 @@ class GameGrid(QWidget):
             self.cards.append(card)
             self.grid_layout.addWidget(card, row, col)
 
-        self.rendered_count = next_count
+        self.rendered_count = target_count
 
         # Se for modo "button" e ainda houver itens restantes, adiciona o botão '+' no final
         if self.mode == "button" and self.rendered_count < total:
@@ -111,14 +137,15 @@ class GameGrid(QWidget):
             self.grid_layout.addWidget(self.load_more_btn, row, col)
 
         self.setUpdatesEnabled(True)
+        self.is_loading = False
 
-    def relayout_cards(self):
-        """Re-posiciona os cards existentes e botão de carregar mais quando a largura da tela muda."""
+    def relayout_cards(self, force: bool = False):
+        """Re-posiciona os cards existentes e botão de carregar mais quando a largura da tela muda ou itens são excluídos/adicionados."""
         if not self.cards and not self.load_more_btn:
             return
 
         new_cols = self.calculate_cols()
-        if new_cols == self.current_cols:
+        if not force and new_cols == self.current_cols:
             return
 
         self.current_cols = new_cols
@@ -160,7 +187,7 @@ class GameGrid(QWidget):
         return updated
 
     def remove_game(self, game_id: int) -> bool:
-        """Remove um jogo in-place do grid."""
+        """Remove um jogo in-place do grid e reorganiza as posições imediatamente."""
         removed = False
         self.games = [g for g in self.games if g.get("id") != game_id]
 
@@ -176,9 +203,8 @@ class GameGrid(QWidget):
             target_card.deleteLater()
             self.rendered_count = len(self.cards)
             
-            # Reorganiza o grid
-            self.current_cols = self.calculate_cols()
-            self.relayout_cards()
+            # Reorganiza o grid forçando novo posicionamento de todos os cards
+            self.relayout_cards(force=True)
             removed = True
 
         return removed
@@ -192,22 +218,7 @@ class GameGrid(QWidget):
         self.cards.insert(index, card)
         self.rendered_count = len(self.cards)
 
-        self.current_cols = self.calculate_cols()
-        
-        # Limpa e repõe
-        while self.grid_layout.count():
-            self.grid_layout.takeAt(0)
-
-        for idx, c in enumerate(self.cards):
-            row = idx // self.current_cols
-            col = idx % self.current_cols
-            self.grid_layout.addWidget(c, row, col)
-
-        if self.load_more_btn is not None:
-            btn_idx = len(self.cards)
-            row = btn_idx // self.current_cols
-            col = btn_idx % self.current_cols
-            self.grid_layout.addWidget(self.load_more_btn, row, col)
+        self.relayout_cards(force=True)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -218,7 +229,7 @@ class GameGrid(QWidget):
 
 
 class ScrollableGameGrid(QScrollArea):
-    """Container com barra de rolagem e carregamento infinito sob demanda."""
+    """Container com barra de rolagem e carregamento suave antecipado garantindo tela cheia preenchida."""
     game_selected = Signal(dict)
 
     def __init__(self, parent=None):
@@ -236,22 +247,54 @@ class ScrollableGameGrid(QScrollArea):
 
     def set_games(self, games: list):
         self.grid.set_games(games)
+        QTimer.singleShot(50, self.ensure_viewport_filled)
+
+    def ensure_viewport_filled(self):
+        """Garante que a área visível seja preenchida com cards suficientes para ativar a barra de rolagem."""
+        if not self.grid.games or self.grid.rendered_count >= len(self.grid.games):
+            return
+
+        scroll_bar = self.verticalScrollBar()
+        # Se a barra de rolagem não tem alcance para rolar e ainda existem jogos não exibidos
+        loop_guard = 0
+        while scroll_bar.maximum() <= 100 and self.grid.rendered_count < len(self.grid.games) and loop_guard < 10:
+            loop_guard += 1
+            prev_rendered = self.grid.rendered_count
+            self.grid.load_more_cards()
+            self.widget().adjustSize()
+            if self.grid.rendered_count == prev_rendered:
+                break
 
     def update_game(self, game_data: dict):
         return self.grid.update_game(game_data)
 
     def remove_game(self, game_id: int):
-        return self.grid.remove_game(game_id)
+        res = self.grid.remove_game(game_id)
+        QTimer.singleShot(50, self.ensure_viewport_filled)
+        return res
 
     def insert_game(self, index: int, game_data: dict):
         self.grid.insert_game(index, game_data)
 
     def on_scroll(self, value: int):
+        if self.grid.is_loading:
+            return
         scroll_bar = self.verticalScrollBar()
-        # Carregamento antecipado (quando atingir 75% ou faltar 350px para o final)
-        if value >= scroll_bar.maximum() * 0.75 or value >= scroll_bar.maximum() - 350:
+        # Dispara quando faltar 500px ou passar de 60% do scroll
+        if value >= scroll_bar.maximum() * 0.60 or value >= scroll_bar.maximum() - 500:
             self.grid.load_more_cards()
+
+    def wheelEvent(self, event):
+        super().wheelEvent(event)
+        # Se o usuário tentar rolar quando ainda não atingiu altura de scrollbar, carrega mais
+        if self.verticalScrollBar().maximum() == 0 and self.grid.rendered_count < len(self.grid.games):
+            self.grid.load_more_cards()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(100, self.ensure_viewport_filled)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.grid.relayout_cards()
+        QTimer.singleShot(100, self.ensure_viewport_filled)
