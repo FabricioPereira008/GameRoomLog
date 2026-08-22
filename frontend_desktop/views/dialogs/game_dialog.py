@@ -111,22 +111,27 @@ class GameDialog(QDialog):
         # 7. Horas (Inteiros)
         hours_layout = QHBoxLayout()
         hours_layout.setSpacing(8)
+        self.lbl_hltb = QLabel("HLTB:")
         self.spin_hltb = QSpinBox()
         self.spin_hltb.setRange(0, 99999)
         self.spin_hltb.setSuffix(" h")
         
+        self.lbl_played = QLabel("Jogadas:")
         self.spin_played = QSpinBox()
         self.spin_played.setRange(0, 99999)
         self.spin_played.setSuffix(" h")
 
-        hours_layout.addWidget(QLabel("HLTB:"))
+        hours_layout.addWidget(self.lbl_hltb)
         hours_layout.addWidget(self.spin_hltb)
-        hours_layout.addWidget(QLabel("Jogadas:"))
+        hours_layout.addWidget(self.lbl_played)
         hours_layout.addWidget(self.spin_played)
+        hours_layout.addStretch()
         form_layout.addRow(make_label("Tempo:"), hours_layout)
 
         # 8. Avaliação (0.0 a 10.0 com 1 decimal)
-        score_layout = QHBoxLayout()
+        self.eval_widget = QWidget()
+        score_layout = QHBoxLayout(self.eval_widget)
+        score_layout.setContentsMargins(0, 0, 0, 0)
         score_layout.setSpacing(8)
         self.spin_score = QDoubleSpinBox()
         self.spin_score.setRange(0, 10)
@@ -144,7 +149,10 @@ class GameDialog(QDialog):
         score_layout.addWidget(self.spin_score)
         score_layout.addWidget(QLabel("Dificuldade (0-10):"))
         score_layout.addWidget(self.spin_diff)
-        form_layout.addRow(make_label("Avaliação:"), score_layout)
+        score_layout.addStretch()
+
+        self.eval_label = make_label("Avaliação:")
+        form_layout.addRow(self.eval_label, self.eval_widget)
 
         # 9. Datas (Finalização e Platina automáticas conforme o Status)
         self.dates_widget = QWidget()
@@ -171,6 +179,7 @@ class GameDialog(QDialog):
 
         self.combo_status.currentTextChanged.connect(self.on_status_changed)
         self.on_status_changed(self.combo_status.currentText())
+
 
 
         # 10. Tipo de Jogada e Campo Condicional de Rejogada
@@ -288,23 +297,25 @@ class GameDialog(QDialog):
         main_layout.addLayout(btn_box)
 
     def on_status_changed(self, status: str):
-        if status == "Zerado":
-            self.dates_label.setVisible(True)
-            self.dates_widget.setVisible(True)
-            self.lbl_finish_date.setVisible(True)
-            self.date_finish.setVisible(True)
-            self.lbl_plat_date.setVisible(False)
-            self.date_plat.setVisible(False)
-        elif status == "Platinado":
-            self.dates_label.setVisible(True)
-            self.dates_widget.setVisible(True)
-            self.lbl_finish_date.setVisible(True)
-            self.date_finish.setVisible(True)
-            self.lbl_plat_date.setVisible(True)
-            self.date_plat.setVisible(True)
-        else:
-            self.dates_label.setVisible(False)
-            self.dates_widget.setVisible(False)
+        is_finished = (status in ["Zerado", "Platinado"])
+        is_platinum = (status == "Platinado")
+
+        # 1. Horas jogadas (dentro de Tempo)
+        self.lbl_played.setVisible(is_finished)
+        self.spin_played.setVisible(is_finished)
+
+        # 2. Avaliação (Nota e Dificuldade)
+        self.eval_label.setVisible(is_finished)
+        self.eval_widget.setVisible(is_finished)
+
+        # 3. Datas (Zerou em / Platinou em)
+        self.dates_label.setVisible(is_finished)
+        self.dates_widget.setVisible(is_finished)
+        self.lbl_finish_date.setVisible(is_finished)
+        self.date_finish.setVisible(is_finished)
+        self.lbl_plat_date.setVisible(is_platinum)
+        self.date_plat.setVisible(is_platinum)
+
 
     def on_play_type_changed(self):
         is_replay = self.combo_play_type.currentText() == "Rejogada"
