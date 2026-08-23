@@ -6,7 +6,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![PySide6](https://img.shields.io/badge/PySide6-Qt6-41CD52?style=for-the-badge&logo=qt&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
-![Pytest](https://img.shields.io/badge/Tests-31%20Passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)
+![Pytest](https://img.shields.io/badge/Tests-36%20Passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 **Seu gerenciador pessoal de backlog de jogos, histórico de gameplay e anuário gamer definitivo.**
@@ -24,11 +24,13 @@ O **GameRoomLog** é um aplicativo desktop nativo e moderno desenvolvido para ge
 ## ✨ Funcionalidades Principais
 
 - 🎮 **Game Room Visual:** Visão geral dos jogos que você está jogando agora, próximos na lista, fila de espera, zerados e platinados.
+- 🔍 **Busca & Filtros Avançados:** Busca instantânea por título e painel retrátil de filtros em tempo real (Gênero, Desenvolvedora, Plataforma, Franquia e Tempo HLTB).
 - 📅 **Anuário Gamer (Yearbook):** Estatísticas detalhadas por ano (horas jogadas, jogos finalizados, platinas conquistadas e médias de avaliação).
 - ⚡ **Performance Zero-Stutter:** Cache inteligente em memória para capas (`QPixmap`), rolagem antecipada suave e carregamento sob demanda em lotes dinâmicos.
-- 🏷️ **Gestão Completa de Categorias:** Organização por Plataformas, Gêneros, Desenvolvedoras e Franquias.
+- 🏷️ **Gestão Completa de Categorias:** Organização por Plataformas, Gêneros, Desenvolvedoras e Franquias com autocompletar inteligente e auto-criação.
 - 📦 **Importador do Notion:** Migre facilmente seu banco de dados anterior do Notion (CSV/Markdown) com detecção automática de capas e metadados.
-- 🧪 **100% Testado:** Suíte com 31 testes automatizados (Backend, Mock de Frontend e Testes de Performance em milissegundos).
+- 🧪 **100% Testado:** Suíte com 36 testes automatizados (Backend, Mock de Frontend e Testes de Performance em milissegundos).
+
 
 ---
 
