@@ -15,3 +15,7 @@ Este arquivo define as convenções e padrões arquiteturais a serem seguidos pe
 
 ## 3. Lançamento de Novas Versões
 - Ao lançar uma nova versão, utilize o workflow definido na skill `.agents/skills/release-version/SKILL.md` ou execute o helper `.agents/skills/release-version/scripts/release.py <VERSAO>`.
+
+## 4. Publicação no GitHub e Controle de Versão (Git Push)
+- **Aprovação Prévia Obrigatória:** NUNCA execute `git push` (de branches ou tags) sem antes avisar o usuário, exibir claramente o resumo dos commits, tags e alterações que serão enviadas, e solicitar a aprovação explícita dele.
+
