@@ -1,8 +1,24 @@
 import sys
 import os
+import io
 import time
 import threading
 from pathlib import Path
+
+# Em executáveis desktop sem janela de terminal (console=False), sys.stdout e sys.stderr são None no Windows.
+# O NullWriter evita que bibliotecas como o Uvicorn quebrem ao tentar chamar sys.stdout.isatty().
+class NullWriter:
+    def write(self, s):
+        pass
+    def flush(self):
+        pass
+    def isatty(self):
+        return False
+
+if sys.stdout is None:
+    sys.stdout = NullWriter()
+if sys.stderr is None:
+    sys.stderr = NullWriter()
 
 # Garantir que o diretório raiz está no sys.path
 BASE_DIR = Path(__file__).resolve().parent
@@ -31,9 +47,12 @@ class EmbeddedBackendServer(threading.Thread):
             host=self.host,
             port=self.port,
             log_level="warning",
-            access_log=False
+            access_log=False,
+            log_config=None,
+            use_colors=False
         )
         self.server = uvicorn.Server(self.config)
+
 
     def run(self):
         try:
