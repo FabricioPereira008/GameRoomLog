@@ -486,11 +486,9 @@ class GameDialog(QDialog):
             
         import os
         from PySide6.QtGui import QPainter, QPainterPath
+        from frontend_desktop.views.components.game_card import resolve_cover_path
         
-        storage_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-            "backend", "storage", "covers", self.cover_filename
-        )
+        storage_path = resolve_cover_path(self.cover_filename)
         if os.path.exists(storage_path):
             pixmap = QPixmap(storage_path)
             if not pixmap.isNull():
@@ -519,12 +517,11 @@ class GameDialog(QDialog):
             return
             
         import os
-        storage_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-            "backend", "storage", "covers", self.cover_filename
-        )
+        from frontend_desktop.views.components.game_card import resolve_cover_path
+        storage_path = resolve_cover_path(self.cover_filename)
         if not os.path.exists(storage_path):
             return
+
 
         from frontend_desktop.views.dialogs.image_cropper_dialog import ImageCropperDialog
         

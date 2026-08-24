@@ -8,18 +8,29 @@ from PySide6.QtGui import QPixmap, QPainter, QColor, QFont, QPainterPath
 _COVER_PIXMAP_CACHE = {}
 _PLACEHOLDER_CACHE = {}
 
+def resolve_cover_path(cover_image: str) -> str:
+    try:
+        from backend.app.core.config import settings
+        p = settings.COVERS_DIR / cover_image
+        if p.exists():
+            return str(p)
+    except Exception:
+        pass
+    return os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+        "backend", "storage", "covers", cover_image
+    )
+
 def get_cached_cover_pixmap(cover_image: str, target_width: int, target_height: int) -> QPixmap:
     """Carrega, escala e arredonda a capa com cache em memória para rolagem 100% fluida."""
     cache_key = (cover_image, target_width, target_height)
     if cache_key in _COVER_PIXMAP_CACHE:
         return _COVER_PIXMAP_CACHE[cache_key]
 
-    storage_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-        "backend", "storage", "covers", cover_image
-    )
+    storage_path = resolve_cover_path(cover_image)
     if not os.path.exists(storage_path):
         return None
+
 
     pixmap = QPixmap(storage_path)
     if pixmap.isNull():

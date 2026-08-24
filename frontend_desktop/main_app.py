@@ -7,9 +7,22 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from frontend_desktop.views.main_window import MainWindow
 from frontend_desktop.api_client.client import api_client
 
+def get_qss_path() -> Path:
+    if hasattr(sys, "_MEIPASS"):
+        base = Path(sys._MEIPASS)
+        for cand in [
+            base / "frontend_desktop" / "styles" / "dark_theme.qss",
+            base / "styles" / "dark_theme.qss",
+            base / "dark_theme.qss"
+        ]:
+            if cand.exists():
+                return cand
+    return Path(__file__).parent / "styles" / "dark_theme.qss"
+
 def setup_live_stylesheet(app: QApplication):
-    qss_path = Path(__file__).parent / "styles" / "dark_theme.qss"
+    qss_path = get_qss_path()
     last_mtime = [0.0]
+
 
     def reload_qss():
         if not qss_path.exists():

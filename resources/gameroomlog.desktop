@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=GameRoomLog
+Comment=Gerenciador de backlog de jogos e anuário gamer
+Exec=gameroomlog
+Icon=gameroomlog
+Terminal=false
+Type=Application
+Categories=Game;Utility;
+Keywords=games;backlog;tracker;steam;
+StartupWMClass=GameRoomLog
