@@ -5,7 +5,7 @@ from pathlib import Path
 
 block_cipher = None
 
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+BASE_DIR = os.path.abspath(SPECPATH if 'SPECPATH' in locals() else os.getcwd())
 
 added_datas = [
     (os.path.join(BASE_DIR, 'frontend_desktop', 'styles', 'dark_theme.qss'), os.path.join('frontend_desktop', 'styles')),
@@ -84,6 +84,7 @@ exe = EXE(
     a.datas,
     [],
     name='gameroomlog',
+    icon='resources/icon.png' if os.path.exists(os.path.join(BASE_DIR, 'resources', 'icon.png')) else None,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -97,3 +98,4 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+

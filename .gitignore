@@ -43,3 +43,9 @@ Thumbs.db
 
 # Temporary test scripts
 test_parse.py
+
+# Build and Distribution
+build/
+dist/
+*.egg-info/
+
