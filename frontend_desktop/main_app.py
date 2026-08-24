@@ -4,6 +4,9 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut, QPalette, QColor
+from frontend_desktop.views.main_window import MainWindow
+from frontend_desktop.api_client.client import api_client
+
 
 def set_dark_palette(app: QApplication):
     """Configura paleta escura padrão para garantir consistência no Windows, macOS e Linux."""
