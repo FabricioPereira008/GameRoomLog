@@ -71,10 +71,12 @@ class YearbookView(QWidget):
         scroll.setObjectName("yearbookScrollArea")
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setAttribute(Qt.WA_StyledBackground, True)
 
         container = QWidget()
         container.setObjectName("yearbookScrollContainer")
         container.setAttribute(Qt.WA_StyledBackground, True)
+
         
         container_layout = QVBoxLayout(container)
         container_layout.setContentsMargins(12, 10, 12, 16)

@@ -1,11 +1,16 @@
 /* GameRoomLog Dark Theme - Fusion Base & Modern High Contrast */
 
-/* Janela Principal e Fundo */
-QMainWindow, QWidget#centralWidget {
-    background-color: #0d0e14;
+/* Base universal para todas as janelas, widgets e viewports */
+QWidget {
     color: #f1f5f9;
     font-family: "Segoe UI", "Inter", "Noto Sans", sans-serif;
     font-size: 13px;
+}
+
+/* Janela Principal, StackedWidget e Fundo Geral */
+QMainWindow, QWidget#centralWidget, QStackedWidget {
+    background-color: #0d0e14;
+    color: #f1f5f9;
 }
 
 /* ========================================================================= */
@@ -18,17 +23,22 @@ QWidget#contentArea {
 }
 
 QWidget[class="game-grid-container"] {
-    background-color: #161824; /* Exemplo: fundo para a grade de jogos */
-    border: 1px solid #232738; /* Exemplo: borda ao redor dos cards */
+    background-color: #161824;
+    border: 1px solid #232738;
     border-radius: 10px;
-    padding: 12px;             /* Espaço interno entre os cards e a borda */
+    padding: 12px;
 }
 
-QWidget#gameRoomScrollContainer {
-    background-color: #12141d; /* Exemplo: fundo para toda a área rolavel */
-    border: 1px solid #232738; /* Exemplo: borda externa contornando as duas seções juntas */
+QWidget#gameRoomScrollContainer,
+QWidget#yearbookScrollContainer,
+QWidget#managementScrollContainer,
+QWidget#categoryDetailScrollContainer,
+QWidget#settingsScrollContainer,
+QWidget#gameDialogContainer {
+    background-color: #12141d;
+    border: 1px solid #232738;
     border-radius: 12px;
-    padding: 16px;             /* Espaço interno para afastar os blocos da borda */
+    padding: 16px;
 }
 
 QFrame[class="game-section-card"] {
@@ -37,14 +47,22 @@ QFrame[class="game-section-card"] {
     padding: 14px;
 }
 
-QScrollArea {
+QScrollArea, QAbstractScrollArea {
     background-color: transparent;
     border: none;
 }
 
+QScrollArea > QWidget > QWidget,
 QWidget#scrollAreaWidgetContents {
     background-color: transparent;
 }
+
+QAbstractScrollArea::corner,
+QScrollBar::corner {
+    background-color: #12141d;
+    border: none;
+}
+
 
 /* ========================================================================= */
 /* SIDEBAR                                                                   */
@@ -124,10 +142,14 @@ QPushButton#btnAddGame:pressed {
 /* DIALOGS, MODAIS & FORMULÁRIOS (INPUTS, COMBOS, SPINS, BOTÕES)            */
 /* ========================================================================= */
 
-QDialog {
+QDialog,
+QDialog > QWidget,
+QWidget#gameDialog,
+QWidget#gameDialogContainer {
     background-color: #12141d;
     color: #f1f5f9;
 }
+
 
 /* Todos os campos de entrada */
 QLineEdit, 
@@ -375,7 +397,7 @@ QLabel[class="stat-label"] {
 /* TABELA                                                                    */
 /* ========================================================================= */
 
-QTableWidget {
+QTableWidget, QTableView {
     background-color: #12141d;
     alternate-background-color: #161925;
     gridline-color: #232738;
@@ -386,6 +408,11 @@ QTableWidget {
     selection-color: #ffffff;
 }
 
+QHeaderView {
+    background-color: #181b28;
+    border: none;
+}
+
 QHeaderView::section {
     background-color: #181b28;
     color: #cbd5e1;
@@ -394,7 +421,27 @@ QHeaderView::section {
     padding: 9px;
     border: none;
     border-bottom: 2px solid #282c3f;
+    border-right: 1px solid #232738;
 }
+
+QHeaderView::section:vertical {
+    background-color: #181b28;
+    color: #94a3b8;
+    font-weight: bold;
+    padding: 6px 10px;
+    border: none;
+    border-right: 2px solid #282c3f;
+    border-bottom: 1px solid #232738;
+}
+
+QTableWidget QTableCornerButton::section,
+QTableView QTableCornerButton::section {
+    background-color: #181b28;
+    border: none;
+    border-bottom: 2px solid #282c3f;
+    border-right: 2px solid #282c3f;
+}
+
 
 /* Scrollbars */
 QScrollBar:vertical {

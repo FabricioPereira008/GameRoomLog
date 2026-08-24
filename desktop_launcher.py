@@ -17,7 +17,8 @@ from PySide6.QtGui import QKeySequence, QShortcut
 
 from backend.app.main import app as fastapi_app
 from frontend_desktop.views.main_window import MainWindow
-from frontend_desktop.main_app import setup_live_stylesheet
+from frontend_desktop.main_app import setup_live_stylesheet, set_dark_palette
+
 
 class EmbeddedBackendServer(threading.Thread):
     """Executa o servidor FastAPI/Uvicorn em uma thread em segundo plano."""
@@ -72,8 +73,10 @@ def main():
     # Inicializar aplicação PySide6
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    set_dark_palette(app)
     app.setApplicationName("GameRoomLog")
     app.setOrganizationName("GameRoom")
+
 
     setup_live_stylesheet(app)
 

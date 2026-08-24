@@ -29,17 +29,23 @@ class GameDialog(QDialog):
         self.populate_data()
 
     def init_ui(self):
+        self.setObjectName("gameDialog")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(14)
 
         # Scroll área vertical (desabilitando scroll horizontal)
         scroll = QScrollArea()
+        scroll.setObjectName("gameDialogScrollArea")
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setAttribute(Qt.WA_StyledBackground, True)
         
-
         container = QWidget()
+        container.setObjectName("gameDialogContainer")
+        container.setAttribute(Qt.WA_StyledBackground, True)
         form_layout = QFormLayout(container)
         form_layout.setSpacing(12)
         form_layout.setLabelAlignment(Qt.AlignRight)

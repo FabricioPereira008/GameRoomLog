@@ -95,10 +95,13 @@ class Sidebar(QWidget):
 
         self.button_group.idClicked.connect(self.on_nav_clicked)
 
-        # Versão no rodapé
-        version_label = QLabel("v0.2.3 • Linux Native")
+        # Versão no rodapé (detecção dinâmica de plataforma)
+        import sys
+        platform_name = "Windows" if sys.platform == "win32" else ("macOS" if sys.platform == "darwin" else "Linux Native")
+        version_label = QLabel(f"v0.2.3 • {platform_name}")
         version_label.setObjectName("appVersion")
         main_layout.addWidget(version_label)
+
 
     def on_nav_clicked(self, nav_id: int):
         self.navigation_changed.emit(nav_id)

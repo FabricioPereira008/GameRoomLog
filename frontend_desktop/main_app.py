@@ -3,11 +3,41 @@ import os
 from pathlib import Path
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QKeySequence, QShortcut
-from frontend_desktop.views.main_window import MainWindow
-from frontend_desktop.api_client.client import api_client
+from PySide6.QtGui import QKeySequence, QShortcut, QPalette, QColor
+
+def set_dark_palette(app: QApplication):
+    """Configura paleta escura padrão para garantir consistência no Windows, macOS e Linux."""
+    palette = QPalette()
+    dark_bg = QColor("#0d0e14")
+    card_bg = QColor("#12141d")
+    input_bg = QColor("#1c2030")
+    text_color = QColor("#f1f5f9")
+    disabled_text = QColor("#64748b")
+    accent_purple = QColor("#7f5af0")
+
+    palette.setColor(QPalette.Window, dark_bg)
+    palette.setColor(QPalette.WindowText, text_color)
+    palette.setColor(QPalette.Base, input_bg)
+    palette.setColor(QPalette.AlternateBase, card_bg)
+    palette.setColor(QPalette.ToolTipBase, card_bg)
+    palette.setColor(QPalette.ToolTipText, text_color)
+    palette.setColor(QPalette.Text, text_color)
+    palette.setColor(QPalette.Button, card_bg)
+    palette.setColor(QPalette.ButtonText, text_color)
+    palette.setColor(QPalette.BrightText, QColor("#ffffff"))
+    palette.setColor(QPalette.Link, accent_purple)
+    palette.setColor(QPalette.Highlight, accent_purple)
+    palette.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+    
+    # Cores desabilitadas
+    palette.setColor(QPalette.Disabled, QPalette.WindowText, disabled_text)
+    palette.setColor(QPalette.Disabled, QPalette.Text, disabled_text)
+    palette.setColor(QPalette.Disabled, QPalette.ButtonText, disabled_text)
+    
+    app.setPalette(palette)
 
 def get_qss_path() -> Path:
+
     if hasattr(sys, "_MEIPASS"):
         base = Path(sys._MEIPASS)
         for cand in [
@@ -62,8 +92,10 @@ def setup_live_stylesheet(app: QApplication):
 def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    set_dark_palette(app)
     app.setApplicationName("GameRoomLog")
     app.setOrganizationName("GameRoom")
+
 
     # Ativar Live Reload da folha de estilos
     setup_live_stylesheet(app)

@@ -14,10 +14,13 @@ class CategoryDetailView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("categoryDetailView")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.category_type = ""
         self.category_id = None
         self.category_data = {}
         self.init_ui()
+
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)

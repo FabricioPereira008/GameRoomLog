@@ -131,6 +131,8 @@ class ManagementView(QWidget):
 
     def __init__(self, category_type: str, title: str, parent=None):
         super().__init__(parent)
+        self.setObjectName("managementView")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.category_type = category_type
         self.title = title
         self.items = []
@@ -163,10 +165,14 @@ class ManagementView(QWidget):
 
         # Scroll Area com Grid de Cards
         self.scroll = QScrollArea()
+        self.scroll.setObjectName("managementScrollArea")
+        self.scroll.setAttribute(Qt.WA_StyledBackground, True)
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         self.container = QWidget()
+        self.container.setObjectName("managementScrollContainer")
+        self.container.setAttribute(Qt.WA_StyledBackground, True)
         self.grid_layout = QGridLayout(self.container)
         self.grid_layout.setContentsMargins(10, 10, 10, 10)
         self.grid_layout.setSpacing(16)
@@ -174,6 +180,7 @@ class ManagementView(QWidget):
 
         self.scroll.setWidget(self.container)
         layout.addWidget(self.scroll)
+
 
     def calculate_cols(self) -> int:
         available_width = self.scroll.width()
