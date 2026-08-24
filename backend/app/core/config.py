@@ -34,7 +34,7 @@ _BASE_DATA_DIR = get_base_data_dir()
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "GameRoomLog API"
-    VERSION: str = "0.2.3"
+    VERSION: str = "0.2.4"
     API_V1_STR: str = "/api/v1"
     
     BASE_DIR: Path = _BASE_DATA_DIR

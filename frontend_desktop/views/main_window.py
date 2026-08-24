@@ -145,7 +145,7 @@ class MainWindow(QMainWindow):
 
         # Barra de status
         self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("Pronto • GameRoomLog v0.2.3 Online")
+        self.statusBar().showMessage("Pronto • GameRoomLog v0.2.4 Online")
 
     def switch_view(self, index: int):
         self.previous_nav_index = index

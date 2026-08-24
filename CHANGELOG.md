@@ -5,6 +5,17 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.2.4] - 2026-08-24
+### Adicionado
+- Pipeline de CI/CD automatizado no GitHub Actions para geração de AppImage (Linux) e executáveis .EXE (Windows).
+- Launcher unificado `desktop_launcher.py` para execução standalone de 1 clique.
+- Suporte a persistência de banco de dados e capas nos diretórios padrão do usuário (XDG no Linux e AppData no Windows).
+- Ícone oficial do aplicativo empacotado nos binários.
+
+### Corrigido
+- Renderização do tema escuro no Windows em modais (`GameDialog`), cabeçalhos de tabela e contêineres de rolagem.
+- Rótulo dinâmico de identificação do sistema operacional na barra lateral.
+
 ## [0.2.3] - 2026-08-22
 ### Adicionado
 - Campo de busca instantânea por título nas páginas Game Room, Fila, Disponíveis, Zerados e Platinados.

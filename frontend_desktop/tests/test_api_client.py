@@ -11,7 +11,7 @@ def test_is_backend_online(client):
     responses.add(
         responses.GET,
         "http://test-server:8000/",
-        json={"app": "GameRoomLog", "version": "0.2.3"},
+        json={"app": "GameRoomLog", "version": "0.2.4"},
         status=200
     )
     assert client.is_backend_online() is True
