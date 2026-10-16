@@ -1,3 +1,4 @@
+import logging
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, QComboBox,
     QSpinBox, QDoubleSpinBox, QDateEdit, QTextEdit, QPushButton, QLabel, QFileDialog,
@@ -7,8 +8,11 @@ from PySide6.QtCore import Qt, QDate, QSettings
 from PySide6.QtGui import QPixmap
 from datetime import date
 from frontend_desktop.api_client.client import api_client
+from frontend_desktop.workers import run_async
 
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 class GameDialog(QDialog):
     def __init__(self, game_data: dict = None, parent=None):
@@ -26,7 +30,6 @@ class GameDialog(QDialog):
 
         self.init_ui()
         self.load_options()
-        self.populate_data()
 
     def init_ui(self):
         self.setObjectName("gameDialog")
@@ -50,30 +53,44 @@ class GameDialog(QDialog):
         form_layout.setSpacing(12)
         form_layout.setLabelAlignment(Qt.AlignRight)
 
-        # Helper para estilizar labels do formulário
-        def make_label(text: str) -> QLabel:
-            lbl = QLabel(text)
-            lbl.setProperty("class", "form-label")
-            return lbl
+        self._build_identity_fields(form_layout)
+        self._build_progress_fields(form_layout)
+        self._build_play_fields(form_layout)
+        self._build_cover_fields(form_layout)
+        self._build_notes_field(form_layout)
 
+        scroll.setWidget(container)
+        main_layout.addWidget(scroll)
+
+        self._build_action_buttons(main_layout)
+
+    @staticmethod
+    def _make_label(text: str) -> QLabel:
+        """Label estilizado do formulário."""
+        lbl = QLabel(text)
+        lbl.setProperty("class", "form-label")
+        return lbl
+
+    def _build_identity_fields(self, form_layout):
+        """Título, desenvolvedora, status, plataforma, franquia e gênero."""
         # 1. Título
         self.input_title = QLineEdit()
         self.input_title.setPlaceholderText("Ex: The Legend of Zelda: Tears of the Kingdom")
-        form_layout.addRow(make_label("Título *:"), self.input_title)
+        form_layout.addRow(self._make_label("Título *:"), self.input_title)
 
         # 2. Desenvolvedora (Combobox Editável com Autocomplete)
         self.combo_developer = QComboBox()
         self.combo_developer.setEditable(True)
         self.combo_developer.setInsertPolicy(QComboBox.NoInsert)
         self.combo_developer.lineEdit().setPlaceholderText("Selecione ou digite a desenvolvedora...")
-        form_layout.addRow(make_label("Desenvolvedora:"), self.combo_developer)
+        form_layout.addRow(self._make_label("Desenvolvedora:"), self.combo_developer)
 
         # 3. Status
         self.combo_status = QComboBox()
         statuses = ["Disponível", "Fila", "Próximo", "Jogando", "Pausado", "Zerado", "Platinado", "Lista de Desejos", "Desisti"]
         for s in statuses:
             self.combo_status.addItem(s, s)
-        form_layout.addRow(make_label("Status:"), self.combo_status)
+        form_layout.addRow(self._make_label("Status:"), self.combo_status)
 
         # 4. Plataforma
         plat_layout = QHBoxLayout()
@@ -86,23 +103,24 @@ class GameDialog(QDialog):
         btn_add_plat.clicked.connect(self.add_new_platform)
         plat_layout.addWidget(self.combo_platform)
         plat_layout.addWidget(btn_add_plat)
-        form_layout.addRow(make_label("Plataforma:"), plat_layout)
+        form_layout.addRow(self._make_label("Plataforma:"), plat_layout)
 
         # 5. Franquia / Série (Combobox Editável com Autocomplete)
         self.combo_franchise = QComboBox()
         self.combo_franchise.setEditable(True)
         self.combo_franchise.setInsertPolicy(QComboBox.NoInsert)
         self.combo_franchise.lineEdit().setPlaceholderText("Selecione ou digite a franquia/série...")
-        form_layout.addRow(make_label("Franquia / Série:"), self.combo_franchise)
+        form_layout.addRow(self._make_label("Franquia / Série:"), self.combo_franchise)
 
         # 6. Gênero (Combobox Editável com Autocomplete)
         self.combo_genre = QComboBox()
         self.combo_genre.setEditable(True)
         self.combo_genre.setInsertPolicy(QComboBox.NoInsert)
         self.combo_genre.lineEdit().setPlaceholderText("Selecione ou digite o gênero...")
-        form_layout.addRow(make_label("Gênero:"), self.combo_genre)
+        form_layout.addRow(self._make_label("Gênero:"), self.combo_genre)
 
-
+    def _build_progress_fields(self, form_layout):
+        """Horas, avaliação e datas."""
         # 7. Horas (Inteiros)
         hours_layout = QHBoxLayout()
         hours_layout.setSpacing(8)
@@ -121,7 +139,7 @@ class GameDialog(QDialog):
         hours_layout.addWidget(self.lbl_played)
         hours_layout.addWidget(self.spin_played)
         hours_layout.addStretch()
-        form_layout.addRow(make_label("Tempo:"), hours_layout)
+        form_layout.addRow(self._make_label("Tempo:"), hours_layout)
 
         # 8. Avaliação (0.0 a 10.0 com 1 decimal)
         self.eval_widget = QWidget()
@@ -146,7 +164,7 @@ class GameDialog(QDialog):
         score_layout.addWidget(self.spin_diff)
         score_layout.addStretch()
 
-        self.eval_label = make_label("Avaliação:")
+        self.eval_label = self._make_label("Avaliação:")
         form_layout.addRow(self.eval_label, self.eval_widget)
 
         # 9. Datas (Finalização e Platina automáticas conforme o Status)
@@ -169,14 +187,14 @@ class GameDialog(QDialog):
         dates_layout.addWidget(self.date_plat)
         dates_layout.addStretch()
 
-        self.dates_label = make_label("Datas:")
+        self.dates_label = self._make_label("Datas:")
         form_layout.addRow(self.dates_label, self.dates_widget)
 
         self.combo_status.currentTextChanged.connect(self.on_status_changed)
         self.on_status_changed(self.combo_status.currentText())
 
-
-
+    def _build_play_fields(self, form_layout):
+        """Tipo de jogada, formato e favorito."""
         # 10. Tipo de Jogada e Campo Condicional de Rejogada
         play_layout = QHBoxLayout()
         play_layout.setSpacing(8)
@@ -197,7 +215,7 @@ class GameDialog(QDialog):
         play_layout.addWidget(self.lbl_play_count)
         play_layout.addWidget(self.spin_play_count)
         play_layout.addStretch()
-        form_layout.addRow(make_label("Tipo de Jogada:"), play_layout)
+        form_layout.addRow(self._make_label("Tipo de Jogada:"), play_layout)
 
         # 11. Formato e Favorito
         format_layout = QHBoxLayout()
@@ -208,8 +226,10 @@ class GameDialog(QDialog):
         format_layout.addWidget(self.combo_format)
         format_layout.addWidget(self.chk_favorite)
         format_layout.addStretch()
-        form_layout.addRow(make_label("Formato:"), format_layout)
+        form_layout.addRow(self._make_label("Formato:"), format_layout)
 
+    def _build_cover_fields(self, form_layout):
+        """Capa: arquivo local, link, busca automática e preview."""
         # 12. Imagem de Capa (Arquivo Local, Link/URL ou Busca Automática)
         cover_layout = QHBoxLayout()
         cover_layout.setSpacing(6)
@@ -230,7 +250,7 @@ class GameDialog(QDialog):
         cover_layout.addWidget(self.btn_auto_cover)
         cover_layout.addWidget(self.btn_url_cover)
         cover_layout.addWidget(self.btn_select_cover)
-        form_layout.addRow(make_label("Capa do Jogo:"), cover_layout)
+        form_layout.addRow(self._make_label("Capa do Jogo:"), cover_layout)
 
         # Status da Capa e Preview Visual
         cover_preview_layout = QHBoxLayout()
@@ -260,16 +280,14 @@ class GameDialog(QDialog):
         
         form_layout.addRow("", cover_preview_layout)
 
+    def _build_notes_field(self, form_layout):
         # 13. Anotações
         self.input_notes = QTextEdit()
         self.input_notes.setPlaceholderText("Escreva aqui suas impressões, review ou dicas...")
         self.input_notes.setFixedHeight(85)
-        form_layout.addRow(make_label("Anotações:"), self.input_notes)
+        form_layout.addRow(self._make_label("Anotações:"), self.input_notes)
 
-        scroll.setWidget(container)
-        main_layout.addWidget(scroll)
-
-        # Botões de Ação
+    def _build_action_buttons(self, main_layout):
         btn_box = QHBoxLayout()
         if self.is_edit:
             self.btn_delete = QPushButton("🗑️ Excluir Jogo")
@@ -317,45 +335,60 @@ class GameDialog(QDialog):
         self.lbl_play_count.setVisible(is_replay)
         self.spin_play_count.setVisible(is_replay)
 
+    def _wait_workers(self):
+        for w in list(self.__dict__.get("_workers", ())):
+            w.wait(5000)
+
+    def done(self, result):
+        self._wait_workers()
+        super().done(result)
+
+    @staticmethod
+    def fetch_options() -> dict:
+        """Busca as opções dos combos (roda fora da thread da UI)."""
+        return {
+            "developers": api_client.get_developers(),
+            "platforms": api_client.get_platforms(),
+            "franchises": api_client.get_franchises(),
+            "genres": api_client.get_genres(),
+        }
+
+    def _set_editable_combo(self, combo, names: list):
+        combo.clear()
+        combo.addItems(names)
+        completer = QCompleter(names, self)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchContains)
+        combo.setCompleter(completer)
+
+    def apply_options(self, options: dict):
+        self._set_editable_combo(self.combo_developer, [d["name"] for d in options["developers"]])
+
+        self.combo_platform.clear()
+        self.combo_platform.addItem("Nenhuma", None)
+        for p in options["platforms"]:
+            self.combo_platform.addItem(p["name"], p["id"])
+
+        self.franchises_list = options["franchises"]
+        self._set_editable_combo(self.combo_franchise, [f["name"] for f in self.franchises_list])
+        self.genres_list = options["genres"]
+        self._set_editable_combo(self.combo_genre, [g["name"] for g in self.genres_list])
+
     def load_options(self):
-        try:
-            # Desenvolvedoras
-            self.combo_developer.clear()
-            devs = api_client.get_developers()
-            dev_names = [d["name"] for d in devs]
-            self.combo_developer.addItems(dev_names)
-            completer = QCompleter(dev_names, self)
-            completer.setCaseSensitivity(Qt.CaseInsensitive)
-            completer.setFilterMode(Qt.MatchContains)
-            self.combo_developer.setCompleter(completer)
+        """Carrega as opções em background e preenche o formulário ao terminar."""
+        self.btn_save.setEnabled(False)
+        run_async(self, self.fetch_options, self._on_options_loaded, self._on_options_failed)
 
-            # Plataformas
-            self.combo_platform.clear()
-            self.combo_platform.addItem("Nenhuma", None)
-            for p in api_client.get_platforms():
-                self.combo_platform.addItem(p["name"], p["id"])
+    def _on_options_loaded(self, options: dict):
+        self.apply_options(options)
+        self.btn_save.setEnabled(True)
+        self.populate_data()
 
-            # Franquias
-            self.combo_franchise.clear()
-            self.franchises_list = api_client.get_franchises()
-            fran_names = [f["name"] for f in self.franchises_list]
-            self.combo_franchise.addItems(fran_names)
-            fran_completer = QCompleter(fran_names, self)
-            fran_completer.setCaseSensitivity(Qt.CaseInsensitive)
-            fran_completer.setFilterMode(Qt.MatchContains)
-            self.combo_franchise.setCompleter(fran_completer)
-
-            # Gêneros
-            self.combo_genre.clear()
-            self.genres_list = api_client.get_genres()
-            gen_names = [g["name"] for g in self.genres_list]
-            self.combo_genre.addItems(gen_names)
-            gen_completer = QCompleter(gen_names, self)
-            gen_completer.setCaseSensitivity(Qt.CaseInsensitive)
-            gen_completer.setFilterMode(Qt.MatchContains)
-            self.combo_genre.setCompleter(gen_completer)
-        except Exception as e:
-            print("Erro ao carregar opções:", e)
+    def _on_options_failed(self, message: str):
+        logger.error("Erro ao carregar opções: %s", message)
+        self.btn_save.setEnabled(True)
+        self.populate_data()
+        self.lbl_cover_status.setText("Não foi possível carregar as listas (API offline?).")
 
     def populate_data(self):
         if not self.is_edit:
@@ -440,8 +473,14 @@ class GameDialog(QDialog):
         self.lbl_cover_status.setText("Pesquisando nos repositórios...")
 
         sgdb_key = QSettings("GameRoom", "GameRoomLog").value("steamgriddb_key", "")
-        filename = api_client.auto_search_cover(title, api_key=sgdb_key if sgdb_key else None)
+        run_async(
+            self, api_client.auto_search_cover,
+            lambda filename: self._on_auto_cover_done(title, filename),
+            lambda _msg: self._on_auto_cover_done(title, None),
+            title, api_key=sgdb_key if sgdb_key else None,
+        )
 
+    def _on_auto_cover_done(self, title: str, filename):
         self.btn_auto_cover.setEnabled(True)
         self.btn_auto_cover.setText("🤖 Buscar Automático")
 
@@ -490,12 +529,11 @@ class GameDialog(QDialog):
         if not self.cover_filename:
             return
             
-        import os
         from PySide6.QtGui import QPainter, QPainterPath
         from frontend_desktop.views.components.game_card import resolve_cover_path
         
         storage_path = resolve_cover_path(self.cover_filename)
-        if os.path.exists(storage_path):
+        if storage_path:
             pixmap = QPixmap(storage_path)
             if not pixmap.isNull():
                 scaled = pixmap.scaled(120, 180, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
@@ -522,10 +560,9 @@ class GameDialog(QDialog):
         if not self.cover_filename:
             return
             
-        import os
         from frontend_desktop.views.components.game_card import resolve_cover_path
         storage_path = resolve_cover_path(self.cover_filename)
-        if not os.path.exists(storage_path):
+        if not storage_path:
             return
 
 
@@ -543,7 +580,7 @@ class GameDialog(QDialog):
                 # Cleanup: deletar temp file local se quiser
                 try:
                     os.remove(dialog.cropped_filepath)
-                except:
+                except OSError:
                     pass
 
 
@@ -568,69 +605,34 @@ class GameDialog(QDialog):
             self.combo_genre.addItem(created["name"], created["id"])
             self.combo_genre.setCurrentIndex(self.combo_genre.count() - 1)
 
-    def save_game(self):
-        title = self.input_title.text().strip()
-        if not title:
-            QMessageBox.warning(self, "Aviso", "O título do jogo é obrigatório.")
-            return
+    @staticmethod
+    def _find_id_by_name(items: list, name: str):
+        for item in items:
+            if item.get("name", "").strip().lower() == name.lower():
+                return item["id"]
+        return None
 
+    def _build_payload(self, title: str) -> dict:
+        """Lê o formulário (thread da UI) e monta o payload base, sem franquia/gênero."""
         play_type = self.combo_play_type.currentText()
-        play_count = self.spin_play_count.value() if play_type == "Rejogada" else 1
-
-        # Franquia / Série
-        fran_text = self.combo_franchise.currentText().strip()
-        franchise_id = None
-        if fran_text:
-            for f in getattr(self, "franchises_list", []):
-                if f.get("name", "").strip().lower() == fran_text.lower():
-                    franchise_id = f["id"]
-                    break
-            if not franchise_id:
-                try:
-                    created_f = api_client.create_franchise(fran_text)
-                    franchise_id = created_f.get("id")
-                except Exception as e:
-                    print("Erro ao auto-criar franquia:", e)
-
-        # Gênero
-        gen_text = self.combo_genre.currentText().strip()
-        genre_ids = []
-        if gen_text:
-            genre_id = None
-            for g in getattr(self, "genres_list", []):
-                if g.get("name", "").strip().lower() == gen_text.lower():
-                    genre_id = g["id"]
-                    break
-            if not genre_id:
-                try:
-                    created_g = api_client.create_genre(gen_text)
-                    genre_id = created_g.get("id")
-                except Exception as e:
-                    print("Erro ao auto-criar gênero:", e)
-            if genre_id:
-                genre_ids.append(genre_id)
-
         payload = {
             "title": title,
             "developer": self.combo_developer.currentText().strip() or None,
             "status": self.combo_status.currentText(),
             "platform_id": self.combo_platform.currentData(),
-            "franchise_id": franchise_id,
-            "genre_ids": genre_ids,
             "hltb_hours": float(self.spin_hltb.value()),
             "played_hours": float(self.spin_played.value()),
             "score": round(self.spin_score.value(), 1) if self.spin_score.value() > 0 else None,
             "difficulty": round(self.spin_diff.value(), 1) if self.spin_diff.value() > 0 else None,
             "play_type": play_type,
-            "play_count": play_count,
+            "play_count": self.spin_play_count.value() if play_type == "Rejogada" else 1,
             "format": self.combo_format.currentText(),
             "is_favorite": self.chk_favorite.isChecked(),
             "notes": self.input_notes.toPlainText().strip() or None,
-            "cover_image": self.cover_filename
+            "cover_image": self.cover_filename,
         }
 
-
-        st = self.combo_status.currentText()
+        st = payload["status"]
         if st == "Zerado":
             payload["finish_date"] = self.date_finish.date().toString("yyyy-MM-dd")
             payload["completion_year"] = self.date_finish.date().year()
@@ -638,22 +640,76 @@ class GameDialog(QDialog):
         elif st == "Platinado":
             payload["finish_date"] = self.date_finish.date().toString("yyyy-MM-dd")
             payload["platinum_date"] = self.date_plat.date().toString("yyyy-MM-dd")
-            payload["completion_year"] = (self.date_plat.date() or self.date_finish.date()).year()
+            payload["completion_year"] = self.date_plat.date().year()
         else:
             payload["finish_date"] = None
             payload["platinum_date"] = None
             payload["completion_year"] = None
+        return payload
 
+    @staticmethod
+    def persist_game(game_id, payload: dict, fran_text: str, gen_text: str,
+                     franchises: list, genres: list) -> dict:
+        """Resolve/cria franquia e gênero e grava o jogo (roda fora da thread da UI)."""
+        payload = dict(payload)
 
-        try:
-            if self.is_edit:
-                self.saved_game = api_client.update_game(self.game_data["id"], payload)
-            else:
-                self.saved_game = api_client.create_game(payload)
-            self.is_deleted = False
-            self.accept()
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro ao salvar jogo: {e}")
+        franchise_id = None
+        if fran_text:
+            franchise_id = GameDialog._find_id_by_name(franchises, fran_text)
+            if not franchise_id:
+                try:
+                    franchise_id = api_client.create_franchise(fran_text).get("id")
+                except Exception as e:
+                    logger.warning("Erro ao auto-criar franquia: %s", e)
+        payload["franchise_id"] = franchise_id
+
+        genre_id = None
+        if gen_text:
+            genre_id = GameDialog._find_id_by_name(genres, gen_text)
+            if not genre_id:
+                try:
+                    genre_id = api_client.create_genre(gen_text).get("id")
+                except Exception as e:
+                    logger.warning("Erro ao auto-criar gênero: %s", e)
+        payload["genre_ids"] = [genre_id] if genre_id else []
+
+        if game_id is not None:
+            return api_client.update_game(game_id, payload)
+        return api_client.create_game(payload)
+
+    def _set_busy(self, busy: bool, save_text: str = "Salvar Jogo"):
+        self.btn_save.setEnabled(not busy)
+        self.btn_save.setText(save_text)
+        self.btn_cancel.setEnabled(not busy)
+        if self.is_edit:
+            self.btn_delete.setEnabled(not busy)
+
+    def save_game(self):
+        title = self.input_title.text().strip()
+        if not title:
+            QMessageBox.warning(self, "Aviso", "O título do jogo é obrigatório.")
+            return
+
+        payload = self._build_payload(title)
+        self._set_busy(True, "Salvando...")
+        run_async(
+            self, self.persist_game, self._on_game_saved, self._on_save_failed,
+            self.game_data["id"] if self.is_edit else None,
+            payload,
+            self.combo_franchise.currentText().strip(),
+            self.combo_genre.currentText().strip(),
+            list(getattr(self, "franchises_list", [])),
+            list(getattr(self, "genres_list", [])),
+        )
+
+    def _on_game_saved(self, saved_game: dict):
+        self.saved_game = saved_game
+        self.is_deleted = False
+        self.accept()
+
+    def _on_save_failed(self, message: str):
+        self._set_busy(False)
+        QMessageBox.critical(self, "Erro", f"Erro ao salvar jogo: {message}")
 
     def delete_game(self):
         confirm = QMessageBox.question(
@@ -662,11 +718,17 @@ class GameDialog(QDialog):
             QMessageBox.Yes | QMessageBox.No
         )
         if confirm == QMessageBox.Yes:
-            try:
-                api_client.delete_game(self.game_data["id"])
-                self.saved_game = self.game_data
-                self.is_deleted = True
-                self.accept()
-            except Exception as e:
-                QMessageBox.critical(self, "Erro", f"Erro ao excluir jogo: {e}")
+            self._set_busy(True)
+            run_async(self, api_client.delete_game, self._on_game_deleted, self._on_delete_failed, self.game_data["id"])
 
+    def _on_game_deleted(self, deleted: bool):
+        if not deleted:
+            self._on_delete_failed("o servidor não confirmou a exclusão")
+            return
+        self.saved_game = self.game_data
+        self.is_deleted = True
+        self.accept()
+
+    def _on_delete_failed(self, message: str):
+        self._set_busy(False)
+        QMessageBox.critical(self, "Erro", f"Erro ao excluir jogo: {message}")

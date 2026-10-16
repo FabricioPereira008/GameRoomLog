@@ -1,3 +1,4 @@
+import logging
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QScrollArea, QGridLayout, QFrame, QMessageBox, QInputDialog, QColorDialog, QSizePolicy
@@ -5,6 +6,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
 from frontend_desktop.api_client.client import api_client
+from frontend_desktop.workers import run_async
+
+logger = logging.getLogger(__name__)
 
 class ManageItemCard(QFrame):
     clicked = Signal(str, int)  # category_type, item_id
@@ -191,19 +195,29 @@ class ManagementView(QWidget):
         cols = max(2, (available_width - 32) // (250 + 16))
         return cols
 
+    FETCHERS = {
+        "genre": "get_genres",
+        "platform": "get_platforms",
+        "franchise": "get_franchises",
+        "developer": "get_developers",
+    }
+
     def load_data(self):
-        try:
-            if self.category_type == "genre":
-                self.items = api_client.get_genres()
-            elif self.category_type == "platform":
-                self.items = api_client.get_platforms()
-            elif self.category_type == "franchise":
-                self.items = api_client.get_franchises()
-            elif self.category_type == "developer":
-                self.items = api_client.get_developers()
-            self.render_items()
-        except Exception as e:
-            print(f"Erro ao carregar {self.category_type}:", e)
+        """Busca os itens em background e renderiza ao terminar (descarta respostas antigas)."""
+        fetcher = getattr(api_client, self.FETCHERS[self.category_type])
+        self._load_seq = getattr(self, "_load_seq", 0) + 1
+        seq = self._load_seq
+        run_async(
+            self, fetcher,
+            lambda items: self._on_items_loaded(seq, items),
+            lambda msg: logger.error("Erro ao carregar %s: %s", self.category_type, msg),
+        )
+
+    def _on_items_loaded(self, seq: int, items: list):
+        if seq != self._load_seq:
+            return
+        self.items = items
+        self.render_items()
 
     def render_items(self):
         while self.grid_layout.count():

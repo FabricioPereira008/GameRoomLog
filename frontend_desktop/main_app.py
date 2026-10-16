@@ -1,3 +1,5 @@
+import logging
+from app_logging import setup_logging
 import sys
 import os
 from pathlib import Path
@@ -6,6 +8,8 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut, QPalette, QColor
 from frontend_desktop.views.main_window import MainWindow
 from frontend_desktop.api_client.client import api_client
+
+logger = logging.getLogger(__name__)
 
 
 def set_dark_palette(app: QApplication):
@@ -77,12 +81,18 @@ def setup_live_stylesheet(app: QApplication):
                     widget.style().polish(widget)
                     widget.update()
                 
-                print("[QSS Live Reload] Estilos atualizados instantaneamente sem reiniciar!")
+                logger.info("[QSS Live Reload] Estilos atualizados")
         except Exception as e:
-            print(f"[QSS Live Reload] Erro ao ler estilos: {e}")
+            logger.warning("[QSS Live Reload] Erro ao ler estilos: %s", e)
 
     # Primeira carga
     reload_qss()
+
+    app._force_reload_qss = reload_qss
+
+    # Em builds empacotados o QSS é fixo: sem polling de arquivo
+    if getattr(sys, "frozen", False):
+        return
 
     # Timer com verificação de mtime a cada 200ms
     timer = QTimer()
@@ -90,9 +100,9 @@ def setup_live_stylesheet(app: QApplication):
     timer.timeout.connect(reload_qss)
     timer.start()
     app._qss_timer = timer
-    app._force_reload_qss = reload_qss
 
 def main():
+    setup_logging()
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     set_dark_palette(app)
@@ -105,7 +115,7 @@ def main():
 
     # Verificação não-bloqueante do Backend (sem pop-up irritante)
     if not api_client.is_backend_online():
-        print("⚠️  Backend offline em http://127.0.0.1:8000. Abrindo interface em modo offline...")
+        logger.warning("Backend offline em %s. Abrindo interface em modo offline...", api_client.server_url)
 
     window = MainWindow()
     

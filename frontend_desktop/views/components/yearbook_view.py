@@ -1,9 +1,14 @@
+import logging
+from datetime import date
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QFrame, QScrollArea, QSizePolicy
 )
 from PySide6.QtCore import Signal, Qt
 from frontend_desktop.views.components.game_grid import GameGrid
 from frontend_desktop.api_client.client import api_client
+from frontend_desktop.workers import run_async
+
+logger = logging.getLogger(__name__)
 
 class StatCard(QFrame):
     def __init__(self, title: str, value: str, icon: str = "🎮", parent=None):
@@ -149,22 +154,20 @@ class YearbookView(QWidget):
         main_layout.addWidget(scroll)
 
     def load_data(self):
-        try:
-            overall = api_client.get_overall_stats()
-            available_years = overall.get("available_years", [])
-            if not available_years:
-                available_years = [2026, 2025]
+        run_async(
+            self, api_client.get_overall_stats, self._on_overall_loaded,
+            lambda msg: logger.error("Erro ao carregar anuário: %s", msg),
+        )
 
-            self.year_combo.blockSignals(True)
-            self.year_combo.clear()
-            for y in available_years:
-                self.year_combo.addItem(str(y), y)
-            self.year_combo.blockSignals(False)
+    def _on_overall_loaded(self, overall: dict):
+        available_years = overall.get("available_years", []) or [date.today().year]
 
-            if available_years:
-                self.load_year(available_years[0])
-        except Exception as e:
-            print("Erro ao carregar anuário:", e)
+        self.year_combo.blockSignals(True)
+        self.year_combo.clear()
+        for y in available_years:
+            self.year_combo.addItem(str(y), y)
+        self.year_combo.blockSignals(False)
+        self.load_year(available_years[0])
 
     def on_year_changed(self):
         year = self.year_combo.currentData()
@@ -172,20 +175,28 @@ class YearbookView(QWidget):
             self.load_year(year)
 
     def load_year(self, year: int):
-        try:
-            summary = api_client.get_yearbook(year)
-            fin_count = summary.get("total_games_finished", 0)
-            plat_count = summary.get("total_platinums", 0)
-            hours_count = summary.get("total_hours_played", 0)
-            avg = summary.get("average_score")
+        self._year_seq = getattr(self, "_year_seq", 0) + 1
+        seq = self._year_seq
+        run_async(
+            self, api_client.get_yearbook,
+            lambda summary: self._on_year_loaded(seq, year, summary),
+            lambda msg: logger.error("Erro ao carregar dados do ano %s: %s", year, msg),
+            year,
+        )
 
-            self.card_finished.set_value(str(fin_count))
-            self.card_platinums.set_value(str(plat_count))
-            self.card_hours.set_value(f"{int(hours_count)}h")
-            self.card_avg.set_value(f"{avg:.1f}/10" if avg is not None else "N/A")
+    def _on_year_loaded(self, seq: int, year: int, summary: dict):
+        if seq != self._year_seq:
+            return
+        fin_count = summary.get("total_games_finished", 0)
+        plat_count = summary.get("total_platinums", 0)
+        hours_count = summary.get("total_hours_played", 0)
+        avg = summary.get("average_score")
 
-            games = summary.get("games", [])
-            self.sub_label.setText(f"🏆 Jogos Finalizados em {year} ({len(games)} {'jogo' if len(games) == 1 else 'jogos'})")
-            self.game_grid.set_games(games)
-        except Exception as e:
-            print(f"Erro ao carregar dados do ano {year}:", e)
+        self.card_finished.set_value(str(fin_count))
+        self.card_platinums.set_value(str(plat_count))
+        self.card_hours.set_value(f"{int(hours_count)}h")
+        self.card_avg.set_value(f"{avg:.1f}/10" if avg is not None else "N/A")
+
+        games = summary.get("games", [])
+        self.sub_label.setText(f"🏆 Jogos Finalizados em {year} ({len(games)} {'jogo' if len(games) == 1 else 'jogos'})")
+        self.game_grid.set_games(games)

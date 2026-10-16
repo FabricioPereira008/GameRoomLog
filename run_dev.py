@@ -6,7 +6,8 @@ from pathlib import Path
 from watchfiles import watch
 
 BASE_DIR = Path(__file__).resolve().parent
-PYTHON_EXE = BASE_DIR / "venv" / "bin" / "python"
+_VENV_PYTHON = BASE_DIR / "venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+PYTHON_EXE = _VENV_PYTHON if _VENV_PYTHON.exists() else Path(sys.executable)
 FRONTEND_MAIN = BASE_DIR / "frontend_desktop" / "main_app.py"
 BACKEND_MAIN = BASE_DIR / "backend" / "run_server.py"
 WATCH_DIR = BASE_DIR / "frontend_desktop"

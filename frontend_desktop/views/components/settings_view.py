@@ -1,4 +1,8 @@
+import logging
+import platform
+from app_version import __version__
 import time
+from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QRadioButton, QButtonGroup,
     QLineEdit, QPushButton, QFrame, QMessageBox, QGroupBox, QFileDialog, QCheckBox,
@@ -6,6 +10,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, Qt, QSettings, QThread
 from frontend_desktop.api_client.client import api_client
+
+logger = logging.getLogger(__name__)
 
 class CoverFetcherThread(QThread):
     progress_updated = Signal(int, int, str, bool)  # current, total, game_title, success
@@ -40,7 +46,7 @@ class CoverFetcherThread(QThread):
                     if success:
                         success_count += 1
                 except Exception as e:
-                    print(f"Erro ao buscar capa para {title}:", e)
+                    logger.warning("Erro ao buscar capa para %s: %s", title, e)
 
                 self.progress_updated.emit(idx + 1, total, title, success)
                 # Pausa leve de 0.3s para evitar rate-limit e permitir cancelamento fluido
@@ -48,7 +54,7 @@ class CoverFetcherThread(QThread):
 
             self.batch_finished.emit(total, success_count)
         except Exception as e:
-            print("Erro no worker de capas:", e)
+            logger.exception("Erro no worker de capas")
             self.batch_finished.emit(0, 0)
 
 
@@ -195,8 +201,8 @@ class SettingsView(QWidget):
         about_layout = QVBoxLayout(about_group)
 
         info_label = QLabel(
-            "<b>GameRoomLog</b> v0.2.4<br>"
-            "Ambiente: Linux (CachyOS KDE Plasma)<br>"
+            f"<b>GameRoomLog</b> v{__version__}<br>"
+            f"Ambiente: {platform.system()} {platform.release()}<br>"
             "Arquitetura: FastAPI Backend (REST) + PySide6 Desktop (Qt6)<br>"
             "Desenvolvido sob medida para gerenciamento avançado de Backlog, Importação do Notion e Anuário Gamer."
         )
@@ -210,7 +216,7 @@ class SettingsView(QWidget):
         folder = QFileDialog.getExistingDirectory(
             self,
             "Selecione a Pasta Exportada do Notion (Game Room)",
-            "/home/fabricio/Downloads"
+            str(Path.home() / "Downloads")
         )
         if not folder:
             return
@@ -242,7 +248,6 @@ class SettingsView(QWidget):
 
             QMessageBox.information(self, "Sucesso", msg)
             self.data_imported.emit()
-            self.settings_changed.emit()
 
             if auto_covers:
                 self.start_batch_cover_fetch()
@@ -281,7 +286,6 @@ class SettingsView(QWidget):
             self.cover_progress_bar.setValue(pct)
             status_icon = "✅" if success else "⚠️"
             self.lbl_cover_status.setText(f"{status_icon} [{current}/{total}] {title}")
-        self.settings_changed.emit()
 
     def on_cover_batch_finished(self, total: int, success_count: int):
         self.btn_batch_covers.setEnabled(True)
@@ -294,8 +298,8 @@ class SettingsView(QWidget):
         else:
             self.lbl_cover_status.setText(f"Busca finalizada: {success_count} capas obtidas de {total} jogos verificados.")
         
+        # Um único refresh ao final do lote (e não um por capa baixada)
         self.data_imported.emit()
-        self.settings_changed.emit()
 
     def on_size_changed(self, button_id: int):
         size_map = {0: "small", 1: "medium", 2: "large"}

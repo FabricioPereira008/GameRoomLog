@@ -1,8 +1,10 @@
+import logging
+from app_version import __version__
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget,
     QPushButton, QLabel, QStatusBar
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 from frontend_desktop.views.components.sidebar import Sidebar
 from frontend_desktop.views.components.game_room_view import GameRoomView
 from frontend_desktop.views.components.game_grid import GameGrid, ScrollableGameGrid
@@ -13,17 +15,50 @@ from frontend_desktop.views.components.category_detail_view import CategoryDetai
 from frontend_desktop.views.components.settings_view import SettingsView
 from frontend_desktop.views.dialogs.game_dialog import GameDialog
 from frontend_desktop.api_client.client import api_client
+from frontend_desktop.views import game_status as gs
+
+logger = logging.getLogger(__name__)
+
+class DataLoaderThread(QThread):
+    """Busca jogos e opções de filtro fora da thread da UI."""
+    loaded = Signal(list, object)  # games, options (tupla ou None)
+    failed = Signal(str)
+
+    def run(self):
+        try:
+            self.loaded.emit(*fetch_all_data())
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
+def fetch_all_data():
+    """Retorna (games, options); options = (genres, devs, platforms, franchises) ou None se falhar."""
+    games = api_client.get_games()
+    try:
+        options = (
+            api_client.get_genres(), api_client.get_developers(),
+            api_client.get_platforms(), api_client.get_franchises(),
+        )
+    except Exception:
+        logger.warning("Erro ao carregar opções de filtros", exc_info=True)
+        options = None
+    return games, options
+
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, auto_load: bool = True):
         super().__init__()
         self.setWindowTitle("GameRoomLog — Backlog & Anuário Gamer")
         self.resize(1260, 790)
         self.setMinimumSize(980, 640)
         self.previous_nav_index = 0
         self.all_games = []
+        self._loader = None
+        self._loading = False
+        self._refresh_pending = False
         self.init_ui()
-        self.refresh_all_data()
+        if auto_load:
+            self.refresh_all_data()
 
     def init_ui(self):
         central_widget = QWidget()
@@ -145,7 +180,7 @@ class MainWindow(QMainWindow):
 
         # Barra de status
         self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("Pronto • GameRoomLog v0.2.4 Online")
+        self.statusBar().showMessage(f"Pronto • GameRoomLog v{__version__} Online")
 
     def switch_view(self, index: int):
         self.previous_nav_index = index
@@ -196,42 +231,66 @@ class MainWindow(QMainWindow):
         self.switch_view(self.previous_nav_index)
 
     def refresh_all_data(self):
-        """Carregamento completo dos jogos a partir do backend."""
+        """Recarrega jogos e opções em background; a UI continua responsiva."""
+        if self._loading:
+            self._refresh_pending = True
+            return
+        self._loading = True
+        self.statusBar().showMessage("Carregando jogos...")
+        self._loader = DataLoaderThread(self)
+        self._loader.loaded.connect(self._apply_loaded_data)
+        self._loader.failed.connect(self._on_load_failed)
+        self._loader.finished.connect(self._on_loader_finished)
+        self._loader.start()
+
+    def refresh_all_data_sync(self):
+        """Versão bloqueante (testes e usos pontuais)."""
         try:
-            games = api_client.get_games()
+            self._apply_loaded_data(*fetch_all_data())
+        except Exception as e:
+            self._on_load_failed(str(e))
+
+    def _on_loader_finished(self):
+        self._loading = False
+        if self._refresh_pending:
+            self._refresh_pending = False
+            self.refresh_all_data()
+
+    def _on_load_failed(self, message: str):
+        self.statusBar().showMessage(f"Erro de conexão com a API: {message}")
+
+    def closeEvent(self, event):
+        if self._loader is not None and self._loader.isRunning():
+            self._loader.wait(5000)
+        super().closeEvent(event)
+
+    def _apply_loaded_data(self, games: list, options):
+        """Distribui os dados carregados pelas views (sempre na thread da UI)."""
+        try:
             self.all_games = games
 
-            # Carrega opções para os painéis de filtro
-            try:
-                genres = api_client.get_genres()
-                devs = api_client.get_developers()
-                platforms = api_client.get_platforms()
-                franchises = api_client.get_franchises()
-
+            if options:
                 for view in [
                     self.view_game_room, self.view_queue_grid, self.view_disponiveis_grid,
                     self.view_zerados_grid, self.view_platinados_grid, self.view_wishlist_grid
                 ]:
                     if hasattr(view, "set_filter_options"):
-                        view.set_filter_options(genres, devs, platforms, franchises)
-            except Exception as opt_err:
-                print("Erro ao carregar opções de filtros:", opt_err)
+                        view.set_filter_options(*options)
 
-            # Separar por categorias com fidelidade aos status
-            now_games = [g for g in games if g.get("status") == "Jogando"]
-            next_games = [g for g in games if g.get("status") == "Próximo"]
-            queue_games = [g for g in games if g.get("status") in ["Fila", "Pausado"]]
-            disponiveis_games = [g for g in games if g.get("status") == "Disponível"]
-            
+            now_games = [g for g in games if g.get("status") == gs.JOGANDO]
+            next_games = [g for g in games if g.get("status") == gs.PROXIMO]
+            queue_games = gs.filter_games("queue", games)
+            disponiveis_games = gs.filter_games("disponiveis", games)
+
             # Zerados (Zerados + Platinados) ordenados por data de finalização (mais recente -> mais antigo)
-            zerados_games = [g for g in games if g.get("status") in ["Zerado", "Platinado"]]
+            zerados_games = gs.filter_games("zerados", games)
             zerados_games.sort(key=lambda g: g.get("finish_date") or "", reverse=True)
-            
+
             # Platinados ordenados por data de platina (mais recente -> mais antigo)
-            platinados_games = [g for g in games if g.get("status") == "Platinado"]
+            platinados_games = gs.filter_games("platinados", games)
             platinados_games.sort(key=lambda g: g.get("platinum_date") or g.get("finish_date") or "", reverse=True)
-            
-            wishlist_games = [g for g in games if g.get("status") == "Lista de Desejos"]
+
+            wishlist_games = gs.filter_games("wishlist", games)
 
             # Atualizar todas as views
             self.view_game_room.set_games(now_games, next_games, queue_games, zerados_games, platinados_games)
@@ -279,36 +338,35 @@ class MainWindow(QMainWindow):
         """Remove o jogo in-place de todas as views sem recarregar telas."""
         self.all_games = [g for g in self.all_games if g.get("id") != game_id]
         self.view_game_room.remove_game(game_id)
-        self.view_queue_grid.remove_game(game_id)
-        self.view_disponiveis_grid.remove_game(game_id)
-        self.view_zerados_grid.remove_game(game_id)
-        self.view_platinados_grid.remove_game(game_id)
-        self.view_wishlist_grid.remove_game(game_id)
+        for _, grid in self._list_grids():
+            grid.remove_game(game_id)
         self.view_table.remove_game(game_id)
         self.statusBar().showMessage(f"Jogo removido com sucesso. Total: {len(self.all_games)}")
+
+    def _list_grids(self):
+        """Pares (chave da lista, grid) alimentados por status; ver game_status.LIST_STATUSES."""
+        return [
+            ("queue", self.view_queue_grid),
+            ("disponiveis", self.view_disponiveis_grid),
+            ("zerados", self.view_zerados_grid),
+            ("platinados", self.view_platinados_grid),
+            ("wishlist", self.view_wishlist_grid),
+        ]
 
     def apply_game_mutation(self, saved_game: dict, is_new: bool = False, old_status: str = None):
         """Aplica inserções e edições in-place sem resetar a posição de rolagem."""
         game_id = saved_game.get("id")
         new_status = saved_game.get("status")
+        title = saved_game.get("title")
 
         if is_new:
             self.all_games.insert(0, saved_game)
             self.view_table.insert_game(saved_game)
             self.view_game_room.insert_game_by_status(saved_game)
-
-            if new_status in ["Fila", "Pausado"]:
-                self.view_queue_grid.insert_game(0, saved_game)
-            elif new_status == "Disponível":
-                self.view_disponiveis_grid.insert_game(0, saved_game)
-            elif new_status in ["Zerado", "Platinado"]:
-                self.view_zerados_grid.insert_game(0, saved_game)
-                if new_status == "Platinado":
-                    self.view_platinados_grid.insert_game(0, saved_game)
-            elif new_status == "Lista de Desejos":
-                self.view_wishlist_grid.insert_game(0, saved_game)
-
-            self.statusBar().showMessage(f"Jogo '{saved_game.get('title')}' adicionado com sucesso. Total: {len(self.all_games)}")
+            for key, grid in self._list_grids():
+                if gs.in_list(key, new_status):
+                    grid.insert_game(0, saved_game)
+            self.statusBar().showMessage(f"Jogo '{title}' adicionado com sucesso. Total: {len(self.all_games)}")
             return
 
         # Edição existente
@@ -317,50 +375,23 @@ class MainWindow(QMainWindow):
                 self.all_games[i] = saved_game
                 break
 
-        # Se o status não foi alterado, apenas atualiza visualmente os cards existentes
+        # Cada lista: entra, sai ou apenas atualiza o card conforme a mudança de status
+        for key, grid in self._list_grids():
+            was_in, is_in = gs.in_list(key, old_status), gs.in_list(key, new_status)
+            if was_in and is_in:
+                grid.update_game(saved_game)
+            elif was_in:
+                grid.remove_game(game_id)
+            elif is_in:
+                grid.insert_game(0, saved_game)
+
         if old_status == new_status:
             self.view_game_room.update_game(saved_game)
-            self.view_queue_grid.update_game(saved_game)
-            self.view_disponiveis_grid.update_game(saved_game)
-            self.view_zerados_grid.update_game(saved_game)
-            self.view_platinados_grid.update_game(saved_game)
-            self.view_wishlist_grid.update_game(saved_game)
             self.view_table.update_game(saved_game)
-            self.statusBar().showMessage(f"Jogo '{saved_game.get('title')}' atualizado com sucesso.")
+            self.statusBar().showMessage(f"Jogo '{title}' atualizado com sucesso.")
             return
 
-        # Se o status mudou:
-        # 1. Remove dos grids antigos
-        if old_status in ["Fila", "Pausado"]:
-            self.view_queue_grid.remove_game(game_id)
-        elif old_status == "Disponível":
-            self.view_disponiveis_grid.remove_game(game_id)
-        elif old_status in ["Zerado", "Platinado"]:
-            if new_status not in ["Zerado", "Platinado"]:
-                self.view_zerados_grid.remove_game(game_id)
-            if old_status == "Platinado" and new_status != "Platinado":
-                self.view_platinados_grid.remove_game(game_id)
-        elif old_status == "Lista de Desejos":
-            self.view_wishlist_grid.remove_game(game_id)
-
-        # 2. Insere ou atualiza nos novos grids
-        if new_status in ["Fila", "Pausado"]:
-            self.view_queue_grid.insert_game(0, saved_game)
-        elif new_status == "Disponível":
-            self.view_disponiveis_grid.insert_game(0, saved_game)
-        elif new_status in ["Zerado", "Platinado"]:
-            if old_status not in ["Zerado", "Platinado"]:
-                self.view_zerados_grid.insert_game(0, saved_game)
-            else:
-                self.view_zerados_grid.update_game(saved_game)
-            if new_status == "Platinado" and old_status != "Platinado":
-                self.view_platinados_grid.insert_game(0, saved_game)
-        elif new_status == "Lista de Desejos":
-            self.view_wishlist_grid.insert_game(0, saved_game)
-
-        # 3. Atualiza Game Room e Tabela
         self.view_game_room.remove_game(game_id)
         self.view_game_room.insert_game_by_status(saved_game)
         self.view_table.update_game(saved_game)
-
-        self.statusBar().showMessage(f"Jogo '{saved_game.get('title')}' movido para '{new_status}'.")
+        self.statusBar().showMessage(f"Jogo '{title}' movido para '{new_status}'.")

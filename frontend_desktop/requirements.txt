@@ -1,7 +1,4 @@
-PySide6>=6.6.0
-requests>=2.31.0
-pillow>=10.2.0
-watchfiles>=0.21.0
-pytest>=8.1.1
-pytest-cov>=5.0.0
-responses>=0.25.0
+# Dependências de runtime do frontend desktop (faixas compatíveis; versões exatas do build em constraints-build.txt)
+PySide6>=6.6.0,<7
+requests>=2.31.0,<3
+pillow>=10.2.0,<13

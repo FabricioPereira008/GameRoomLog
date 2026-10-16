@@ -1,8 +1,11 @@
+import logging
+from app_logging import setup_logging
 import sys
 import os
 import io
 import time
 import threading
+from urllib.parse import urlparse
 from pathlib import Path
 
 # Em executáveis desktop sem janela de terminal (console=False), sys.stdout e sys.stderr são None no Windows.
@@ -26,14 +29,16 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 import uvicorn
-import requests
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 
 from backend.app.main import app as fastapi_app
 from frontend_desktop.views.main_window import MainWindow
+from frontend_desktop.api_client.client import api_client
 from frontend_desktop.main_app import setup_live_stylesheet, set_dark_palette
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddedBackendServer(threading.Thread):
@@ -58,25 +63,23 @@ class EmbeddedBackendServer(threading.Thread):
         try:
             self.server.run()
         except Exception as e:
-            print(f"[Backend Error] {e}")
+            logger.exception("Erro no backend embutido")
 
     def stop(self):
         self.server.should_exit = True
 
-def is_server_ready(url: str = "http://127.0.0.1:8000/") -> bool:
-    try:
-        r = requests.get(url, timeout=0.5)
-        return r.status_code == 200
-    except Exception:
-        return False
+def is_server_ready() -> bool:
+    return api_client.is_backend_online()
 
 def main():
+    setup_logging()
     backend_thread = None
 
     # Se o backend não estiver rodando externamente, inicia o backend embutido
     if not is_server_ready():
-        print("⚡ Iniciando backend FastAPI integrado...")
-        backend_thread = EmbeddedBackendServer()
+        logger.info("Iniciando backend FastAPI integrado...")
+        parsed = urlparse(api_client.server_url)
+        backend_thread = EmbeddedBackendServer(host=parsed.hostname or "127.0.0.1", port=parsed.port or 8000)
         backend_thread.start()
 
         # Aguardar inicialização com limite de 5 segundos
@@ -85,9 +88,9 @@ def main():
             time.sleep(0.05)
 
         if is_server_ready():
-            print("✓ Backend FastAPI pronto em http://127.0.0.1:8000")
+            logger.info("Backend FastAPI pronto em %s", api_client.server_url)
         else:
-            print("⚠️ Backend demorou para responder, abrindo interface mesmo assim...")
+            logger.warning("Backend demorou para responder, abrindo interface mesmo assim...")
 
     # Inicializar aplicação PySide6
     app = QApplication(sys.argv)
@@ -108,7 +111,7 @@ def main():
     exit_code = app.exec()
 
     if backend_thread:
-        print("Encerrando servidor backend integrado...")
+        logger.info("Encerrando servidor backend integrado...")
         backend_thread.stop()
 
     sys.exit(exit_code)

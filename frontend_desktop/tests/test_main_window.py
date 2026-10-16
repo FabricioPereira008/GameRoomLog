@@ -1,0 +1,100 @@
+import pytest
+from frontend_desktop.views import game_status as gs
+from frontend_desktop.views.main_window import MainWindow
+
+
+def _game(gid, status, title=None):
+    return {"id": gid, "title": title or f"Jogo {gid}", "status": status, "genres": []}
+
+
+@pytest.fixture
+def window(qapp, monkeypatch):
+    games = [_game(1, "Fila"), _game(2, "Zerado"), _game(3, "Platinado"), _game(4, "Jogando")]
+    from frontend_desktop.views import main_window as mw
+    monkeypatch.setattr(mw.api_client, "get_games", lambda **kw: list(games))
+    for name in ("get_genres", "get_developers", "get_platforms", "get_franchises"):
+        monkeypatch.setattr(mw.api_client, name, lambda: [])
+    w = MainWindow(auto_load=False)
+    w.refresh_all_data_sync()
+    yield w
+    w.close()
+
+
+def _ids(grid):
+    return {g["id"] for g in grid.all_games_source}
+
+
+def test_status_lists_membership():
+    assert gs.in_list("zerados", "Platinado") and gs.in_list("platinados", "Platinado")
+    assert not gs.in_list("platinados", "Zerado")
+    assert [g["id"] for g in gs.filter_games("queue", [_game(1, "Fila"), _game(2, "Pausado"), _game(3, "Zerado")])] == [1, 2]
+
+
+def test_refresh_distributes_games_by_status(window):
+    assert _ids(window.view_queue_grid) == {1}
+    assert _ids(window.view_zerados_grid) == {2, 3}
+    assert _ids(window.view_platinados_grid) == {3}
+
+
+def test_new_game_is_inserted_in_matching_lists_only(window):
+    window.apply_game_mutation(_game(10, "Platinado"), is_new=True)
+    assert 10 in _ids(window.view_zerados_grid) and 10 in _ids(window.view_platinados_grid)
+    assert 10 not in _ids(window.view_queue_grid)
+    assert window.all_games[0]["id"] == 10
+
+
+def test_status_change_moves_game_between_lists(window):
+    window.apply_game_mutation(_game(1, "Zerado"), old_status="Fila")
+    assert 1 not in _ids(window.view_queue_grid)
+    assert 1 in _ids(window.view_zerados_grid)
+    window.apply_game_mutation(_game(1, "Platinado"), old_status="Zerado")
+    assert 1 in _ids(window.view_zerados_grid) and 1 in _ids(window.view_platinados_grid)
+    window.apply_game_mutation(_game(1, "Zerado"), old_status="Platinado")
+    assert 1 not in _ids(window.view_platinados_grid) and 1 in _ids(window.view_zerados_grid)
+
+
+def test_same_status_edit_updates_in_place(window):
+    window.apply_game_mutation(_game(1, "Fila", "Novo Título"), old_status="Fila")
+    assert [g["title"] for g in window.view_queue_grid.all_games_source if g["id"] == 1] == ["Novo Título"]
+    assert [g["title"] for g in window.all_games if g["id"] == 1] == ["Novo Título"]
+
+
+def test_deletion_removes_from_all_lists(window):
+    window.apply_game_deletion(3)
+    assert all(3 not in _ids(g) for _, g in window._list_grids())
+    assert all(g["id"] != 3 for g in window.all_games)
+
+
+def test_async_refresh_loads_in_background_and_coalesces(qapp, monkeypatch):
+    from PySide6.QtCore import QEventLoop, QTimer
+    from frontend_desktop.views import main_window as mw
+    calls = []
+    monkeypatch.setattr(mw.api_client, "get_games", lambda **kw: calls.append(1) or [_game(1, "Fila")])
+    for name in ("get_genres", "get_developers", "get_platforms", "get_franchises"):
+        monkeypatch.setattr(mw.api_client, name, lambda: [])
+    w = MainWindow(auto_load=False)
+    w.refresh_all_data()
+    w.refresh_all_data()  # coalescido: roda no máximo mais uma vez depois da primeira
+    loop = QEventLoop()
+    QTimer.singleShot(1500, loop.quit)
+    w._loader.finished.connect(lambda: QTimer.singleShot(300, loop.quit))
+    loop.exec()
+    assert 1 <= len(calls) <= 2
+    assert {g["id"] for g in w.view_queue_grid.all_games_source} == {1}
+    w.close()
+
+
+def test_async_refresh_reports_failure(qapp, monkeypatch):
+    from PySide6.QtCore import QEventLoop, QTimer
+    from frontend_desktop.views import main_window as mw
+    def boom(**kw):
+        raise ConnectionError("offline")
+    monkeypatch.setattr(mw.api_client, "get_games", boom)
+    w = MainWindow(auto_load=False)
+    w.refresh_all_data()
+    loop = QEventLoop()
+    w._loader.finished.connect(loop.quit)
+    QTimer.singleShot(2000, loop.quit)
+    loop.exec()
+    assert "offline" in w.statusBar().currentMessage()
+    w.close()

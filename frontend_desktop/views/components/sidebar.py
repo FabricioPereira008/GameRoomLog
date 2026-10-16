@@ -1,3 +1,4 @@
+from app_version import __version__
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QLabel, QFrame, QButtonGroup, QScrollArea
 )
@@ -98,7 +99,7 @@ class Sidebar(QWidget):
         # Versão no rodapé (detecção dinâmica de plataforma)
         import sys
         platform_name = "Windows" if sys.platform == "win32" else ("macOS" if sys.platform == "darwin" else "Linux Native")
-        version_label = QLabel(f"v0.2.4 • {platform_name}")
+        version_label = QLabel(f"v{__version__} • {platform_name}")
         version_label.setObjectName("appVersion")
         main_layout.addWidget(version_label)
 

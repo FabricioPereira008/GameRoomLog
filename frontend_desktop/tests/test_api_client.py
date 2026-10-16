@@ -1,4 +1,5 @@
 import pytest
+from app_version import __version__
 import responses
 from frontend_desktop.api_client.client import ApiClient
 
@@ -11,7 +12,7 @@ def test_is_backend_online(client):
     responses.add(
         responses.GET,
         "http://test-server:8000/",
-        json={"app": "GameRoomLog", "version": "0.2.4"},
+        json={"app": "GameRoomLog", "version": __version__},
         status=200
     )
     assert client.is_backend_online() is True
@@ -91,3 +92,56 @@ def test_get_stats_and_yearbook(client):
 
     overall = client.get_overall_stats()
     assert overall["total_hours"] == 850.0
+
+
+@responses.activate
+def test_auto_cover_game_sends_key_in_body(client):
+    responses.add(responses.POST, "http://test-server:8000/api/v1/uploads/auto-cover-game/3",
+                  json={"success": True}, status=200)
+    client.auto_cover_game(3, "secret")
+    req = responses.calls[0].request
+    assert b"secret" in req.body
+    assert "secret" not in req.url
+
+
+@responses.activate
+def test_get_cover_path_downloads_once_and_caches(tmp_path):
+    api = ApiClient(base_url="http://test-server:8000/api/v1", cover_cache_dir=tmp_path)
+    responses.add(responses.GET, "http://test-server:8000/static/covers/a.jpg", body=b"img", status=200)
+    path = api.get_cover_path("a.jpg")
+    assert path and open(path, "rb").read() == b"img"
+    api.get_cover_path("a.jpg")
+    assert len(responses.calls) == 1
+
+
+@responses.activate
+def test_get_cover_path_missing_and_traversal(tmp_path):
+    api = ApiClient(base_url="http://test-server:8000/api/v1", cover_cache_dir=tmp_path)
+    responses.add(responses.GET, "http://test-server:8000/static/covers/none.jpg", status=404)
+    assert api.get_cover_path("none.jpg") is None
+    responses.add(responses.GET, "http://test-server:8000/static/covers/passwd", body=b"x", status=200)
+    assert api.get_cover_path("../../etc/passwd") is not None
+    assert not (tmp_path.parent / "etc").exists()
+
+
+@responses.activate
+def test_error_status_raises_and_delete_returns_bool(client):
+    import requests
+    responses.add(responses.PUT, "http://test-server:8000/api/v1/genres/1", status=409)
+    with pytest.raises(requests.HTTPError):
+        client.update_genre(1, "x", "#fff")
+    responses.add(responses.DELETE, "http://test-server:8000/api/v1/genres/1", status=204)
+    assert client.delete_genre(1) is True
+    responses.add(responses.DELETE, "http://test-server:8000/api/v1/genres/2", status=404)
+    assert client.delete_genre(2) is False
+
+
+def test_base_url_from_env(monkeypatch):
+    monkeypatch.setenv("GAMEROOM_API_URL", "http://example:9000/api/v1/")
+    assert ApiClient().base_url == "http://example:9000/api/v1"
+
+
+@responses.activate
+def test_is_backend_online_rejects_foreign_service(client):
+    responses.add(responses.GET, "http://test-server:8000/", body="<html>other service</html>", status=200)
+    assert client.is_backend_online() is False
