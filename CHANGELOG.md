@@ -5,6 +5,11 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.3.1] - 2026-10-16
+### Corrigido
+- AppImage agora abre em distribuições sem libfuse.so.2 (ex.: Arch/CachyOS com apenas FUSE 3): o build passou a usar o appimagetool atual, com runtime estático.
+- O workflow de release verifica o runtime do AppImage e faz um smoke test do app extraído antes de publicar.
+
 ## [0.3.0] - 2026-10-16
 ### Adicionado
 - Nova interface: design system com tokens (cores, raios, tipografia), fonte Inter embutida e ícones SVG no lugar dos emojis; sidebar com seções e itens ativos destacados.
