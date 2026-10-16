@@ -7,6 +7,8 @@ from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.workers import run_async
+from frontend_desktop.ui_helpers import add_search_icon, make_color_dot, set_button_icon
+from frontend_desktop.styles.tokens import COLORS
 
 logger = logging.getLogger(__name__)
 
@@ -39,15 +41,13 @@ class ManageItemCard(QFrame):
 
         if self.category_type == "genre":
             color = self.item_data.get("color", "#4f46e5")
-            color_dot = QLabel("   ")
-            color_dot.setStyleSheet(f"background-color: {color}; border-radius: 6px; border: 1px solid #ffffff44;")
-            header.addWidget(color_dot)
+            header.addWidget(make_color_dot(color))
 
         layout.addLayout(header)
 
         # Contador de Jogos Zerados
         count = self.item_data.get("games_count", 0)
-        count_label = QLabel(f"🏆 {count} {'jogo zerado' if count == 1 else 'jogos zerados'} (Clique para ver)")
+        count_label = QLabel(f"{count} {'jogo zerado' if count == 1 else 'jogos zerados'} · clique para ver")
         count_label.setProperty("class", "manage-card-count")
         layout.addWidget(count_label)
 
@@ -56,13 +56,17 @@ class ManageItemCard(QFrame):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
 
-        btn_edit = QPushButton("✏️ Editar")
+        btn_edit = QPushButton("Editar")
+
+        set_button_icon(btn_edit, "pencil")
         btn_edit.setProperty("class", "small-btn")
         btn_edit.setCursor(Qt.PointingHandCursor)
         btn_edit.clicked.connect(self.on_edit)
         btn_layout.addWidget(btn_edit)
 
-        btn_delete = QPushButton("🗑️ Excluir")
+        btn_delete = QPushButton("Excluir")
+
+        set_button_icon(btn_delete, "trash-2", COLORS["danger"])
         btn_delete.setProperty("class", "delete-btn")
         btn_delete.setCursor(Qt.PointingHandCursor)
         btn_delete.clicked.connect(self.on_delete)
@@ -152,7 +156,8 @@ class ManagementView(QWidget):
         header = QHBoxLayout()
         
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText(f"🔍 Buscar em {self.title.lower()}...")
+        self.search_input.setPlaceholderText(f"Buscar em {self.title.lower()}...")
+        add_search_icon(self.search_input)
         self.search_input.setFixedWidth(280)
         self.search_input.textChanged.connect(self.render_items)
         header.addWidget(self.search_input)

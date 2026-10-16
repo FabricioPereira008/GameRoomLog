@@ -1,8 +1,10 @@
 import os
+import tempfile
 import uuid
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QLabel
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QWheelEvent
+from frontend_desktop.ui_helpers import repolish
 
 class ImageCropperDialog(QDialog):
     def __init__(self, image_path: str, parent=None):
@@ -10,11 +12,6 @@ class ImageCropperDialog(QDialog):
         self.setWindowTitle("Ajustar Capa do Jogo")
         self.setFixedSize(540, 600)
         
-        qss_path = os.path.join(os.path.dirname(__file__), "..", "..", "styles", "dark_theme.qss")
-        if os.path.exists(qss_path):
-            with open(qss_path, "r", encoding="utf-8") as f:
-                self.setStyleSheet(f.read())
-
         self.image_path = image_path
         self.cropped_filepath = None
         self.init_ui()
@@ -25,7 +22,8 @@ class ImageCropperDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         
         lbl = QLabel("Arraste a imagem para reposicionar e use a roda do mouse para dar zoom.")
-        lbl.setStyleSheet("color: #94a3b8; font-weight: bold;")
+        lbl.setProperty("class", "status-muted")
+        lbl.setWordWrap(True)
         lbl.setAlignment(Qt.AlignCenter)
         layout.addWidget(lbl)
         
@@ -34,7 +32,7 @@ class ImageCropperDialog(QDialog):
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.view.setDragMode(QGraphicsView.ScrollHandDrag)
-        self.view.setStyleSheet("border: 2px dashed #7f5af0; background-color: #0c0d12; border-radius: 8px;")
+        self.view.setProperty("class", "crop-view")
         
         self.scene = QGraphicsScene(self)
         self.scene.setSceneRect(-2000, -2000, 4000, 4000)
@@ -89,10 +87,12 @@ class ImageCropperDialog(QDialog):
         self.pixmap_item.setScale(current_scale * zoom_factor)
 
     def crop_and_accept(self):
-        self.view.setStyleSheet("border: none; background-color: transparent;")
+        self.view.setProperty("class", "crop-view-plain")
+        repolish(self.view)
         cropped_pixmap = self.view.grab()
         
-        temp_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "backend", "storage", "covers")
+        # Arquivo temporário local (o frontend não escreve no armazenamento do backend)
+        temp_dir = os.path.join(tempfile.gettempdir(), "gameroomlog")
         os.makedirs(temp_dir, exist_ok=True)
         filename = f"crop_{uuid.uuid4().hex}.jpg"
         filepath = os.path.join(temp_dir, filename)

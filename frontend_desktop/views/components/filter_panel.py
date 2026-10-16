@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QComboBox, QSpinBox, QPushButton, QCompleter, QSizePolicy
 )
 from PySide6.QtCore import Signal, Qt
+from frontend_desktop.ui_helpers import set_button_icon
 
 class FilterPanel(QWidget):
     """
@@ -28,7 +29,8 @@ class FilterPanel(QWidget):
         main_layout.setSpacing(8)
 
         # 1. Botão de Alternância de Filtros
-        self.btn_toggle = QPushButton("🎛️ Filtros")
+        self.btn_toggle = QPushButton("Filtros")
+        set_button_icon(self.btn_toggle, "sliders-horizontal")
         self.btn_toggle.setObjectName("btnToggleFilters")
         self.btn_toggle.setProperty("class", "filter-btn")
         self.btn_toggle.setCursor(Qt.PointingHandCursor)
@@ -106,7 +108,9 @@ class FilterPanel(QWidget):
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.addStretch()
         
-        self.btn_clear = QPushButton("✖ Limpar Filtros")
+        self.btn_clear = QPushButton("Limpar filtros")
+        
+        set_button_icon(self.btn_clear, "x")
         self.btn_clear.setCursor(Qt.PointingHandCursor)
         self.btn_clear.setProperty("class", "small-btn")
         self.btn_clear.clicked.connect(self.clear_filters)
@@ -184,10 +188,10 @@ class FilterPanel(QWidget):
     def update_button_badge(self):
         active = self.count_active_filters()
         if active > 0:
-            self.btn_toggle.setText(f"🎛️ Filtros ({active})")
+            self.btn_toggle.setText(f"Filtros ({active})")
             self.btn_toggle.setProperty("class", "filter-btn filter-btn-active")
         else:
-            self.btn_toggle.setText("🎛️ Filtros")
+            self.btn_toggle.setText("Filtros")
             self.btn_toggle.setProperty("class", "filter-btn")
         self.btn_toggle.style().unpolish(self.btn_toggle)
         self.btn_toggle.style().polish(self.btn_toggle)

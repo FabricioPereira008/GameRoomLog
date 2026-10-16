@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 from frontend_desktop.views.components.game_grid import GameGrid
 from frontend_desktop.views.components.filter_panel import FilterPanel
+from frontend_desktop.ui_helpers import add_search_icon
 
 class GameRoomView(QWidget):
     game_selected = Signal(dict)
@@ -32,7 +33,8 @@ class GameRoomView(QWidget):
         top_bar_layout.setSpacing(10)
 
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Buscar jogos por título no Game Room...")
+        self.search_input.setPlaceholderText("Buscar jogos por título no Game Room...")
+        add_search_icon(self.search_input)
         self.search_input.setClearButtonEnabled(True)
         self.search_input.setProperty("class", "search-input")
         self.search_input.textChanged.connect(self.on_search_changed)
@@ -56,7 +58,7 @@ class GameRoomView(QWidget):
         container.setAttribute(Qt.WA_StyledBackground, True)
         container_layout = QVBoxLayout(container)
         container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(24)
+        container_layout.setSpacing(12)
 
         # --- FUNÇÃO HELPER PARA CRIAR SEÇÕES ---
         def create_section(title, object_name):
@@ -65,7 +67,7 @@ class GameRoomView(QWidget):
             section.setProperty("class", "game-section-card")
             section.setAttribute(Qt.WA_StyledBackground, True)
             layout = QVBoxLayout(section)
-            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setContentsMargins(16, 14, 16, 16)
             layout.setSpacing(12)
             
             header = QLabel(title)
@@ -86,11 +88,11 @@ class GameRoomView(QWidget):
             return grid, section, line
 
         # Criar as 5 seções
-        self.grid_now, self.sec_now, self.line_now = create_section("🕹️ Agora (Em Andamento)", "nowPlayingSection")
-        self.grid_next, self.sec_next, self.line_next = create_section("⏭️ Próximos", "nextSection")
-        self.grid_queue, self.sec_queue, self.line_queue = create_section("📋 Fila de Espera", "queueSection")
-        self.grid_finished, self.sec_finished, self.line_finished = create_section("🏆 Zerados", "finishedSection")
-        self.grid_platinum, self.sec_platinum, self.line_platinum = create_section("👑 Platinados", "platinumSection")
+        self.grid_now, self.sec_now, self.line_now = create_section("Agora (em andamento)", "nowPlayingSection")
+        self.grid_next, self.sec_next, self.line_next = create_section("Próximos", "nextSection")
+        self.grid_queue, self.sec_queue, self.line_queue = create_section("Fila de espera", "queueSection")
+        self.grid_finished, self.sec_finished, self.line_finished = create_section("Zerados", "finishedSection")
+        self.grid_platinum, self.sec_platinum, self.line_platinum = create_section("Platinados", "platinumSection")
 
         # Conectar eventos
         self.grid_now.game_selected.connect(self.game_selected.emit)

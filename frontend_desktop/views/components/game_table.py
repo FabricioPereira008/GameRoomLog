@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QHeaderView, QLineEdit, QComboBox, QLabel
 )
 from PySide6.QtCore import Signal, Qt
+from frontend_desktop.ui_helpers import add_search_icon
 
 class GameTable(QWidget):
     game_selected = Signal(dict)
@@ -25,7 +26,8 @@ class GameTable(QWidget):
         filter_layout.setSpacing(10)
 
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Filtrar por nome ou desenvolvedora...")
+        self.search_input.setPlaceholderText("Filtrar por nome ou desenvolvedora...")
+        add_search_icon(self.search_input)
         self.search_input.setObjectName("searchBar")
         self.search_input.textChanged.connect(self.apply_filter)
         filter_layout.addWidget(self.search_input)

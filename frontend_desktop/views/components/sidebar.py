@@ -1,8 +1,16 @@
-from app_version import __version__
+import sys
+
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QPushButton, QLabel, QFrame, QButtonGroup, QScrollArea
+    QButtonGroup, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget, QHBoxLayout
 )
-from PySide6.QtCore import Signal, Qt
+
+from app_version import __version__
+from frontend_desktop import icons
+from frontend_desktop.styles.tokens import COLORS
+from frontend_desktop.ui_helpers import set_button_icon
+from frontend_desktop.views.view_ids import NAV_SECTIONS, VIEW_META, ViewId
+
 
 class Sidebar(QWidget):
     navigation_changed = Signal(int)
@@ -12,97 +20,89 @@ class Sidebar(QWidget):
         super().__init__(parent)
         self.setObjectName("sidebarWidget")
         self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setFixedWidth(240)
+        self.setFixedWidth(236)
         self.init_ui()
+
+    def _nav_button(self, view_id: ViewId) -> QPushButton:
+        meta = VIEW_META[view_id]
+        btn = QPushButton(meta.nav_label)
+        btn.setProperty("class", "nav-btn")
+        btn.setCheckable(True)
+        btn.setCursor(Qt.PointingHandCursor)
+        set_button_icon(btn, meta.icon, COLORS["text_muted"], COLORS["accent_text"], 18)
+        self.button_group.addButton(btn, int(view_id))
+        return btn
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 14, 12, 14)
-        main_layout.setSpacing(6)
+        main_layout.setContentsMargins(14, 18, 14, 14)
+        main_layout.setSpacing(4)
 
-        # Cabeçalho do App
-        title = QLabel("🎮 Game Room")
+        # Marca do app
+        brand = QHBoxLayout()
+        brand.setSpacing(10)
+        logo = QLabel()
+        logo.setPixmap(icons.pixmap("gamepad-2", COLORS["accent"], 26))
+        brand.addWidget(logo)
+        title = QLabel("GameRoomLog")
         title.setObjectName("appTitle")
-        subtitle = QLabel("Organize seu Backlog")
+        brand.addWidget(title)
+        brand.addStretch()
+        main_layout.addLayout(brand)
+
+        subtitle = QLabel("Organize seu backlog")
         subtitle.setObjectName("appSubtitle")
-
-        main_layout.addWidget(title)
         main_layout.addWidget(subtitle)
+        main_layout.addSpacing(12)
 
-        # Botão Principal de Adicionar Jogo
-        self.btn_add = QPushButton("+ Adicionar Jogo")
+        self.btn_add = QPushButton("Adicionar jogo")
         self.btn_add.setObjectName("btnAddGame")
         self.btn_add.setCursor(Qt.PointingHandCursor)
+        set_button_icon(self.btn_add, "plus", COLORS["on_accent"], size=18)
         self.btn_add.clicked.connect(self.add_game_requested.emit)
         main_layout.addWidget(self.btn_add)
+        main_layout.addSpacing(8)
 
-        main_layout.addSpacing(6)
-
-        # Scroll área interna para os botões do menu
         scroll = QScrollArea()
         scroll.setObjectName("sidebarScrollArea")
         scroll.setWidgetResizable(True)
-        
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
         scroll_content = QWidget()
         scroll_content.setObjectName("sidebarNavContainer")
         scroll_content.setAttribute(Qt.WA_StyledBackground, True)
-        
         layout = QVBoxLayout(scroll_content)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
+        layout.setSpacing(2)
 
-
-        # Grupo de Navegação
         self.button_group = QButtonGroup(self)
         self.button_group.setExclusive(True)
-
-        nav_items = [
-            ("🕹️  Game Room", 0),
-            ("📋  Fila de Espera", 1),
-            ("🟢  Disponíveis", 2),
-            ("🏆  Zerados", 3),
-            ("👑  Platinados", 4),
-            ("📊  Anuário", 5),
-            ("🎨  Gêneros", 6),
-            ("🎮  Plataformas", 7),
-            ("👾  Séries / Franquias", 8),
-            ("📑  Biblioteca (Tabela)", 9),
-            ("⭐  Lista de Desejos", 10),
-        ]
-
         self.nav_buttons = []
-        for text, index in nav_items:
-            btn = QPushButton(text)
-            btn.setProperty("class", "nav-btn")
-            btn.setCheckable(True)
-            btn.setCursor(Qt.PointingHandCursor)
-            if index == 0:
-                btn.setChecked(True)
-            self.button_group.addButton(btn, index)
-            layout.addWidget(btn)
-            self.nav_buttons.append(btn)
 
+        for section_title, view_ids in NAV_SECTIONS:
+            label = QLabel(section_title.upper())
+            label.setProperty("class", "nav-section")
+            layout.addWidget(label)
+            for view_id in view_ids:
+                btn = self._nav_button(view_id)
+                layout.addWidget(btn)
+                self.nav_buttons.append(btn)
+
+        self.button_group.button(int(ViewId.GAME_ROOM)).setChecked(True)
         layout.addStretch()
         scroll.setWidget(scroll_content)
         main_layout.addWidget(scroll)
 
-        # Botão de Configurações fixo na parte inferior
-        self.btn_settings = QPushButton("⚙️  Configurações")
-        self.btn_settings.setProperty("class", "nav-btn")
-        self.btn_settings.setCheckable(True)
-        self.btn_settings.setCursor(Qt.PointingHandCursor)
-        self.button_group.addButton(self.btn_settings, 11)
+        # Configurações fixas na parte inferior
+        self.btn_settings = self._nav_button(ViewId.SETTINGS)
         main_layout.addWidget(self.btn_settings)
 
         self.button_group.idClicked.connect(self.on_nav_clicked)
 
-        # Versão no rodapé (detecção dinâmica de plataforma)
-        import sys
-        platform_name = "Windows" if sys.platform == "win32" else ("macOS" if sys.platform == "darwin" else "Linux Native")
-        version_label = QLabel(f"v{__version__} • {platform_name}")
+        platform_name = "Windows" if sys.platform == "win32" else ("macOS" if sys.platform == "darwin" else "Linux")
+        version_label = QLabel(f"v{__version__} · {platform_name}")
         version_label.setObjectName("appVersion")
         main_layout.addWidget(version_label)
-
 
     def on_nav_clicked(self, nav_id: int):
         self.navigation_changed.emit(nav_id)

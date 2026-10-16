@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt, QSettings, QTimer
 from frontend_desktop.views.components.game_card import GameCard, LoadMoreCard
 from frontend_desktop.views.components.filter_panel import FilterPanel
+from frontend_desktop.ui_helpers import add_search_icon
 
 
 
@@ -251,7 +252,8 @@ class ScrollableGameGrid(QWidget):
         top_bar_layout.setSpacing(10)
 
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Buscar jogos por título...")
+        self.search_input.setPlaceholderText("Buscar jogos por título...")
+        add_search_icon(self.search_input)
         self.search_input.setClearButtonEnabled(True)
         self.search_input.setProperty("class", "search-input")
         self.search_input.textChanged.connect(self.on_search_changed)

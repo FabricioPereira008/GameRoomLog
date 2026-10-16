@@ -36,7 +36,7 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from backend.app.main import app as fastapi_app
 from frontend_desktop.views.main_window import MainWindow
 from frontend_desktop.api_client.client import api_client
-from frontend_desktop.main_app import setup_live_stylesheet, set_dark_palette
+from frontend_desktop.main_app import create_app, create_main_window
 
 logger = logging.getLogger(__name__)
 
@@ -93,18 +93,8 @@ def main():
             logger.warning("Backend demorou para responder, abrindo interface mesmo assim...")
 
     # Inicializar aplicação PySide6
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    set_dark_palette(app)
-    app.setApplicationName("GameRoomLog")
-    app.setOrganizationName("GameRoom")
-
-
-    setup_live_stylesheet(app)
-
-    window = MainWindow()
-    shortcut_f5 = QShortcut(QKeySequence("F5"), window)
-    shortcut_f5.activated.connect(lambda: getattr(app, "_force_reload_qss", lambda: None)())
+    app = create_app()
+    window = create_main_window(app)
 
     window.show()
 

@@ -8,6 +8,7 @@ from frontend_desktop.views.components.game_grid import ScrollableGameGrid
 from frontend_desktop.views.components.yearbook_view import StatCard
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.workers import run_async
+from frontend_desktop.ui_helpers import set_button_icon, style_color_dot
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,9 @@ class CategoryDetailView(QWidget):
 
         top_bar.addStretch()
 
-        self.btn_edit_color = QPushButton("🎨 Alterar Cor da Tag")
+        self.btn_edit_color = QPushButton("Alterar cor da tag")
+
+        set_button_icon(self.btn_edit_color, "tags")
         self.btn_edit_color.setProperty("class", "small-btn")
         self.btn_edit_color.setCursor(Qt.PointingHandCursor)
         self.btn_edit_color.setVisible(False)
@@ -68,8 +71,8 @@ class CategoryDetailView(QWidget):
         stats_layout = QHBoxLayout()
         stats_layout.setSpacing(12)
 
-        self.card_total_games = StatCard("Jogos Zerados", "0", "🏆")
-        self.card_total_hours = StatCard("Horas Totais Jogadas", "0h", "⏱️")
+        self.card_total_games = StatCard("Jogos Zerados", "0", "trophy")
+        self.card_total_hours = StatCard("Horas Totais Jogadas", "0h", "clock")
 
         stats_layout.addWidget(self.card_total_games)
         stats_layout.addWidget(self.card_total_hours)
@@ -78,7 +81,7 @@ class CategoryDetailView(QWidget):
         main_layout.addLayout(stats_layout)
 
         # Subtítulo da Lista de Jogos
-        self.section_label = QLabel("🏆 Jogos Zerados / Platinados")
+        self.section_label = QLabel("Jogos Zerados / Platinados")
         self.section_label.setProperty("class", "section-header-small")
         main_layout.addWidget(self.section_label)
 
@@ -90,8 +93,8 @@ class CategoryDetailView(QWidget):
 
     DETAIL_FETCHERS = {
         "genre": ("get_genre_details", "{}"),
-        "platform": ("get_platform_details", "🎮 {}"),
-        "franchise": ("get_franchise_details", "👾 {}"),
+        "platform": ("get_platform_details", "{}"),
+        "franchise": ("get_franchise_details", "{}"),
     }
 
     def load_category(self, category_type: str, category_id: int):
@@ -118,7 +121,7 @@ class CategoryDetailView(QWidget):
         self.btn_edit_color.setVisible(is_genre)
         if is_genre:
             color = data.get("color", "#4f46e5")
-            self.color_dot.setStyleSheet(f"background-color: {color}; border-radius: 8px; border: 1px solid #ffffff66;")
+            style_color_dot(self.color_dot, color, 16)
 
         self.category_data = data
         self.card_total_games.set_value(str(data.get("total_games", 0)))

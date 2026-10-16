@@ -98,3 +98,28 @@ def test_async_refresh_reports_failure(qapp, monkeypatch):
     loop.exec()
     assert "offline" in w.statusBar().currentMessage()
     w.close()
+
+
+def test_lazy_views_are_created_on_first_visit(window):
+    from frontend_desktop.views.view_ids import ViewId
+    assert ViewId.YEARBOOK not in window._views and ViewId.SETTINGS not in window._views
+    window.switch_view(int(ViewId.SETTINGS))
+    assert ViewId.SETTINGS in window._views and window.current_view_id == ViewId.SETTINGS
+    assert window.view_title_label.text() == "Configurações"
+    window.switch_view(int(ViewId.QUEUE))
+    assert window.current_view_id == ViewId.QUEUE
+    assert ViewId.YEARBOOK not in window._views  # nunca visitada
+
+
+def test_every_view_id_has_metadata_and_icon(qapp):
+    from frontend_desktop import icons
+    from frontend_desktop.views.view_ids import ViewId, VIEW_META
+    assert set(VIEW_META) == set(ViewId)
+    for meta in VIEW_META.values():
+        assert (icons.icons_dir() / f"{meta.icon}.svg").exists(), meta.icon
+
+
+def test_sidebar_has_a_button_for_each_nav_view(window):
+    from frontend_desktop.views.view_ids import NAV_SECTIONS
+    expected = {int(v) for _, ids in NAV_SECTIONS for v in ids} | {11}
+    assert {window.sidebar.button_group.id(b) for b in window.sidebar.button_group.buttons()} == expected

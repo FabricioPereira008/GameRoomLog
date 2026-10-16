@@ -7,11 +7,13 @@ from PySide6.QtCore import Signal, Qt
 from frontend_desktop.views.components.game_grid import GameGrid
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.workers import run_async
+from frontend_desktop import icons
+from frontend_desktop.styles.tokens import COLORS
 
 logger = logging.getLogger(__name__)
 
 class StatCard(QFrame):
-    def __init__(self, title: str, value: str, icon: str = "🎮", parent=None):
+    def __init__(self, title: str, value: str, icon: str = "gamepad-2", parent=None):
         super().__init__(parent)
         self.setProperty("class", "stat-card")
         self.setFixedHeight(62)
@@ -29,8 +31,8 @@ class StatCard(QFrame):
         icon_layout.setContentsMargins(0, 0, 0, 0)
         icon_layout.setAlignment(Qt.AlignCenter)
         
-        icon_label = QLabel(icon)
-        icon_label.setProperty("class", "yearbook-icon")
+        icon_label = QLabel()
+        icon_label.setPixmap(icons.pixmap(icon, COLORS["accent_text"], 20))
         icon_label.setAlignment(Qt.AlignCenter)
         icon_layout.addWidget(icon_label)
         
@@ -114,10 +116,10 @@ class YearbookView(QWidget):
         stats_layout.setContentsMargins(0, 0, 0, 0)
         stats_layout.setSpacing(12)
 
-        self.card_finished = StatCard("Jogos Zerados", "0", "🎮")
-        self.card_platinums = StatCard("Platinas", "0", "🏆")
-        self.card_hours = StatCard("Horas Jogadas", "0h", "⏱️")
-        self.card_avg = StatCard("Média de Nota", "N/A", "⭐")
+        self.card_finished = StatCard("Jogos Zerados", "0", "circle-check")
+        self.card_platinums = StatCard("Platinas", "0", "trophy")
+        self.card_hours = StatCard("Horas Jogadas", "0h", "clock")
+        self.card_avg = StatCard("Média de Nota", "N/A", "star")
 
         stats_layout.addWidget(self.card_finished)
         stats_layout.addWidget(self.card_platinums)
@@ -137,7 +139,7 @@ class YearbookView(QWidget):
         sec_layout.setSpacing(12)
         sec_layout.setAlignment(Qt.AlignTop)
 
-        self.sub_label = QLabel("🏆 Jogos Finalizados")
+        self.sub_label = QLabel("Jogos Finalizados")
         self.sub_label.setProperty("class", "section-header")
         sec_layout.addWidget(self.sub_label)
 
@@ -198,5 +200,5 @@ class YearbookView(QWidget):
         self.card_avg.set_value(f"{avg:.1f}/10" if avg is not None else "N/A")
 
         games = summary.get("games", [])
-        self.sub_label.setText(f"🏆 Jogos Finalizados em {year} ({len(games)} {'jogo' if len(games) == 1 else 'jogos'})")
+        self.sub_label.setText(f"Jogos Finalizados em {year} ({len(games)} {'jogo' if len(games) == 1 else 'jogos'})")
         self.game_grid.set_games(games)

@@ -16,6 +16,9 @@ from frontend_desktop.views.components.settings_view import SettingsView
 from frontend_desktop.views.dialogs.game_dialog import GameDialog
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.views import game_status as gs
+from frontend_desktop.views.view_ids import ViewId, VIEW_META
+from frontend_desktop.styles.tokens import COLORS
+from frontend_desktop.ui_helpers import set_button_icon
 
 logger = logging.getLogger(__name__)
 
@@ -88,92 +91,46 @@ class MainWindow(QMainWindow):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(12)
 
-        self.view_title_label = QLabel("🕹️ Game Room")
+        self.view_title_label = QLabel(VIEW_META[ViewId.GAME_ROOM].title)
         self.view_title_label.setObjectName("viewTitle")
         header_layout.addWidget(self.view_title_label)
 
         header_layout.addStretch()
 
-        self.btn_refresh = QPushButton("🔄 Atualizar")
+        self.btn_refresh = QPushButton("Atualizar")
         self.btn_refresh.setCursor(Qt.PointingHandCursor)
         self.btn_refresh.setProperty("class", "small-btn")
+        set_button_icon(self.btn_refresh, "refresh-cw", COLORS["text_muted"])
         self.btn_refresh.clicked.connect(self.refresh_all_data)
         header_layout.addWidget(self.btn_refresh)
 
         content_layout.addLayout(header_layout)
 
-        # QStackedWidget com as Telas em Cache
+        # QStackedWidget: telas de jogos são criadas já (recebem dados); as demais sob demanda
         self.stack = QStackedWidget()
+        self._views = {}
 
-        # View 0: Game Room (Agora + Próximos + Fila + Zerados + Platinados)
-        self.view_game_room = GameRoomView()
+        self.view_game_room = self._register(ViewId.GAME_ROOM, GameRoomView())
         self.view_game_room.game_selected.connect(self.open_edit_game_dialog)
-        self.stack.addWidget(self.view_game_room)
 
-        # View 1: Fila de Espera
-        self.view_queue_grid = ScrollableGameGrid()
-        self.view_queue_grid.game_selected.connect(self.open_edit_game_dialog)
-        self.stack.addWidget(self.view_queue_grid)
+        self.view_queue_grid = self._new_game_grid(ViewId.QUEUE)
+        self.view_disponiveis_grid = self._new_game_grid(ViewId.AVAILABLE)
+        self.view_zerados_grid = self._new_game_grid(ViewId.FINISHED)  # Zerados + Platinados
+        self.view_platinados_grid = self._new_game_grid(ViewId.PLATINUM)
+        self.view_wishlist_grid = self._new_game_grid(ViewId.WISHLIST)
 
-        # View 2: Disponíveis
-        self.view_disponiveis_grid = ScrollableGameGrid()
-        self.view_disponiveis_grid.game_selected.connect(self.open_edit_game_dialog)
-        self.stack.addWidget(self.view_disponiveis_grid)
-
-        # View 3: Zerados (Inclui Zerados e Platinados)
-        self.view_zerados_grid = ScrollableGameGrid()
-        self.view_zerados_grid.game_selected.connect(self.open_edit_game_dialog)
-        self.stack.addWidget(self.view_zerados_grid)
-
-        # View 4: Platinados (Apenas Platinados)
-        self.view_platinados_grid = ScrollableGameGrid()
-        self.view_platinados_grid.game_selected.connect(self.open_edit_game_dialog)
-        self.stack.addWidget(self.view_platinados_grid)
-
-        # View 5: Anuário
-        self.view_yearbook = YearbookView()
-        self.view_yearbook.game_selected.connect(self.open_edit_game_dialog)
-        self.stack.addWidget(self.view_yearbook)
-
-        # View 6: Gêneros (Gerenciamento)
-        self.view_genres = ManagementView("genre", "Gênero")
-        self.view_genres.category_selected.connect(self.open_category_detail)
-        self.view_genres.data_changed.connect(self.refresh_all_data)
-        self.stack.addWidget(self.view_genres)
-
-        # View 7: Plataformas (Gerenciamento)
-        self.view_platforms = ManagementView("platform", "Plataforma")
-        self.view_platforms.category_selected.connect(self.open_category_detail)
-        self.view_platforms.data_changed.connect(self.refresh_all_data)
-        self.stack.addWidget(self.view_platforms)
-
-        # View 8: Séries / Franquias (Gerenciamento)
-        self.view_franchises = ManagementView("franchise", "Série / Franquia")
-        self.view_franchises.category_selected.connect(self.open_category_detail)
-        self.view_franchises.data_changed.connect(self.refresh_all_data)
-        self.stack.addWidget(self.view_franchises)
-
-        # View 9: Biblioteca (Tabela Completa)
-        self.view_table = GameTable()
+        self.view_table = self._register(ViewId.LIBRARY, GameTable())
         self.view_table.game_selected.connect(self.open_edit_game_dialog)
-        self.stack.addWidget(self.view_table)
 
-        # View 10: Lista de Desejos
-        self.view_wishlist_grid = ScrollableGameGrid()
-        self.view_wishlist_grid.game_selected.connect(self.open_edit_game_dialog)
-        self.stack.addWidget(self.view_wishlist_grid)
-
-        # View 11: Configurações
-        self.view_settings = SettingsView()
-        self.view_settings.settings_changed.connect(self.refresh_all_data)
-        self.view_settings.data_imported.connect(self.refresh_all_data)
-        self.stack.addWidget(self.view_settings)
-
-        # View 12: Detalhes de Categoria (Subpágina)
-        self.view_category_detail = CategoryDetailView()
-        self.view_category_detail.back_requested.connect(self.return_from_category_detail)
-        self.view_category_detail.game_selected.connect(self.open_edit_game_dialog)
-        self.stack.addWidget(self.view_category_detail)
+        # Telas pesadas/analíticas: criadas na primeira visita
+        self._lazy_factories = {
+            ViewId.YEARBOOK: self._create_yearbook,
+            ViewId.GENRES: lambda: self._create_management("genre", "Gênero"),
+            ViewId.PLATFORMS: lambda: self._create_management("platform", "Plataforma"),
+            ViewId.FRANCHISES: lambda: self._create_management("franchise", "Série / Franquia"),
+            ViewId.SETTINGS: self._create_settings,
+            ViewId.CATEGORY_DETAIL: self._create_category_detail,
+        }
 
         content_layout.addWidget(self.stack)
         main_layout.addWidget(content_widget)
@@ -182,50 +139,83 @@ class MainWindow(QMainWindow):
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage(f"Pronto • GameRoomLog v{__version__} Online")
 
+    # --- registro de views ---
+    def _register(self, view_id: ViewId, widget: QWidget) -> QWidget:
+        self._views[view_id] = widget
+        self.stack.addWidget(widget)
+        return widget
+
+    def _new_game_grid(self, view_id: ViewId) -> ScrollableGameGrid:
+        grid = self._register(view_id, ScrollableGameGrid())
+        grid.game_selected.connect(self.open_edit_game_dialog)
+        return grid
+
+    def _ensure_view(self, view_id: ViewId) -> QWidget:
+        if view_id not in self._views:
+            self._register(view_id, self._lazy_factories[view_id]())
+        return self._views[view_id]
+
+    def _create_yearbook(self):
+        view = YearbookView()
+        view.game_selected.connect(self.open_edit_game_dialog)
+        return view
+
+    def _create_management(self, category_type: str, title: str):
+        view = ManagementView(category_type, title)
+        view.category_selected.connect(self.open_category_detail)
+        view.data_changed.connect(self.refresh_all_data)
+        return view
+
+    def _create_settings(self):
+        view = SettingsView()
+        view.settings_changed.connect(self.refresh_all_data)
+        view.data_imported.connect(self.refresh_all_data)
+        return view
+
+    def _create_category_detail(self):
+        view = CategoryDetailView()
+        view.back_requested.connect(self.return_from_category_detail)
+        view.game_selected.connect(self.open_edit_game_dialog)
+        return view
+
+    view_yearbook = property(lambda self: self._ensure_view(ViewId.YEARBOOK))
+    view_genres = property(lambda self: self._ensure_view(ViewId.GENRES))
+    view_platforms = property(lambda self: self._ensure_view(ViewId.PLATFORMS))
+    view_franchises = property(lambda self: self._ensure_view(ViewId.FRANCHISES))
+    view_settings = property(lambda self: self._ensure_view(ViewId.SETTINGS))
+    view_category_detail = property(lambda self: self._ensure_view(ViewId.CATEGORY_DETAIL))
+
+    @property
+    def current_view_id(self) -> ViewId:
+        widget = self.stack.currentWidget()
+        for view_id, view in self._views.items():
+            if view is widget:
+                return view_id
+        return ViewId.GAME_ROOM
+
+    # --- navegação ---
+    DYNAMIC_VIEWS = (ViewId.YEARBOOK, ViewId.GENRES, ViewId.PLATFORMS, ViewId.FRANCHISES)
+
     def switch_view(self, index: int):
-        self.previous_nav_index = index
-        self.stack.setCurrentIndex(index)
-        titles = [
-            "🕹️ Game Room",
-            "📋 Fila de Espera",
-            "🟢 Jogos Disponíveis",
-            "🏆 Jogos Zerados",
-            "👑 Jogos Platinados",
-            "📊 Anuário Gamer",
-            "🎨 Gerenciar Gêneros",
-            "🎮 Gerenciar Plataformas",
-            "👾 Gerenciar Séries / Franquias",
-            "📑 Biblioteca de Jogos (Tabela)",
-            "⭐ Lista de Desejos",
-            "⚙️ Configurações"
-        ]
-        if 0 <= index < len(titles):
-            self.view_title_label.setText(titles[index])
+        view_id = ViewId(index)
+        self.previous_nav_index = int(view_id)
+        self.stack.setCurrentWidget(self._ensure_view(view_id) if view_id in self._lazy_factories else self._views[view_id])
+        self.view_title_label.setText(VIEW_META[view_id].title)
+        self.sidebar.set_current_index(int(view_id))
 
         # Limpa filtros de busca e categorias ao navegar entre as páginas
         self.view_game_room.clear_filters()
-        self.view_queue_grid.clear_filters()
-        self.view_disponiveis_grid.clear_filters()
-        self.view_zerados_grid.clear_filters()
-        self.view_platinados_grid.clear_filters()
-        self.view_wishlist_grid.clear_filters()
+        for _, grid in self._list_grids():
+            grid.clear_filters()
 
-        # Apenas recarrega dados para páginas analíticas ou dinâmicas que dependem de agregação
-        if index == 5:
-            self.view_yearbook.load_data()
-        elif index == 6:
-            self.view_genres.load_data()
-        elif index == 7:
-            self.view_platforms.load_data()
-        elif index == 8:
-            self.view_franchises.load_data()
-        # Todas as outras páginas (Game Room, Fila, Zerados, etc.) utilizam o cache existente instantaneamente!
-
+        # Só telas analíticas/dinâmicas recarregam; as demais usam o cache existente
+        if view_id in self.DYNAMIC_VIEWS:
+            self._views[view_id].load_data()
 
     def open_category_detail(self, category_type: str, item_id: int):
         self.view_category_detail.load_category(category_type, item_id)
-        self.stack.setCurrentIndex(12)
-        self.view_title_label.setText("📋 Detalhes da Categoria")
+        self.stack.setCurrentWidget(self.view_category_detail)
+        self.view_title_label.setText(VIEW_META[ViewId.CATEGORY_DETAIL].title)
 
     def return_from_category_detail(self):
         self.switch_view(self.previous_nav_index)
@@ -302,16 +292,10 @@ class MainWindow(QMainWindow):
             self.view_table.set_games(games)
 
 
-            cur_idx = self.stack.currentIndex()
-            if cur_idx == 5:
-                self.view_yearbook.load_data()
-            elif cur_idx == 6:
-                self.view_genres.load_data()
-            elif cur_idx == 7:
-                self.view_platforms.load_data()
-            elif cur_idx == 8:
-                self.view_franchises.load_data()
-            elif cur_idx == 12 and self.view_category_detail.category_id:
+            current = self.current_view_id
+            if current in self.DYNAMIC_VIEWS:
+                self._views[current].load_data()
+            elif current == ViewId.CATEGORY_DETAIL and self.view_category_detail.category_id:
                 self.view_category_detail.load_category(
                     self.view_category_detail.category_type,
                     self.view_category_detail.category_id

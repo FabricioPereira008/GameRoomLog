@@ -3,8 +3,10 @@ from PySide6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QWidget, QSizePolicy
 )
 from PySide6.QtCore import Signal, Qt, QSettings
-from PySide6.QtGui import QPixmap, QPainter, QColor, QFont, QPainterPath
+from PySide6.QtGui import QPixmap, QPainter, QColor, QPainterPath
 from frontend_desktop.api_client.client import api_client
+from frontend_desktop import icons
+from frontend_desktop.styles.tokens import COLORS
 
 _COVER_PIXMAP_CACHE = {}
 _PLACEHOLDER_CACHE = {}
@@ -61,11 +63,11 @@ def get_cached_placeholder_pixmap(target_width: int, target_height: int) -> QPix
     path = QPainterPath()
     path.addRoundedRect(0, 0, target_width, target_height, 8, 8)
     painter.setClipPath(path)
-    painter.fillPath(path, QColor("#151720"))
-    painter.setPen(QColor("#525875"))
-    font = QFont("Segoe UI", 16)
-    painter.setFont(font)
-    painter.drawText(pixmap.rect(), Qt.AlignCenter, "🎮")
+    painter.fillPath(path, QColor(COLORS["surface_2"]))
+    icon_px = icons.pixmap("gamepad-2", COLORS["text_dim"], 32)
+    painter.drawPixmap(
+        (target_width - 32) // 2, (target_height - 32) // 2, 32, 32, icon_px
+    )
     painter.end()
 
     _PLACEHOLDER_CACHE[cache_key] = pixmap
@@ -115,7 +117,7 @@ class GameCard(QFrame):
         self.cover_label = QLabel()
         self.cover_label.setFixedHeight(self.cover_height)
         self.cover_label.setAlignment(Qt.AlignCenter)
-        self.cover_label.setStyleSheet("background-color: #12131a; border-radius: 8px;")
+        self.cover_label.setProperty("class", "cover")
         
         self.load_cover()
         layout.addWidget(self.cover_label)
@@ -124,10 +126,6 @@ class GameCard(QFrame):
         self.title_label = QLabel(self.game_data.get("title", "Sem Título"))
         self.title_label.setProperty("class", "card-title")
         self.title_label.setWordWrap(True)
-        if self.size_mode == "small":
-            self.title_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #ffffff;")
-        elif self.size_mode == "large":
-            self.title_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff;")
         layout.addWidget(self.title_label)
 
         # Tags: Plataforma e Gênero
@@ -138,15 +136,17 @@ class GameCard(QFrame):
 
         # Meta info: Horas e Nota
         self.meta_layout = QHBoxLayout()
+        self.meta_layout.setSpacing(4)
+        self.hours_icon = QLabel()
+        self.hours_icon.setPixmap(icons.pixmap("clock", COLORS["text_muted"], 12))
+        self.meta_layout.addWidget(self.hours_icon)
         self.hours_label = QLabel()
-        self.hours_label.setStyleSheet("color: #94a1b2; font-size: 11px;")
+        self.hours_label.setProperty("class", "card-meta")
         self.meta_layout.addWidget(self.hours_label)
         self.meta_layout.addStretch()
 
         self.score_label = QLabel()
-        self.score_label.setStyleSheet(
-            "color: #2cb67d; font-weight: bold; font-size: 11px; background-color: #2cb67d22; border: 1px solid #2cb67d55; padding: 2px 6px; border-radius: 4px;"
-        )
+        self.score_label.setProperty("class", "badge-score")
         self.meta_layout.addWidget(self.score_label)
         layout.addLayout(self.meta_layout)
 
@@ -161,10 +161,8 @@ class GameCard(QFrame):
 
         platform = self.game_data.get("platform")
         if platform:
-            plat_badge = QLabel(f"🎮 {platform.get('name')}")
-            plat_badge.setStyleSheet(
-                "background-color: #262938; color: #e2e8f0; border: 1px solid #363b4f; border-radius: 4px; padding: 2px 6px; font-size: 9px;"
-            )
+            plat_badge = QLabel(platform.get("name"))
+            plat_badge.setProperty("class", "badge")
             self.tags_layout.addWidget(plat_badge)
 
         genres = self.game_data.get("genres", [])
@@ -182,20 +180,20 @@ class GameCard(QFrame):
             except Exception:
                 pass
 
-            genre_badge.setStyleSheet(
-                f"background-color: {g_color}; color: {text_color}; border-radius: 4px; padding: 2px 6px; font-size: 9px; font-weight: bold;"
-            )
+            genre_badge.setProperty("class", "badge-genre")
+            # Única cor dinâmica (vem do dado do gênero); forma e tipografia ficam no QSS
+            genre_badge.setStyleSheet(f"background-color: {g_color}; color: {text_color};")
             self.tags_layout.addWidget(genre_badge)
 
         self.tags_layout.addStretch()
 
     def render_meta(self):
         hours = self.game_data.get("played_hours") or self.game_data.get("hltb_hours") or 0.0
-        self.hours_label.setText(f"⏱️ {int(hours)}h")
+        self.hours_label.setText(f"{int(hours)}h")
 
         score = self.game_data.get("score")
         if score is not None:
-            self.score_label.setText(f"⭐ {score:.1f}")
+            self.score_label.setText(f"{score:.1f}")
             self.score_label.setVisible(True)
         else:
             self.score_label.setVisible(False)
@@ -265,29 +263,21 @@ class LoadMoreCard(QFrame):
         # Bloco visual que simula a capa
         cover_box = QFrame()
         cover_box.setFixedHeight(self.cover_height)
-        cover_box.setStyleSheet(
-            "background-color: #171a29; border: 2px dashed #475569; border-radius: 8px;"
-        )
         box_layout = QVBoxLayout(cover_box)
         box_layout.setAlignment(Qt.AlignCenter)
         box_layout.setSpacing(6)
 
-        plus_icon = QLabel("+")
+        plus_icon = QLabel()
         plus_icon.setAlignment(Qt.AlignCenter)
-        plus_icon.setStyleSheet("color: #a78bfa; font-size: 40px; font-weight: bold;")
+        plus_icon.setPixmap(icons.pixmap("plus", COLORS["accent_text"], 28))
         box_layout.addWidget(plus_icon)
 
-        more_text = QLabel("Carregar Mais")
+        more_text = QLabel("Carregar mais")
         more_text.setAlignment(Qt.AlignCenter)
-        more_text.setStyleSheet("color: #cbd5e1; font-size: 11px; font-weight: bold;")
+        more_text.setProperty("class", "load-more-title")
         box_layout.addWidget(more_text)
 
         layout.addWidget(cover_box)
-
-        footer_label = QLabel("Mostrar mais")
-        footer_label.setAlignment(Qt.AlignCenter)
-        footer_label.setStyleSheet("color: #64748b; font-size: 10px;")
-        layout.addWidget(footer_label)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:

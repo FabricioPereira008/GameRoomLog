@@ -6,10 +6,12 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QRadioButton, QButtonGroup,
     QLineEdit, QPushButton, QFrame, QMessageBox, QGroupBox, QFileDialog, QCheckBox,
-    QApplication, QProgressBar
+    QApplication, QProgressBar, QScrollArea
 )
 from PySide6.QtCore import Signal, Qt, QSettings, QThread
 from frontend_desktop.api_client.client import api_client
+from frontend_desktop.styles.tokens import COLORS
+from frontend_desktop.ui_helpers import set_button_icon, set_status
 
 logger = logging.getLogger(__name__)
 
@@ -69,12 +71,23 @@ class SettingsView(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(24, 20, 24, 20)
+        # Conteúdo rolável: em janelas baixas os grupos não são espremidos
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        container = QWidget()
+        container.setObjectName("settingsScrollContainer")
+        scroll.setWidget(container)
+        outer_layout.addWidget(scroll)
+
+        main_layout = QVBoxLayout(container)
+        main_layout.setContentsMargins(8, 8, 16, 20)
         main_layout.setSpacing(20)
         main_layout.setAlignment(Qt.AlignTop)
 
-        title = QLabel("⚙️ Configurações do Aplicativo")
+        title = QLabel("Configurações")
         title.setProperty("class", "view-title-large")
         main_layout.addWidget(title)
 
@@ -97,7 +110,8 @@ class SettingsView(QWidget):
         self.chk_auto_covers.setChecked(True)
         import_layout.addWidget(self.chk_auto_covers)
 
-        btn_import = QPushButton("📦 Selecionar Pasta do Notion e Iniciar Importação")
+        btn_import = QPushButton("Selecionar pasta do Notion e importar")
+        set_button_icon(btn_import, "upload", COLORS["on_accent"])
         btn_import.setProperty("class", "action-btn")
         btn_import.setCursor(Qt.PointingHandCursor)
         btn_import.clicked.connect(self.on_import_notion)
@@ -136,13 +150,15 @@ class SettingsView(QWidget):
 
         # Controles de Busca em Lote
         batch_btn_layout = QHBoxLayout()
-        self.btn_batch_covers = QPushButton("🖼️ Buscar Capas Faltantes em Lote")
+        self.btn_batch_covers = QPushButton("Buscar capas faltantes em lote")
+        set_button_icon(self.btn_batch_covers, "image", COLORS["on_accent"])
         self.btn_batch_covers.setProperty("class", "action-btn")
         self.btn_batch_covers.setCursor(Qt.PointingHandCursor)
         self.btn_batch_covers.clicked.connect(self.start_batch_cover_fetch)
         batch_btn_layout.addWidget(self.btn_batch_covers)
 
-        self.btn_stop_covers = QPushButton("⏹️ Parar Busca")
+        self.btn_stop_covers = QPushButton("Parar busca")
+        set_button_icon(self.btn_stop_covers, "pause", COLORS["text"])
         self.btn_stop_covers.setProperty("class", "cancel-btn")
         self.btn_stop_covers.setCursor(Qt.PointingHandCursor)
         self.btn_stop_covers.setVisible(False)
@@ -172,9 +188,9 @@ class SettingsView(QWidget):
 
         self.size_button_group = QButtonGroup(self)
         
-        self.rb_small = QRadioButton("Pequeno (165px) — Mais cards visíveis por linha")
-        self.rb_medium = QRadioButton("Médio (215px) — Padrão balanceado")
-        self.rb_large = QRadioButton("Grande (270px) — Capas em destaque")
+        self.rb_small = QRadioButton("Pequeno (130px) — Mais cards visíveis por linha")
+        self.rb_medium = QRadioButton("Médio (170px) — Padrão balanceado")
+        self.rb_large = QRadioButton("Grande (230px) — Capas em destaque")
 
         self.size_button_group.addButton(self.rb_small, 0)
         self.size_button_group.addButton(self.rb_medium, 1)
@@ -236,15 +252,15 @@ class SettingsView(QWidget):
 
             msg = (
                 f"<b>Importação do Notion Concluída!</b><br><br>"
-                f"🎮 Total de jogos encontrados no CSV: <b>{total}</b><br>"
-                f"✨ Novos jogos cadastrados: <b>{imported}</b><br>"
-                f"🔄 Jogos já existentes atualizados: <b>{updated}</b><br>"
+                f"Total de jogos encontrados no CSV: <b>{total}</b><br>"
+                f"Novos jogos cadastrados: <b>{imported}</b><br>"
+                f"Jogos já existentes atualizados: <b>{updated}</b><br>"
             )
             if auto_covers and queue > 0:
-                msg += f"🖼️ Busca de capas iniciada em lote para <b>{queue} jogos</b>.<br>"
+                msg += f"Busca de capas iniciada em lote para <b>{queue} jogos</b>.<br>"
 
             if errors:
-                msg += f"<br><small style='color: #f87171;'>Ocorreram {len(errors)} avisos não impeditivos.</small>"
+                msg += f"<br><small>Ocorreram {len(errors)} avisos não impeditivos.</small>"
 
             QMessageBox.information(self, "Sucesso", msg)
             self.data_imported.emit()
@@ -284,8 +300,7 @@ class SettingsView(QWidget):
         if total > 0:
             pct = int((current / total) * 100)
             self.cover_progress_bar.setValue(pct)
-            status_icon = "✅" if success else "⚠️"
-            self.lbl_cover_status.setText(f"{status_icon} [{current}/{total}] {title}")
+            set_status(self.lbl_cover_status, "ok" if success else "error", f"[{current}/{total}] {title}")
 
     def on_cover_batch_finished(self, total: int, success_count: int):
         self.btn_batch_covers.setEnabled(True)

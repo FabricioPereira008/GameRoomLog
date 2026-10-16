@@ -1,130 +1,42 @@
 import logging
-from app_logging import setup_logging
 import sys
-import os
-from pathlib import Path
+
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QKeySequence, QShortcut, QPalette, QColor
+
+from app_logging import setup_logging
+from frontend_desktop.theme import apply_theme, setup_live_stylesheet
 from frontend_desktop.views.main_window import MainWindow
-from frontend_desktop.api_client.client import api_client
 
 logger = logging.getLogger(__name__)
 
 
-def set_dark_palette(app: QApplication):
-    """Configura paleta escura padrão para garantir consistência no Windows, macOS e Linux."""
-    palette = QPalette()
-    dark_bg = QColor("#0d0e14")
-    card_bg = QColor("#12141d")
-    input_bg = QColor("#1c2030")
-    text_color = QColor("#f1f5f9")
-    disabled_text = QColor("#64748b")
-    accent_purple = QColor("#7f5af0")
-
-    palette.setColor(QPalette.Window, dark_bg)
-    palette.setColor(QPalette.WindowText, text_color)
-    palette.setColor(QPalette.Base, input_bg)
-    palette.setColor(QPalette.AlternateBase, card_bg)
-    palette.setColor(QPalette.ToolTipBase, card_bg)
-    palette.setColor(QPalette.ToolTipText, text_color)
-    palette.setColor(QPalette.Text, text_color)
-    palette.setColor(QPalette.Button, card_bg)
-    palette.setColor(QPalette.ButtonText, text_color)
-    palette.setColor(QPalette.BrightText, QColor("#ffffff"))
-    palette.setColor(QPalette.Link, accent_purple)
-    palette.setColor(QPalette.Highlight, accent_purple)
-    palette.setColor(QPalette.HighlightedText, QColor("#ffffff"))
-    
-    # Cores desabilitadas
-    palette.setColor(QPalette.Disabled, QPalette.WindowText, disabled_text)
-    palette.setColor(QPalette.Disabled, QPalette.Text, disabled_text)
-    palette.setColor(QPalette.Disabled, QPalette.ButtonText, disabled_text)
-    
-    app.setPalette(palette)
-
-def get_qss_path() -> Path:
-
-    if hasattr(sys, "_MEIPASS"):
-        base = Path(sys._MEIPASS)
-        for cand in [
-            base / "frontend_desktop" / "styles" / "dark_theme.qss",
-            base / "styles" / "dark_theme.qss",
-            base / "dark_theme.qss"
-        ]:
-            if cand.exists():
-                return cand
-    return Path(__file__).parent / "styles" / "dark_theme.qss"
-
-def setup_live_stylesheet(app: QApplication):
-    qss_path = get_qss_path()
-    last_mtime = [0.0]
+def create_app() -> QApplication:
+    """Cria a QApplication já com tema, fontes e live reload (dev)."""
+    app = QApplication(sys.argv)
+    app.setApplicationName("GameRoomLog")
+    app.setOrganizationName("GameRoom")
+    apply_theme(app)
+    setup_live_stylesheet(app)
+    return app
 
 
-    def reload_qss():
-        if not qss_path.exists():
-            return
-        try:
-            current_mtime = os.path.getmtime(qss_path)
-            if current_mtime != last_mtime[0]:
-                last_mtime[0] = current_mtime
-                with open(qss_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                
-                # Resetar e reaplicar para forçar recálculo completo
-                app.setStyleSheet("")
-                app.setStyleSheet(content)
-                
-                # Forçar repolimento em todos os widgets abertos na tela
-                for widget in app.allWidgets():
-                    widget.style().unpolish(widget)
-                    widget.style().polish(widget)
-                    widget.update()
-                
-                logger.info("[QSS Live Reload] Estilos atualizados")
-        except Exception as e:
-            logger.warning("[QSS Live Reload] Erro ao ler estilos: %s", e)
+def create_main_window(app: QApplication) -> MainWindow:
+    window = MainWindow()
+    # F5 recarrega os estilos manualmente (útil em desenvolvimento)
+    shortcut_f5 = QShortcut(QKeySequence("F5"), window)
+    shortcut_f5.activated.connect(lambda: getattr(app, "_force_reload_qss", lambda: None)())
+    return window
 
-    # Primeira carga
-    reload_qss()
-
-    app._force_reload_qss = reload_qss
-
-    # Em builds empacotados o QSS é fixo: sem polling de arquivo
-    if getattr(sys, "frozen", False):
-        return
-
-    # Timer com verificação de mtime a cada 200ms
-    timer = QTimer()
-    timer.setInterval(200)
-    timer.timeout.connect(reload_qss)
-    timer.start()
-    app._qss_timer = timer
 
 def main():
     setup_logging()
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    set_dark_palette(app)
-    app.setApplicationName("GameRoomLog")
-    app.setOrganizationName("GameRoom")
-
-
-    # Ativar Live Reload da folha de estilos
-    setup_live_stylesheet(app)
-
-    # Verificação não-bloqueante do Backend (sem pop-up irritante)
-    if not api_client.is_backend_online():
-        logger.warning("Backend offline em %s. Abrindo interface em modo offline...", api_client.server_url)
-
-    window = MainWindow()
-    
-    # Atalho F5 para recarregar estilos manualmente a qualquer momento
-    shortcut_f5 = QShortcut(QKeySequence("F5"), window)
-    shortcut_f5.activated.connect(lambda: getattr(app, "_force_reload_qss", lambda: None)())
-
+    app = create_app()
+    # Se o backend estiver offline, a janela abre e a barra de status informa (carregamento é assíncrono)
+    window = create_main_window(app)
     window.show()
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()

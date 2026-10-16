@@ -9,6 +9,8 @@ from PySide6.QtGui import QPixmap
 from datetime import date
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.workers import run_async
+from frontend_desktop.styles.tokens import COLORS
+from frontend_desktop.ui_helpers import set_button_icon, set_status
 
 from pathlib import Path
 
@@ -222,7 +224,7 @@ class GameDialog(QDialog):
         format_layout.setSpacing(12)
         self.combo_format = QComboBox()
         self.combo_format.addItems(["Digital", "Físico", "Emulado"])
-        self.chk_favorite = QCheckBox("⭐ Favorito")
+        self.chk_favorite = QCheckBox("Favorito")
         format_layout.addWidget(self.combo_format)
         format_layout.addWidget(self.chk_favorite)
         format_layout.addStretch()
@@ -234,16 +236,22 @@ class GameDialog(QDialog):
         cover_layout = QHBoxLayout()
         cover_layout.setSpacing(6)
 
-        self.btn_auto_cover = QPushButton("🤖 Buscar Automático")
+        self.btn_auto_cover = QPushButton("Buscar automático")
+
+        set_button_icon(self.btn_auto_cover, "wand-sparkles")
         self.btn_auto_cover.setProperty("class", "small-btn")
         self.btn_auto_cover.setToolTip("Pesquisa e baixa a capa automaticamente pelo título do jogo")
         self.btn_auto_cover.clicked.connect(self.auto_search_cover)
 
-        self.btn_url_cover = QPushButton("🔗 Link / URL...")
+        self.btn_url_cover = QPushButton("Link / URL…")
+
+        set_button_icon(self.btn_url_cover, "link")
         self.btn_url_cover.setProperty("class", "small-btn")
         self.btn_url_cover.clicked.connect(self.choose_cover_url)
 
-        self.btn_select_cover = QPushButton("📁 Arquivo...")
+        self.btn_select_cover = QPushButton("Arquivo…")
+
+        set_button_icon(self.btn_select_cover, "folder-open")
         self.btn_select_cover.setProperty("class", "small-btn")
         self.btn_select_cover.clicked.connect(self.choose_cover_image)
 
@@ -256,16 +264,18 @@ class GameDialog(QDialog):
         cover_preview_layout = QHBoxLayout()
         self.lbl_cover_preview = QLabel()
         self.lbl_cover_preview.setFixedSize(120, 180)
-        self.lbl_cover_preview.setStyleSheet("background-color: #161824; border: 1.5px dashed #3c435f; border-radius: 6px;")
+        self.lbl_cover_preview.setProperty("class", "cover-preview")
         self.lbl_cover_preview.setAlignment(Qt.AlignCenter)
         self.lbl_cover_preview.setText("Sem\nCapa")
         
         preview_info_layout = QVBoxLayout()
         self.lbl_cover_status = QLabel("Nenhuma imagem selecionada")
-        self.lbl_cover_status.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        self.lbl_cover_status.setProperty("class", "status-muted")
         self.lbl_cover_status.setWordWrap(True)
         
-        self.btn_edit_cover = QPushButton("✂️ Ajustar Recorte")
+        self.btn_edit_cover = QPushButton("Ajustar recorte")
+        
+        set_button_icon(self.btn_edit_cover, "crop")
         self.btn_edit_cover.setProperty("class", "small-btn")
         self.btn_edit_cover.setVisible(False)
         self.btn_edit_cover.clicked.connect(self.open_image_cropper)
@@ -290,7 +300,8 @@ class GameDialog(QDialog):
     def _build_action_buttons(self, main_layout):
         btn_box = QHBoxLayout()
         if self.is_edit:
-            self.btn_delete = QPushButton("🗑️ Excluir Jogo")
+            self.btn_delete = QPushButton("Excluir jogo")
+            set_button_icon(self.btn_delete, "trash-2", COLORS["danger"])
             self.btn_delete.setProperty("class", "delete-btn")
             self.btn_delete.clicked.connect(self.delete_game)
             btn_box.addWidget(self.btn_delete)
@@ -388,7 +399,7 @@ class GameDialog(QDialog):
         logger.error("Erro ao carregar opções: %s", message)
         self.btn_save.setEnabled(True)
         self.populate_data()
-        self.lbl_cover_status.setText("Não foi possível carregar as listas (API offline?).")
+        set_status(self.lbl_cover_status, "error", "Não foi possível carregar as listas (API offline?).")
 
     def populate_data(self):
         if not self.is_edit:
@@ -470,7 +481,7 @@ class GameDialog(QDialog):
 
         self.btn_auto_cover.setEnabled(False)
         self.btn_auto_cover.setText("Buscando...")
-        self.lbl_cover_status.setText("Pesquisando nos repositórios...")
+        set_status(self.lbl_cover_status, "muted", "Pesquisando nos repositórios...")
 
         sgdb_key = QSettings("GameRoom", "GameRoomLog").value("steamgriddb_key", "")
         run_async(
@@ -482,16 +493,14 @@ class GameDialog(QDialog):
 
     def _on_auto_cover_done(self, title: str, filename):
         self.btn_auto_cover.setEnabled(True)
-        self.btn_auto_cover.setText("🤖 Buscar Automático")
+        self.btn_auto_cover.setText("Buscar automático")
 
         if filename:
             self.cover_filename = filename
-            self.lbl_cover_status.setText(f"✓ Capa baixada com sucesso: {filename[:12]}...")
-            self.lbl_cover_status.setStyleSheet("color: #2cb67d; font-size: 11px;")
+            set_status(self.lbl_cover_status, "ok", f"Capa baixada com sucesso: {filename[:12]}...")
             self.update_cover_preview()
         else:
-            self.lbl_cover_status.setText("Capa não encontrada automaticamente.")
-            self.lbl_cover_status.setStyleSheet("color: #fc8181; font-size: 11px;")
+            set_status(self.lbl_cover_status, "error", "Capa não encontrada automaticamente.")
             QMessageBox.warning(
                 self, "Não Encontrado",
                 f"Não foi possível encontrar automaticamente uma capa para '{title}'.\nVocê pode colar o link direto da imagem pelo botão 'Link / URL'."
@@ -505,8 +514,7 @@ class GameDialog(QDialog):
             filename = api_client.upload_cover(file_path)
             if filename:
                 self.cover_filename = filename
-                self.lbl_cover_status.setText(f"✓ Imagem: {filename[:12]}...")
-                self.lbl_cover_status.setStyleSheet("color: #2cb67d; font-size: 11px;")
+                set_status(self.lbl_cover_status, "ok", f"Imagem: {filename[:12]}...")
                 self.update_cover_preview()
                 self.open_image_cropper()
             else:
@@ -518,8 +526,7 @@ class GameDialog(QDialog):
             filename = api_client.upload_cover_url(url.strip())
             if filename:
                 self.cover_filename = filename
-                self.lbl_cover_status.setText(f"✓ Baixado: {filename[:12]}...")
-                self.lbl_cover_status.setStyleSheet("color: #2cb67d; font-size: 11px;")
+                set_status(self.lbl_cover_status, "ok", f"Baixado: {filename[:12]}...")
                 self.update_cover_preview()
                 self.open_image_cropper()
             else:
@@ -575,7 +582,7 @@ class GameDialog(QDialog):
             if crop_filename:
                 self.cover_filename = crop_filename
                 self.update_cover_preview()
-                self.lbl_cover_status.setText(f"✓ Recorte salvo: {crop_filename[:12]}...")
+                set_status(self.lbl_cover_status, "ok", f"Recorte salvo: {crop_filename[:12]}...")
                 
                 # Cleanup: deletar temp file local se quiser
                 try:
