@@ -5,6 +5,25 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.3.0] - 2026-10-16
+### Adicionado
+- Nova interface: design system com tokens (cores, raios, tipografia), fonte Inter embutida e ícones SVG no lugar dos emojis; sidebar com seções e itens ativos destacados.
+- Grades de jogos virtualizadas (model/view com delegate): carregar e filtrar 600 jogos leva poucos milissegundos; capas carregadas em segundo plano com cache limitado.
+- Biblioteca em tabela ordenável por coluna (ordenação numérica) e status coloridos.
+- Migrações de banco com Alembic (bancos existentes são adotados sem perda de dados).
+- Salvar, excluir e carregar listas/capas sem travar a interface; logs em arquivo rotativo.
+- CI em push/PR com cobertura mínima de 70%, hook de pré-commit versionado e dependências de build travadas (constraints-build.txt).
+
+### Segurança
+- CORS restrito a origens locais; proteção contra SSRF e limite de tamanho nos downloads de capa; validação de imagens enviadas; chave da SteamGridDB no corpo da requisição.
+
+### Modificado
+- Camada de serviços para gêneros, plataformas, franquias e desenvolvedoras; contagens em consulta única; chaves estrangeiras habilitadas no SQLite; validação de campos (título, notas 0-10, horas).
+- Versão do app centralizada em app_version.py.
+
+### Corrigido
+- Exclusão de jogo agora respeita a resposta do servidor; fallback de data da platina; configurações rolável em janelas baixas; recorte de capa não grava mais no armazenamento do backend.
+
 ## [0.2.4] - 2026-08-24
 ### Adicionado
 - Pipeline de CI/CD automatizado no GitHub Actions para geração de AppImage (Linux) e executáveis .EXE (Windows).
