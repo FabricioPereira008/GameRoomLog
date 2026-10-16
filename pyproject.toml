@@ -1,0 +1,13 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["backend/tests", "frontend_desktop/tests"]
+addopts = "-v"
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`:DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["backend/app", "frontend_desktop"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true

@@ -10,9 +10,15 @@ BASE_DIR = os.path.abspath(SPECPATH if 'SPECPATH' in locals() else os.getcwd())
 added_datas = [
     (os.path.join(BASE_DIR, 'frontend_desktop', 'styles', 'dark_theme.qss'), os.path.join('frontend_desktop', 'styles')),
     (os.path.join(BASE_DIR, 'resources'), 'resources'),
+    (os.path.join(BASE_DIR, 'backend', 'migrations'), os.path.join('backend', 'migrations')),
 ]
 
 hidden_imports = [
+    'alembic',
+    'alembic.runtime.migration',
+    'alembic.script',
+    'app_version',
+    'app_logging',
     'uvicorn',
     'uvicorn.logging',
     'uvicorn.loops',
@@ -84,11 +90,12 @@ exe = EXE(
     a.datas,
     [],
     name='gameroomlog',
-    icon='resources/icon.png' if os.path.exists(os.path.join(BASE_DIR, 'resources', 'icon.png')) else None,
+    # Windows exige .ico; no Linux o ícone vem do .desktop/AppImage
+    icon=os.path.join(BASE_DIR, 'resources', 'icon.ico') if sys.platform == 'win32' and os.path.exists(os.path.join(BASE_DIR, 'resources', 'icon.ico')) else None,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,  # UPX costuma corromper binários do Qt
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

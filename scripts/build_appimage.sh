@@ -14,7 +14,7 @@ if [ -d "venv" ]; then
 fi
 
 echo "1. Instalando / Verificando dependências de build..."
-$PYTHON_BIN -m pip install --upgrade pip pyinstaller
+$PYTHON_BIN -m pip install -r requirements-build.txt -c constraints-build.txt
 
 echo "2. Compilando o binário unificado com PyInstaller..."
 $PYTHON_BIN -m PyInstaller --clean gameroomlog.spec

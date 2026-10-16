@@ -6,7 +6,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![PySide6](https://img.shields.io/badge/PySide6-Qt6-41CD52?style=for-the-badge&logo=qt&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
-![Pytest](https://img.shields.io/badge/Tests-36%20Passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)
+![Pytest](https://img.shields.io/badge/Tests-107%20Passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 **Seu gerenciador pessoal de backlog de jogos, histórico de gameplay e anuário gamer definitivo.**
@@ -29,7 +29,7 @@ O **GameRoomLog** é um aplicativo desktop nativo e moderno desenvolvido para ge
 - ⚡ **Performance Zero-Stutter:** Cache inteligente em memória para capas (`QPixmap`), rolagem antecipada suave e carregamento sob demanda em lotes dinâmicos.
 - 🏷️ **Gestão Completa de Categorias:** Organização por Plataformas, Gêneros, Desenvolvedoras e Franquias com autocompletar inteligente e auto-criação.
 - 📦 **Importador do Notion:** Migre facilmente seu banco de dados anterior do Notion (CSV/Markdown) com detecção automática de capas e metadados.
-- 🧪 **100% Testado:** Suíte com 36 testes automatizados (Backend, Mock de Frontend e Testes de Performance em milissegundos).
+- 🧪 **Bem testado:** 107 testes automatizados (API, services, migrações, segurança de uploads, ApiClient, janelas assíncronas e performance), com ~78% de cobertura e mínimo de 70% exigido no CI.
 
 ---
 
@@ -96,8 +96,7 @@ venv\Scripts\activate.bat
 
 ```bash
 pip install --upgrade pip
-pip install -r backend/requirements.txt
-pip install -r frontend_desktop/requirements.txt
+pip install -r requirements-dev.txt   # runtime + testes (para só rodar o app: backend/ e frontend_desktop/requirements.txt)
 ```
 
 ---
@@ -142,7 +141,7 @@ pytest --cov=backend/app --cov=frontend_desktop/api_client --cov-report=term-mis
 ```
 
 ### Hook de Pré-Commit
-O repositório já inclui validação automática pré-commit (`.git/hooks/pre-commit`). Commits serão bloqueados automaticamente caso algum teste falhe.
+O repositório traz o hook de pré-commit em `scripts/pre-commit`. Instale-o uma vez com `./scripts/install-hooks.sh`; depois disso, commits são bloqueados automaticamente caso algum teste falhe. O CI (`.github/workflows/ci.yml`) roda os testes e a cobertura mínima a cada push e pull request.
 
 ---
 
@@ -188,7 +187,8 @@ GameRoomLog/
 ├── desktop_launcher.py       # Inicializador unificado para desktop
 ├── gameroomlog.spec          # Configuração de empacotamento PyInstaller
 ├── CHANGELOG.md              # Histórico de versões (Keep a Changelog)
-├── pytest.ini                # Configuração do Pytest
+├── pyproject.toml            # Configuração do Pytest e da cobertura
+├── app_version.py            # Fonte única da versão
 └── run_all.py                # Inicializador conjunto para desenvolvimento
 ```
 
