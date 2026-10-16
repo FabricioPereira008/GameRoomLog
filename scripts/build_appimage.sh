@@ -52,7 +52,7 @@ echo "4. Gerando o arquivo .AppImage com appimagetool..."
 APPIMAGETOOL="$PROJECT_DIR/dist/appimagetool"
 if [ ! -f "$APPIMAGETOOL" ]; then
     echo "Baixando appimagetool..."
-    wget -q -O "$APPIMAGETOOL" https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage || \
+    # appimagetool atual (runtime estático, funciona com FUSE 3 ou sem FUSE)
     wget -q -O "$APPIMAGETOOL" https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
     chmod +x "$APPIMAGETOOL"
 fi

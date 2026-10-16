@@ -89,12 +89,27 @@ jobs:
           EOF
           chmod +x dist/AppDir/AppRun
 
-          wget -q -O dist/appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage || \
+          # appimagetool atual (runtime estático): roda com FUSE 3 ou sem FUSE.
+          # O AppImageKit "continuous" antigo gera runtime que exige libfuse.so.2 e não abre em distros sem ela.
           wget -q -O dist/appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x dist/appimagetool
 
           ARCH=x86_64 dist/appimagetool --appimage-extract-and-run dist/AppDir dist/GameRoomLog-x86_64.AppImage
           chmod +x dist/GameRoomLog-x86_64.AppImage
+
+      - name: Verificar runtime do AppImage (estático, sem exigir libfuse.so.2)
+        run: |
+          # Runtime antigo (AppImageKit): ligado dinamicamente e faz dlopen de libfuse.so.2.
+          # Runtime atual: estático (nenhuma biblioteca NEEDED) e compatível com FUSE 3.
+          if readelf -d dist/GameRoomLog-x86_64.AppImage 2>/dev/null | grep -q "(NEEDED)"; then
+            echo "::error::Runtime do AppImage ligado dinamicamente (provável dependência de libfuse.so.2); use o appimagetool atual."
+            exit 1
+          fi
+          # O app deve iniciar a partir do AppImage extraído (smoke test headless)
+          dist/GameRoomLog-x86_64.AppImage --appimage-extract >/dev/null
+          GAMEROOM_DATA_DIR="$RUNNER_TEMP/gr-data" QT_QPA_PLATFORM=offscreen timeout 20 squashfs-root/AppRun > smoke.log 2>&1 || true
+          cat smoke.log
+          grep -q "Backend FastAPI pronto" smoke.log
 
       - name: Salvar Artefato AppImage
         uses: actions/upload-artifact@v4
