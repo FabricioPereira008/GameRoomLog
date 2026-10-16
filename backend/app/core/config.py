@@ -1,6 +1,7 @@
 import sys
 import os
 from pathlib import Path
+from app_version import __version__
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 def get_base_data_dir() -> Path:
@@ -34,7 +35,7 @@ _BASE_DATA_DIR = get_base_data_dir()
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "GameRoomLog API"
-    VERSION: str = "0.2.4"
+    VERSION: str = __version__
     API_V1_STR: str = "/api/v1"
     
     BASE_DIR: Path = _BASE_DATA_DIR
@@ -44,8 +45,13 @@ class Settings(BaseSettings):
     COVERS_DIR: Path = _BASE_DATA_DIR / "storage" / "covers"
     
     STEAMGRIDDB_API_KEY: str = ""
-    
-    model_config = SettingsConfigDict(case_sensitive=True)
+
+    # Origens web autorizadas via CORS (o cliente desktop não depende de CORS)
+    CORS_ORIGINS: list[str] = ["http://127.0.0.1:8000", "http://localhost:8000"]
+    # Tamanho máximo de imagens de capa (upload ou download), em bytes
+    MAX_COVER_BYTES: int = 10 * 1024 * 1024
+
+    model_config = SettingsConfigDict(case_sensitive=True, env_file=".env", extra="ignore")
 
 settings = Settings()
 

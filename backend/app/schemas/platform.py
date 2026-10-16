@@ -1,15 +1,15 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 
 class PlatformBase(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=100)
     icon_name: Optional[str] = None
 
 class PlatformCreate(PlatformBase):
     pass
 
 class PlatformUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     icon_name: Optional[str] = None
 
 class PlatformResponse(PlatformBase):

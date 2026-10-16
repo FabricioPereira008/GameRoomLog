@@ -1,24 +1,21 @@
 import csv
+import logging
 import re
-import os
-import io
-import uuid
-import urllib.parse
 import threading
 from pathlib import Path
 from datetime import datetime, date
 from typing import Dict, Any, List, Optional, Tuple
-import httpx
-from PIL import Image, ImageFilter
 from sqlalchemy.orm import Session
 
-from backend.app.core.config import settings
 from backend.app.models.game import Game, GameStatus, PlayType, GameFormat
 from backend.app.models.genre import Genre
 from backend.app.models.platform import Platform
 from backend.app.models.franchise import Franchise
 from backend.app.models.developer import Developer
 from backend.app.core.database import SessionLocal
+from backend.app.services.cover_service import find_cover_sync
+
+logger = logging.getLogger(__name__)
 
 MONTHS_PT = {
     "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3,
@@ -144,142 +141,6 @@ def sanitize_filename_for_lookup(name: str) -> str:
     """Remove caracteres especiais para busca aproximada de arquivos .md."""
     return re.sub(r"[^\w\s]", "", name).lower().strip()
 
-def extract_markdown_notes(md_file_path: Path) -> str:
-    """Lê o arquivo .md de uma subpágina e extrai o corpo do texto após as propriedades."""
-    try:
-        with open(md_file_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-
-        start_idx = 0
-        for i, line in enumerate(lines):
-            if line.startswith("# "):
-                start_idx = i + 1
-                break
-
-        in_properties = True
-        notes_start = start_idx
-        for i in range(start_idx, len(lines)):
-            line = lines[i].strip()
-            if not line:
-                if in_properties:
-                    continue
-            elif ":" in line and in_properties:
-                pass
-            else:
-                notes_start = i
-                break
-
-        notes = "".join(lines[notes_start:]).strip()
-        return notes
-    except Exception as e:
-        print(f"Erro ao extrair notas de {md_file_path}:", e)
-        return ""
-
-def process_cover_image(img_bytes: bytes) -> tuple[bytes, str]:
-    """Processa a imagem para garantir o formato vertical 600x900."""
-    try:
-        img = Image.open(io.BytesIO(img_bytes))
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGBA")
-        else:
-            img = img.convert("RGB")
-
-        w, h = img.size
-        current_ratio = w / h
-
-        if 0.55 <= current_ratio <= 0.78:
-            out_io = io.BytesIO()
-            img.convert("RGB").save(out_io, format="JPEG", quality=92)
-            return out_io.getvalue(), ".jpg"
-
-        target_w, target_h = 600, 900
-        bg = img.resize((target_w, target_h), Image.Resampling.BILINEAR)
-        bg = bg.filter(ImageFilter.GaussianBlur(radius=25))
-        dark_overlay = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 80))
-        bg = Image.alpha_composite(bg.convert("RGBA"), dark_overlay)
-
-        fit_scale = target_w / w
-        fit_w = target_w
-        fit_h = int(h * fit_scale)
-        if fit_h > target_h:
-            fit_scale = target_h / h
-            fit_h = target_h
-            fit_w = int(w * fit_scale)
-
-        fg = img.resize((fit_w, fit_h), Image.Resampling.LANCZOS)
-        paste_x = (target_w - fit_w) // 2
-        paste_y = (target_h - fit_h) // 2
-
-        bg.paste(fg, (paste_x, paste_y), fg if fg.mode == "RGBA" else None)
-
-        out_io = io.BytesIO()
-        bg.convert("RGB").save(out_io, format="JPEG", quality=92)
-        return out_io.getvalue(), ".jpg"
-    except Exception:
-        return img_bytes, ".jpg"
-
-def fetch_and_save_cover_sync(title: str) -> Optional[str]:
-    """Busca automaticamente a capa de um jogo e salva no diretório de covers."""
-    api_key = settings.STEAMGRIDDB_API_KEY
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-
-    with httpx.Client(timeout=10.0, follow_redirects=True) as client:
-        # 1. SteamGridDB
-        if api_key:
-            try:
-                sgdb_headers = {"Authorization": f"Bearer {api_key}"}
-                encoded_title = urllib.parse.quote(title)
-                search_url = f"https://www.steamgriddb.com/api/v2/search/autocomplete/{encoded_title}"
-                search_res = client.get(search_url, headers=sgdb_headers)
-                if search_res.status_code == 200:
-                    data = search_res.json().get("data", [])
-                    if data:
-                        game_id = data[0].get("id")
-                        grids_url = f"https://www.steamgriddb.com/api/v2/grids/game/{game_id}?dimensions=600x900"
-                        grids_res = client.get(grids_url, headers=sgdb_headers)
-                        if grids_res.status_code == 200 and grids_res.json().get("data"):
-                            img_url = grids_res.json().get("data")[0].get("url")
-                            img_resp = client.get(img_url, headers=headers)
-                            if img_resp.status_code == 200:
-                                processed, ext = process_cover_image(img_resp.content)
-                                fn = f"{uuid.uuid4()}{ext}"
-                                with open(settings.COVERS_DIR / fn, "wb") as f:
-                                    f.write(processed)
-                                return fn
-            except Exception:
-                pass
-
-        # 2. Steam Store Public Search
-        try:
-            encoded_title = urllib.parse.quote(title)
-            steam_search_url = f"https://store.steampowered.com/api/storesearch/?term={encoded_title}&l=portuguese&cc=BR"
-            resp = client.get(steam_search_url, headers=headers)
-            if resp.status_code == 200:
-                items = resp.json().get("items", [])
-                if items:
-                    app_id = items[0].get("id")
-                    candidate_urls = [
-                        f"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{app_id}/library_600x900_2x.jpg",
-                        f"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{app_id}/library_600x900.jpg",
-                        f"https://steamcdn-a.akamaihd.net/steam/apps/{app_id}/library_600x900_2x.jpg",
-                        f"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{app_id}/header.jpg",
-                    ]
-                    for img_url in candidate_urls:
-                        try:
-                            img_resp = client.get(img_url, headers=headers)
-                            if img_resp.status_code == 200 and len(img_resp.content) > 1500:
-                                processed, ext = process_cover_image(img_resp.content)
-                                fn = f"{uuid.uuid4()}{ext}"
-                                with open(settings.COVERS_DIR / fn, "wb") as f:
-                                    f.write(processed)
-                                return fn
-                        except Exception:
-                            continue
-        except Exception:
-            pass
-
-    return None
-
 def background_fetch_covers_for_games(game_ids: List[int]):
     """Thread em background para buscar capas dos jogos importados sem travar a interface."""
     def worker():
@@ -288,12 +149,12 @@ def background_fetch_covers_for_games(game_ids: List[int]):
             for gid in game_ids:
                 game = db.query(Game).filter(Game.id == gid).first()
                 if game and not game.cover_image:
-                    cover_file = fetch_and_save_cover_sync(game.title)
+                    cover_file = find_cover_sync(game.title)
                     if cover_file:
                         game.cover_image = cover_file
                         db.commit()
         except Exception as e:
-            print("Erro no background cover fetcher:", e)
+            logger.exception("Erro no background cover fetcher")
         finally:
             db.close()
 
@@ -331,19 +192,11 @@ class NotionImporterService:
         if not root.exists() or not root.is_dir():
             raise ValueError(f"O caminho informado não é um diretório válido: {folder_path}")
 
-        csv_file, jogos_dir = NotionImporterService.find_export_files(root)
+        csv_file, _ = NotionImporterService.find_export_files(root)
         if not csv_file or not csv_file.exists():
             raise ValueError(
                 "Não foi encontrado o arquivo de banco de dados 'Jogos.csv' ou 'Jogos_all.csv' no diretório selecionado."
             )
-
-        md_lookup: Dict[str, Path] = {}
-        if jogos_dir and jogos_dir.exists():
-            for md_file in jogos_dir.glob("*.md"):
-                base_name = md_file.stem
-                title_part = re.sub(r"\s+[0-9a-fA-F]{32}$", "", base_name)
-                norm_key = sanitize_filename_for_lookup(title_part)
-                md_lookup[norm_key] = md_file
 
         imported_count = 0
         updated_count = 0
@@ -378,8 +231,6 @@ class NotionImporterService:
 
                 finish_date = parse_notion_date(row.get("Data de Finalização"))
                 platinum_date = parse_notion_date(row.get("Data da Platina"))
-
-                notes = None
 
 
                 # 1. Plataforma
@@ -459,8 +310,6 @@ class NotionImporterService:
                     existing_game.completion_year = completion_year
                     existing_game.play_type = play_type
                     existing_game.play_count = play_count
-                    if notes:
-                        existing_game.notes = notes
                     if genre_obj and genre_obj not in existing_game.genres:
                         existing_game.genres = [genre_obj]
                     
@@ -487,7 +336,6 @@ class NotionImporterService:
                         play_count=play_count,
                         format=GameFormat.DIGITAL,
                         is_favorite=False,
-                        notes=notes if notes else None
                     )
                     if genre_obj:
                         new_game.genres = [genre_obj]

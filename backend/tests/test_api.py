@@ -1,4 +1,5 @@
 import pytest
+from app_version import __version__
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -34,7 +35,7 @@ client = TestClient(app)
 def test_read_root():
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.2.4"
+    assert response.json()["version"] == __version__
 
 def test_genre_crud_and_details():
     # 1. Create
@@ -200,3 +201,58 @@ def test_overall_stats_and_yearbook():
     assert overall["status_counts"]["zerados"] == 1
     assert overall["status_counts"]["platinados"] == 1
     assert overall["total_hours"] == 39.0
+
+
+# --- Categorias: erros, contagens e integridade ---
+CATEGORY_ENDPOINTS = ["genres", "platforms", "franchises", "developers"]
+
+
+@pytest.mark.parametrize("ep", CATEGORY_ENDPOINTS)
+def test_category_empty_name_is_422(ep):
+    assert client.post(f"/api/v1/{ep}/", json={"name": ""}).status_code == 422
+
+
+@pytest.mark.parametrize("ep", CATEGORY_ENDPOINTS)
+def test_category_update_delete_404(ep):
+    assert client.put(f"/api/v1/{ep}/9999", json={"name": "X"}).status_code == 404
+    assert client.delete(f"/api/v1/{ep}/9999").status_code == 404
+
+
+@pytest.mark.parametrize("ep", CATEGORY_ENDPOINTS)
+def test_category_rename_to_existing_is_409(ep):
+    client.post(f"/api/v1/{ep}/", json={"name": "Alpha"})
+    b = client.post(f"/api/v1/{ep}/", json={"name": "Beta"}).json()
+    r = client.put(f"/api/v1/{ep}/{b['id']}", json={"name": "alpha"})
+    assert r.status_code == 409
+
+
+@pytest.mark.parametrize("ep", CATEGORY_ENDPOINTS)
+def test_category_create_is_idempotent_by_name(ep):
+    a = client.post(f"/api/v1/{ep}/", json={"name": "Same"}).json()
+    b = client.post(f"/api/v1/{ep}/", json={"name": "same"}).json()
+    assert a["id"] == b["id"]
+
+
+def test_category_counts_only_completed_and_delete_unlinks_games():
+    plat = client.post("/api/v1/platforms/", json={"name": "PC"}).json()
+    gen = client.post("/api/v1/genres/", json={"name": "RPG"}).json()
+    dev = client.post("/api/v1/developers/", json={"name": "Studio"}).json()
+    fr = client.post("/api/v1/franchises/", json={"name": "Saga"}).json()
+    base = {"platform_id": plat["id"], "genre_ids": [gen["id"]], "developer_id": dev["id"], "franchise_id": fr["id"]}
+    done = client.post("/api/v1/games/", json={**base, "title": "A", "status": "Zerado"}).json()
+    client.post("/api/v1/games/", json={**base, "title": "B", "status": "Fila"})
+
+    for ep, obj in [("platforms", plat), ("genres", gen), ("developers", dev), ("franchises", fr)]:
+        row = next(x for x in client.get(f"/api/v1/{ep}/").json() if x["id"] == obj["id"])
+        assert row["games_count"] == 1, ep
+
+    assert client.delete(f"/api/v1/platforms/{plat['id']}").status_code == 204
+    game = client.get(f"/api/v1/games/{done['id']}").json()
+    assert game["platform_id"] is None
+
+
+def test_game_validation_limits():
+    assert client.post("/api/v1/games/", json={"title": ""}).status_code == 422
+    assert client.post("/api/v1/games/", json={"title": "X", "score": 11}).status_code == 422
+    assert client.post("/api/v1/games/", json={"title": "X", "played_hours": -1}).status_code == 422
+    assert client.post("/api/v1/games/", json={"title": "X", "play_count": 0}).status_code == 422

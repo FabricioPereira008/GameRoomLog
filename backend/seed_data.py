@@ -1,9 +1,10 @@
 from datetime import date
-from backend.app.core.database import SessionLocal, engine, Base
+from backend.app.core.database import SessionLocal, engine
+from backend.app.core.migrations import run_migrations
 from backend.app.models import Game, Genre, Platform, Franchise, GameStatus, PlayType, GameFormat
 
 def seed():
-    Base.metadata.create_all(bind=engine)
+    run_migrations(engine)
     db = SessionLocal()
 
     # Checa se já tem dados

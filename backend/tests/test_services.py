@@ -164,3 +164,34 @@ def test_stats_service_overall_and_yearbook(db):
     assert yearbook_2025.total_platinums == 1
     assert yearbook_2025.total_hours_played == 60.0
     assert yearbook_2025.average_score == 9.5
+
+
+def test_production_engine_enables_foreign_keys():
+    from backend.app.core.database import engine as prod_engine
+    with prod_engine.connect() as conn:
+        assert conn.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+
+
+def test_developer_sync_by_name_creates_and_links(db):
+    g = GameService.create_game(db, GameCreate(title="A", developer="  Nova Studio "))
+    assert g.developer == "Nova Studio" and g.developer_id is not None
+    g2 = GameService.create_game(db, GameCreate(title="B", developer="nova studio"))
+    assert g2.developer_id == g.developer_id
+
+
+def test_developer_sync_id_wins_and_update_paths(db):
+    dev = Developer(name="Oficial")
+    db.add(dev); db.commit()
+    g = GameService.create_game(db, GameCreate(title="A", developer="Qualquer", developer_id=dev.id))
+    assert g.developer == "Oficial"
+
+    other = Developer(name="Outra")
+    db.add(other); db.commit()
+    updated = GameService.update_game(db, g.id, GameUpdate(developer_id=other.id))
+    assert updated.developer == "Outra"  # update só com developer_id sincroniza o nome
+
+    untouched = GameService.update_game(db, g.id, GameUpdate(title="Novo"))
+    assert untouched.developer == "Outra" and untouched.developer_id == other.id  # update parcial não mexe
+
+    cleared = GameService.update_game(db, g.id, GameUpdate(developer=""))
+    assert cleared.developer is None and cleared.developer_id is None

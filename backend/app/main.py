@@ -1,27 +1,44 @@
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from backend.app.core.config import settings
-from backend.app.core.database import engine, Base
+from backend.app.core.database import engine
+from backend.app.core.migrations import run_migrations
 from backend.app.api.v1.api_router import api_router
+from backend.app.services.category_service import CategoryConflictError, CategoryNotFoundError
 
-# Criar tabelas no banco de dados automaticamente se não existirem
-Base.metadata.create_all(bind=engine)
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Cria o schema (banco novo), adota bancos legados e aplica migrações pendentes
+    run_migrations(engine)
+    yield
+
 
 app = FastAPI(
+    lifespan=lifespan,
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description="API do GameRoomLog para gerenciamento de backlog de jogos e anuário"
 )
 
-# Configuração de CORS (liberado para facilitar integrações desktop/mobile)
+# CORS restrito: impede que páginas web arbitrárias chamem a API local
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(CategoryNotFoundError)
+async def category_not_found_handler(request: Request, exc: CategoryNotFoundError):
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+@app.exception_handler(CategoryConflictError)
+async def category_conflict_handler(request: Request, exc: CategoryConflictError):
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 # Montar diretório estático para capas
 app.mount("/static/covers", StaticFiles(directory=settings.COVERS_DIR), name="covers")

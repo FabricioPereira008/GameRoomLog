@@ -75,12 +75,20 @@ class GameService:
         ).filter(Game.id == game_id).first()
 
     @staticmethod
-    def create_game(db: Session, game_in: GameCreate) -> Game:
-        data = game_in.model_dump(exclude={"genre_ids"})
-        
-        # Sincronizar Developer se fornecido como string
+    def _sync_developer(db: Session, data: dict) -> None:
+        """Mantém `developer` (nome) e `developer_id` coerentes; developer_id tem precedência.
+
+        Só age sobre as chaves presentes em `data` (serve para create e update parcial).
+        """
+        if data.get("developer_id"):
+            dev = db.query(Developer).filter(Developer.id == data["developer_id"]).first()
+            if dev:
+                data["developer"] = dev.name
+            return
+        if "developer" not in data and "developer_id" not in data:
+            return
         dev_name = (data.get("developer") or "").strip()
-        if dev_name and not data.get("developer_id"):
+        if dev_name:
             dev = db.query(Developer).filter(Developer.name.ilike(dev_name)).first()
             if not dev:
                 dev = Developer(name=dev_name)
@@ -88,10 +96,15 @@ class GameService:
                 db.flush()
             data["developer_id"] = dev.id
             data["developer"] = dev.name
-        elif data.get("developer_id"):
-            dev = db.query(Developer).filter(Developer.id == data["developer_id"]).first()
-            if dev:
-                data["developer"] = dev.name
+        else:
+            data["developer"] = None
+            data["developer_id"] = None
+
+    @staticmethod
+    def create_game(db: Session, game_in: GameCreate) -> Game:
+        data = game_in.model_dump(exclude={"genre_ids"})
+        
+        GameService._sync_developer(db, data)
 
         # Se preencheu finish_date ou platinum_date mas não completion_year, calcula o ano
         if not data.get("completion_year"):
@@ -122,15 +135,7 @@ class GameService:
         update_data = game_in.model_dump(exclude_unset=True)
         genre_ids = update_data.pop("genre_ids", None)
 
-        dev_name = (update_data.get("developer") or "").strip()
-        if dev_name and not update_data.get("developer_id"):
-            dev = db.query(Developer).filter(Developer.name.ilike(dev_name)).first()
-            if not dev:
-                dev = Developer(name=dev_name)
-                db.add(dev)
-                db.flush()
-            update_data["developer_id"] = dev.id
-            update_data["developer"] = dev.name
+        GameService._sync_developer(db, update_data)
 
         for key, value in update_data.items():
             setattr(db_game, key, value)

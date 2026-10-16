@@ -1,3 +1,4 @@
+from datetime import date
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
@@ -80,7 +81,7 @@ class StatsService:
 
         available_years.sort(reverse=True)
         if not available_years:
-            available_years = [2026]
+            available_years = [date.today().year]
 
         return OverallStats(
             status_counts=status_counts,
