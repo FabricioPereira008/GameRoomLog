@@ -27,7 +27,7 @@ Determine the scope of the new feature:
 Run the automated coverage check helper:
 
 ```bash
-./venv/bin/python .agents/skills/ensure-test-coverage/scripts/check_coverage.py
+./venv/bin/python .claude/skills/ensure-test-coverage/scripts/check_coverage.py
 ```
 Or directly via pytest:
 ```bash

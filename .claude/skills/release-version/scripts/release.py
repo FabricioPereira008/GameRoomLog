@@ -13,14 +13,8 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[4]
 
-FILES_WITH_VERSION = [
-    ROOT_DIR / "backend" / "app" / "core" / "config.py",
-    ROOT_DIR / "backend" / "tests" / "test_api.py",
-    ROOT_DIR / "frontend_desktop" / "tests" / "test_api_client.py",
-    ROOT_DIR / "frontend_desktop" / "views" / "components" / "settings_view.py",
-    ROOT_DIR / "frontend_desktop" / "views" / "components" / "sidebar.py",
-    ROOT_DIR / "frontend_desktop" / "views" / "main_window.py",
-]
+VERSION_FILE = ROOT_DIR / "app_version.py"
+FILES_WITH_VERSION = [VERSION_FILE]  # fonte única; o resto importa de app_version
 
 def run_cmd(cmd, cwd=ROOT_DIR, check=True):
     print(f"⚙️  Executando: {' '.join(cmd) if isinstance(cmd, list) else cmd}")
@@ -31,11 +25,9 @@ def run_cmd(cmd, cwd=ROOT_DIR, check=True):
     return res
 
 def get_current_version():
-    config_file = ROOT_DIR / "backend" / "app" / "core" / "config.py"
-    content = config_file.read_text(encoding="utf-8")
-    m = re.search(r'VERSION:\s*str\s*=\s*"([^"]+)"', content)
+    m = re.search(r'__version__\s*=\s*"([^"]+)"', VERSION_FILE.read_text(encoding="utf-8"))
     if not m:
-        raise ValueError("Não foi possível encontrar a versão atual em config.py")
+        raise ValueError("Não foi possível encontrar __version__ em app_version.py")
     return m.group(1)
 
 def run_tests():
@@ -52,14 +44,10 @@ def run_tests():
 
 def update_version_in_files(old_version, new_version):
     print(f"📝 Atualizando versão de {old_version} para {new_version}...")
-    for f in FILES_WITH_VERSION:
-        if not f.exists():
-            print(f"⚠️ Arquivo não encontrado: {f}")
-            continue
-        text = f.read_text(encoding="utf-8")
-        updated = text.replace(old_version, new_version)
-        f.write_text(updated, encoding="utf-8")
-        print(f"  ✓ {f.relative_to(ROOT_DIR)}")
+    text = VERSION_FILE.read_text(encoding="utf-8")
+    updated = re.sub(r'(__version__\s*=\s*)"[^"]+"', rf'\g<1>"{new_version}"', text, count=1)
+    VERSION_FILE.write_text(updated, encoding="utf-8")
+    print(f"  ✓ {VERSION_FILE.relative_to(ROOT_DIR)}")
 
 def update_changelog(new_version, notes=None):
     changelog_file = ROOT_DIR / "CHANGELOG.md"
@@ -85,7 +73,7 @@ def update_changelog(new_version, notes=None):
 
 def git_commit_and_tag(new_version):
     print("📦 Criando commit e tag no Git...")
-    run_cmd(["git", "add", "."])
+    run_cmd(["git", "add", "CHANGELOG.md"] + [str(f.relative_to(ROOT_DIR)) for f in FILES_WITH_VERSION if f.exists()])
     run_cmd(["git", "commit", "-m", f"chore(release): bump version to v{new_version}"])
     tag_name = f"v{new_version}"
     run_cmd(["git", "tag", "-a", tag_name, "-m", f"Release {tag_name}"])

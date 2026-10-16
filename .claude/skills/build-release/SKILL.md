@@ -54,7 +54,13 @@ Output:
 
 ---
 
-## 4. Key Files
+## 4. Dependências do build
+
+Os builds instalam `requirements-build.txt` com `-c constraints-build.txt` (versões exatas já validadas). Para atualizar as versões: recrie o venv, instale `requirements-build.txt` sem constraints, rode `pytest` e um build local com smoke test, e regenere `constraints-build.txt`. Desenvolvimento e CI usam `requirements-dev.txt`, com faixas compatíveis.
+
+---
+
+## 5. Key Files
 
 - `desktop_launcher.py`: Unified entrypoint that launches the FastAPI backend silently in a background thread and runs the PySide6 Qt GUI.
 - `gameroomlog.spec`: PyInstaller configuration bundle with assets and hidden imports.

@@ -16,16 +16,10 @@ This skill automates the end-to-end release process for new versions of the Game
 When releasing a new version, the agent must execute the following sequence:
 
 1. **Pre-flight Check**: Run the complete automated test suite (`pytest`) to ensure no existing regressions.
-2. **Version Propagation**: Update the version number across all layers:
-   - `backend/app/core/config.py` (`VERSION`)
-   - `backend/tests/test_api.py` (`assert response.json()["version"] == ...`)
-   - `frontend_desktop/tests/test_api_client.py` (`"version": ...`)
-   - `frontend_desktop/views/components/settings_view.py` (`GameRoomLog v...`)
-   - `frontend_desktop/views/components/sidebar.py` (`v... • Linux Native`)
-   - `frontend_desktop/views/main_window.py` (`GameRoomLog v... Online`)
+2. **Version Update**: A versão vive em um único lugar, `app_version.py` (`__version__`). Backend, frontend e testes importam dela, então só esse arquivo muda.
 3. **Changelog Generation**: Add a structured release entry in `CHANGELOG.md` adhering to the *Keep a Changelog* format.
 4. **Post-update Test Run**: Re-run the test suite to ensure the updated version assertions pass.
-5. **Git Commit & Tag**: Create a signed/annotated git commit `chore(release): bump version to v<VERSION>` and a tag `v<VERSION>`.
+5. **Git Commit & Tag**: Create an annotated git commit `chore(release): bump version to v<VERSION>` and a tag `v<VERSION>`.
 
 ---
 
@@ -36,12 +30,12 @@ When releasing a new version, the agent must execute the following sequence:
 Run the release script directly from the project root:
 
 ```bash
-./venv/bin/python .agents/skills/release-version/scripts/release.py <NEW_VERSION> ["Release notes in Markdown"]
+./venv/bin/python .claude/skills/release-version/scripts/release.py <NEW_VERSION> ["Release notes in Markdown"]
 ```
 
 **Example:**
 ```bash
-./venv/bin/python .agents/skills/release-version/scripts/release.py 0.2.3 "### Adicionado\n- Nova tela de estatísticas.\n\n### Corrigido\n- Bug no scroll da lista."
+./venv/bin/python .claude/skills/release-version/scripts/release.py 0.2.3 "### Adicionado\n- Nova tela de estatísticas.\n\n### Corrigido\n- Bug no scroll da lista."
 ```
 
 ---
@@ -54,7 +48,7 @@ If running manually step-by-step:
    ```bash
    ./venv/bin/pytest -v
    ```
-2. **Update version strings in all 6 files listed above.**
+2. **Edit `__version__` in `app_version.py`.**
 3. **Update `CHANGELOG.md`:**
    Insert `## [<NEW_VERSION>] - YYYY-MM-DD` at the top of the version list.
 4. **Run tests again:**
@@ -63,7 +57,11 @@ If running manually step-by-step:
    ```
 5. **Create Git commit and tag:**
    ```bash
-   git add .
+   git add CHANGELOG.md app_version.py
    git commit -m "chore(release): bump version to v<NEW_VERSION>"
    git tag -a v<NEW_VERSION> -m "Release v<NEW_VERSION>"
    ```
+
+## Importante
+
+A skill cria apenas commit e tag **locais**. Nunca execute `git push` (branch ou tag) sem mostrar ao usuário o resumo do que será enviado e obter aprovação explícita (regra do `AGENTS.md`). O push da tag dispara o build no GitHub Actions.
