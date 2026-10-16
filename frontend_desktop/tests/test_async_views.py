@@ -86,3 +86,15 @@ def test_category_detail_loads_and_ignores_navigation_race(qapp, monkeypatch):
     view.category_id = 99
     view._on_category_loaded("genre", 1, {"name": "Velho"})
     assert view.title_label.text() == "RPG"
+
+
+def test_shutdown_workers_waits_for_running_threads(qapp):
+    import time
+    from PySide6.QtWidgets import QWidget
+    from frontend_desktop.workers import shutdown_workers
+    owner = QWidget()
+    done = []
+    run_async(owner, lambda: (time.sleep(0.15), "ok")[1], done.append)
+    shutdown_workers(qapp)
+    qapp.processEvents()
+    assert done == ["ok"] and not any(w.isRunning() for w in owner._workers)

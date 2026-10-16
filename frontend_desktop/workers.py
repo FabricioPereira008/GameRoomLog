@@ -35,3 +35,12 @@ def run_async(owner, func, on_success, on_error=None, *args, **kwargs) -> ApiWor
     worker.finished.connect(lambda: workers.discard(worker))
     worker.start()
     return worker
+
+
+def shutdown_workers(app, timeout_ms: int = 3000) -> None:
+    """Chamado em aboutToQuit: espera threads de rede e capas terminarem (evita 'QThread destroyed while running')."""
+    from frontend_desktop.cover_loader import cover_loader
+    for widget in app.allWidgets():
+        for worker in list(widget.__dict__.get("_workers", ())):
+            worker.wait(timeout_ms)
+    cover_loader.wait_for_done(timeout_ms)

@@ -9,6 +9,7 @@ from PySide6.QtGui import QPixmap
 from datetime import date
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.workers import run_async
+from frontend_desktop.cover_loader import cover_loader
 from frontend_desktop.styles.tokens import COLORS
 from frontend_desktop.ui_helpers import set_button_icon, set_status
 
@@ -31,6 +32,7 @@ class GameDialog(QDialog):
         self.resize(640, 720)
 
         self.init_ui()
+        cover_loader.loaded.connect(self._on_cover_loaded)
         self.load_options()
 
     def init_ui(self):
@@ -533,42 +535,23 @@ class GameDialog(QDialog):
                 QMessageBox.warning(self, "Erro", "Não foi possível baixar a imagem do link fornecido.")
 
     def update_cover_preview(self):
+        """Mostra a capa atual; o download/escala acontece em background (cover_loader)."""
         if not self.cover_filename:
             return
-            
-        from PySide6.QtGui import QPainter, QPainterPath
-        from frontend_desktop.views.components.game_card import resolve_cover_path
-        
-        storage_path = resolve_cover_path(self.cover_filename)
-        if storage_path:
-            pixmap = QPixmap(storage_path)
-            if not pixmap.isNull():
-                scaled = pixmap.scaled(120, 180, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-                
-                # Arredondar cantos do preview
-                rounded = QPixmap(120, 180)
-                rounded.fill(Qt.transparent)
-                painter = QPainter(rounded)
-                painter.setRenderHint(QPainter.Antialiasing)
-                path = QPainterPath()
-                path.addRoundedRect(0, 0, 120, 180, 6, 6)
-                painter.setClipPath(path)
-                
-                # Centraliza a imagem no painel recortado
-                x_offset = (120 - scaled.width()) // 2
-                y_offset = (180 - scaled.height()) // 2
-                painter.drawPixmap(x_offset, y_offset, scaled)
-                painter.end()
-                
-                self.lbl_cover_preview.setPixmap(rounded)
-                self.btn_edit_cover.setVisible(True)
+        pixmap = cover_loader.request(self.cover_filename, 120, 180)
+        if pixmap is not None:
+            self.lbl_cover_preview.setPixmap(pixmap)
+            self.btn_edit_cover.setVisible(True)
+
+    def _on_cover_loaded(self, filename: str):
+        if filename == self.cover_filename:
+            self.update_cover_preview()
 
     def open_image_cropper(self):
         if not self.cover_filename:
             return
             
-        from frontend_desktop.views.components.game_card import resolve_cover_path
-        storage_path = resolve_cover_path(self.cover_filename)
+        storage_path = api_client.get_cover_path(self.cover_filename)
         if not storage_path:
             return
 

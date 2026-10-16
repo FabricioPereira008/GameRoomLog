@@ -24,3 +24,6 @@ def in_list(list_key: str, status) -> bool:
 
 def filter_games(list_key: str, games: list) -> list:
     return [g for g in games if in_list(list_key, g.get("status"))]
+
+# Ordem usada nos filtros de status (ex.: tabela da biblioteca)
+ALL_STATUSES = [JOGANDO, FILA, PROXIMO, PAUSADO, ZERADO, PLATINADO, DISPONIVEL, LISTA_DE_DESEJOS, "Desisti"]

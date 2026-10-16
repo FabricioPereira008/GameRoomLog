@@ -1,252 +1,198 @@
-from PySide6.QtWidgets import (
-    QWidget, QScrollArea, QGridLayout, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QSizePolicy
-)
-from PySide6.QtCore import Signal, Qt, QSettings, QTimer
-from frontend_desktop.views.components.game_card import GameCard, LoadMoreCard
-from frontend_desktop.views.components.filter_panel import FilterPanel
-from frontend_desktop.ui_helpers import add_search_icon
+"""Grades de jogos baseadas em model/view: cards pintados por delegate, filtro sem recriar widgets."""
+import math
+from typing import Callable, List, Optional
 
+from PySide6.QtCore import QModelIndex, Qt, QTimer, Signal
+from PySide6.QtWidgets import (
+    QAbstractItemView, QHBoxLayout, QLineEdit, QListView, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+)
+
+from frontend_desktop.cover_loader import cover_loader
+from frontend_desktop.models.game_list_model import GameFilterProxy, GameListModel, GameRole
+from frontend_desktop.ui_helpers import add_search_icon
+from frontend_desktop.views.components.filter_panel import FilterPanel
+from frontend_desktop.views.components.game_card_delegate import GameCardDelegate, current_size_mode
+
+GRID_SPACING = 12
+FILTER_DEBOUNCE_MS = 150
+MODE_INFINITE = "infinite"  # preenche a área e rola sozinho (listas de status)
+MODE_BUTTON = "button"      # altura limitada em linhas + botão "Mostrar mais" (seções do Game Room)
+MODE_FULL = "full"          # mostra todas as linhas, sem rolagem própria (ex.: Anuário)
+
+
+class GameListView(QListView):
+    """QListView em modo ícones, com tamanhos uniformes e hover; pode ceder a rolagem ao pai."""
+    game_clicked = Signal(dict)
+
+    def __init__(self, scrolls: bool = True, parent=None):
+        super().__init__(parent)
+        self._scrolls = scrolls
+        self.setViewMode(QListView.IconMode)
+        self.setResizeMode(QListView.Adjust)
+        self.setMovement(QListView.Static)
+        self.setWrapping(True)
+        self.setFlow(QListView.LeftToRight)
+        self.setUniformItemSizes(True)
+        self.setSpacing(GRID_SPACING)
+        self.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.setFrameShape(QListView.NoFrame)
+        self.setMouseTracking(True)
+        self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.verticalScrollBar().setSingleStep(28)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        if not scrolls:
+            self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.viewport().setCursor(Qt.PointingHandCursor)
+        self.clicked.connect(self._emit_game)
+        self.activated.connect(self._emit_game)
+
+    def _emit_game(self, index: QModelIndex):
+        game = index.data(GameRole)
+        if game:
+            self.game_clicked.emit(game)
+
+    def wheelEvent(self, event):
+        if self._scrolls:
+            super().wheelEvent(event)
+        else:
+            event.ignore()  # o QScrollArea pai rola
 
 
 class GameGrid(QWidget):
-    """Grid adaptativa e de alta performance com colunas dinâmicas e carregamento sob demanda."""
+    """Lista de cards. A fonte de dados completa fica em `model`; `proxy` aplica o filtro."""
     game_selected = Signal(dict)
 
-    def __init__(self, mode: str = "infinite", initial_batch: int = None, parent=None):
+    def __init__(self, mode: str = MODE_INFINITE, initial_rows: int = 2, parent=None):
         super().__init__(parent)
-        self.mode = mode  # "infinite" ou "button"
-        self.custom_initial_batch = initial_batch
-        
-        self.setObjectName("gameGridContainer")
-        self.setProperty("class", "game-grid-container")
-        self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.mode = mode
+        self._rows_step = max(1, initial_rows)
+        self._visible_rows = self._rows_step
 
-        self.grid_layout = QGridLayout(self)
-        self.grid_layout.setContentsMargins(4, 4, 4, 4)
-        self.grid_layout.setSpacing(14)
-        self.grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.model = GameListModel(self)
+        self.proxy = GameFilterProxy(self)
+        self.proxy.setSourceModel(self.model)
 
-        self.games = []
-        self.cards = []
-        self.load_more_btn = None
-        self.rendered_count = 0
-        self.current_cols = 5
-        self.is_loading = False
+        self.delegate = GameCardDelegate(parent=self)
+        self.view = GameListView(scrolls=(mode == MODE_INFINITE), parent=self)
+        self.view.setModel(self.proxy)
+        self.view.setItemDelegate(self.delegate)
+        self.view.game_clicked.connect(self.game_selected.emit)
 
-    def get_card_width(self) -> int:
-        size_mode = QSettings("GameRoom", "GameRoomLog").value("card_size", "medium")
-        if size_mode == "small":
-            return 130
-        elif size_mode == "large":
-            return 230
-        return 170
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.addWidget(self.view)
 
-    def calculate_cols(self) -> int:
-        available_width = self.width()
-        if available_width <= 200 and self.parentWidget():
-            available_width = self.parentWidget().width()
-        if available_width <= 200:
-            available_width = 1200  # Fallback razoável para renderização inicial
+        self.more_button = QPushButton("Mostrar mais")
+        self.more_button.setProperty("class", "small-btn")
+        self.more_button.setCursor(Qt.PointingHandCursor)
+        self.more_button.clicked.connect(self.load_more_cards)
+        self.more_button.setVisible(False)
+        layout.addWidget(self.more_button, alignment=Qt.AlignLeft)
 
-        card_width = self.get_card_width()
-        spacing = 14
-        cols = max(2, (available_width - 16) // (card_width + spacing))
-        return cols
+        if mode != MODE_INFINITE:
+            self.view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            self.proxy.rowsInserted.connect(self._schedule_height_update)
+            self.proxy.rowsRemoved.connect(self._schedule_height_update)
+            self.proxy.modelReset.connect(self._schedule_height_update)
+            self.proxy.layoutChanged.connect(self._schedule_height_update)
 
-    def get_batch_size(self) -> int:
-        cols = self.current_cols or self.calculate_cols()
-        if self.mode == "button":
-            return max(14, cols * 2)
-        # Modo infinito: carrega de 2 a 3 linhas por vez conforme a largura da tela
-        return max(16, cols * 2)
+        cover_loader.loaded.connect(self._on_cover_loaded)
 
-    def get_initial_batch(self) -> int:
-        if self.custom_initial_batch is not None:
-            return self.custom_initial_batch
-        cols = self.current_cols or self.calculate_cols()
-        if self.mode == "button":
-            return max(14, cols * 2)
-        # Modo infinito: preenche no mínimo 3 a 4 linhas na abertura para cobrir telas fullscreen
-        return max(24, cols * 4)
+    # --- dados ---
+    @property
+    def games(self) -> List[dict]:
+        """Jogos que passam no filtro atual (ordem exibida)."""
+        return self.proxy.games
 
-    def set_games(self, games: list):
-        self.games = list(games)
-        self.rendered_count = 0
-        self.cards = []
-        self.load_more_btn = None
-        self.current_cols = self.calculate_cols()
-        self.is_loading = False
+    @property
+    def rendered_count(self) -> int:
+        """Quantos cards estão visíveis (em MODE_BUTTON, limitado pelas linhas abertas)."""
+        total = self.proxy.rowCount()
+        if self.mode == MODE_BUTTON:
+            return min(total, self._columns() * self._visible_rows)
+        return total
 
-        # Limpa widgets anteriores
-        while self.grid_layout.count():
-            item = self.grid_layout.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
+    def set_predicate(self, predicate: Optional[Callable[[dict], bool]]) -> None:
+        self.proxy.set_predicate(predicate)
+        self._update_height()
 
-        if not self.games:
-            empty_label = QLabel("Nenhum jogo encontrado nesta categoria.")
-            empty_label.setProperty("class", "empty-state-text")
-            empty_label.setAlignment(Qt.AlignCenter)
-            self.grid_layout.addWidget(empty_label, 0, 0)
-            return
+    def set_games(self, games: list) -> None:
+        if self.delegate.set_size_mode(current_size_mode()):
+            self.view.scheduleDelayedItemsLayout()
+        self._visible_rows = self._rows_step
+        self.model.set_games(games)
+        self._update_height()
 
-        initial_count = min(self.get_initial_batch(), len(self.games))
-        self.load_cards_batch(initial_count)
-
-    def load_more_cards(self):
-        total = len(self.games)
-        if self.is_loading or (self.rendered_count >= total and not self.load_more_btn):
-            return
-        batch_size = self.get_batch_size()
-        next_count = min(self.rendered_count + batch_size, total)
-        self.load_cards_batch(next_count)
-
-    def load_cards_batch(self, target_count: int):
-        total = len(self.games)
-        if self.is_loading or self.rendered_count >= target_count:
-            return
-
-        self.is_loading = True
-        cols = self.current_cols
-        
-        # Remove o botão "Carregar Mais" temporariamente se ele já existir no layout
-        if self.load_more_btn is not None:
-            self.grid_layout.removeWidget(self.load_more_btn)
-            self.load_more_btn.deleteLater()
-            self.load_more_btn = None
-
-        batch = self.games[self.rendered_count:target_count]
-
-        self.setUpdatesEnabled(False)
-        for idx, game in enumerate(batch):
-            global_idx = self.rendered_count + idx
-            row = global_idx // cols
-            col = global_idx % cols
-            card = GameCard(game)
-            card.clicked.connect(self.on_card_clicked)
-            self.cards.append(card)
-            self.grid_layout.addWidget(card, row, col)
-
-        self.rendered_count = target_count
-
-        # Se for modo "button" e ainda houver itens restantes, adiciona o botão '+' no final
-        if self.mode == "button" and self.rendered_count < total:
-            self.load_more_btn = LoadMoreCard()
-            self.load_more_btn.clicked.connect(self.load_more_cards)
-            btn_idx = self.rendered_count
-            row = btn_idx // cols
-            col = btn_idx % cols
-            self.grid_layout.addWidget(self.load_more_btn, row, col)
-
-        self.setUpdatesEnabled(True)
-        self.is_loading = False
-
-    def relayout_cards(self, force: bool = False):
-        """Re-posiciona os cards existentes e botão de carregar mais quando a largura da tela muda ou itens são excluídos/adicionados."""
-        if not self.cards and not self.load_more_btn:
-            return
-
-        new_cols = self.calculate_cols()
-        if not force and new_cols == self.current_cols:
-            return
-
-        self.current_cols = new_cols
-        self.setUpdatesEnabled(False)
-
-        # Remove todos da grid sem deletar os widgets
-        while self.grid_layout.count():
-            self.grid_layout.takeAt(0)
-
-        # Reinsere os cards de jogos nas novas posições (row, col)
-        for idx, card in enumerate(self.cards):
-            row = idx // self.current_cols
-            col = idx % self.current_cols
-            self.grid_layout.addWidget(card, row, col)
-
-        # Reinsere o botão de carregar mais se existir
-        if self.load_more_btn is not None:
-            btn_idx = len(self.cards)
-            row = btn_idx // self.current_cols
-            col = btn_idx % self.current_cols
-            self.grid_layout.addWidget(self.load_more_btn, row, col)
-
-        self.setUpdatesEnabled(True)
+    def insert_game(self, index: int, game_data: dict) -> None:
+        self.model.insert_game(index, game_data)
 
     def update_game(self, game_data: dict) -> bool:
-        """Atualiza um jogo in-place sem recarregar todo o grid."""
-        game_id = game_data.get("id")
-        updated = False
-        for idx, g in enumerate(self.games):
-            if g.get("id") == game_id:
-                self.games[idx] = game_data
-                updated = True
-                break
-
-        for card in self.cards:
-            if card.game_data.get("id") == game_id:
-                card.update_data(game_data)
-                return True
-        return updated
+        return self.model.update_game(game_data)
 
     def remove_game(self, game_id: int) -> bool:
-        """Remove um jogo in-place do grid e reorganiza as posições imediatamente."""
-        removed = False
-        self.games = [g for g in self.games if g.get("id") != game_id]
+        return self.model.remove_game(game_id)
 
-        target_card = None
-        for card in self.cards:
-            if card.game_data.get("id") == game_id:
-                target_card = card
-                break
+    # --- layout ---
+    def _columns(self) -> int:
+        cell = self.delegate.metrics.card_width + GRID_SPACING
+        width = self.view.viewport().width() or self.width()
+        return max(1, (width - GRID_SPACING) // cell)
 
-        if target_card:
-            self.cards.remove(target_card)
-            self.grid_layout.removeWidget(target_card)
-            target_card.deleteLater()
-            self.rendered_count = len(self.cards)
-            
-            # Reorganiza o grid forçando novo posicionamento de todos os cards
-            self.relayout_cards(force=True)
-            removed = True
+    def _total_rows(self) -> int:
+        return math.ceil(self.proxy.rowCount() / self._columns()) if self.proxy.rowCount() else 0
 
-        return removed
+    def _schedule_height_update(self, *args) -> None:
+        QTimer.singleShot(0, self._update_height)
 
-    def insert_game(self, index: int, game_data: dict):
-        """Insere um novo jogo in-place no grid."""
-        self.games.insert(index, game_data)
-        
-        card = GameCard(game_data)
-        card.clicked.connect(self.on_card_clicked)
-        self.cards.insert(index, card)
-        self.rendered_count = len(self.cards)
+    def _update_height(self) -> None:
+        """Em modos sem rolagem própria, ajusta a altura da lista ao número de linhas exibidas."""
+        if self.mode == MODE_INFINITE:
+            return
+        total_rows = self._total_rows()
+        rows = min(total_rows, self._visible_rows) if self.mode == MODE_BUTTON else total_rows
+        height = rows * (self.delegate.metrics.card_height + GRID_SPACING) + GRID_SPACING if rows else 0
+        self.view.setFixedHeight(height)
+        hidden = self.proxy.rowCount() - self.rendered_count
+        self.more_button.setVisible(self.mode == MODE_BUTTON and hidden > 0)
+        if hidden > 0:
+            self.more_button.setText(f"Mostrar mais ({hidden})")
 
-        self.relayout_cards(force=True)
+    def relayout_cards(self, force: bool = False) -> None:  # compat: antigo relayout manual
+        self._update_height()
+
+    def load_more_cards(self) -> None:
+        """Abre mais linhas (MODE_BUTTON). Nos demais modos a lista já mostra tudo."""
+        if self.mode == MODE_BUTTON:
+            self._visible_rows += self._rows_step
+            self._update_height()
+
+    def _on_cover_loaded(self, filename: str) -> None:
+        self.view.viewport().update()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.relayout_cards()
+        self._update_height()
 
-    def on_card_clicked(self, game_data: dict):
-        self.game_selected.emit(game_data)
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._update_height()
 
 
 class ScrollableGameGrid(QWidget):
-    """Container com campo de busca integrado, painel de filtros retrátil, barra de rolagem e carregamento suave antecipado."""
+    """Grade com busca, painel de filtros e rolagem nativa. A busca digitada usa debounce."""
     game_selected = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("scrollableGameGridWrapper")
         self.setAttribute(Qt.WA_StyledBackground, True)
-        self.all_games_source = []
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(10)
 
-        # Barra Superior: Pesquisa por Título + Botão de Filtro
         top_bar_layout = QHBoxLayout()
         top_bar_layout.setContentsMargins(0, 0, 0, 0)
         top_bar_layout.setSpacing(10)
@@ -266,110 +212,70 @@ class ScrollableGameGrid(QWidget):
         main_layout.addLayout(top_bar_layout)
         main_layout.addWidget(self.filter_panel)
 
-        # Área de Rolagem
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setObjectName("gameGridScrollArea")
-        self.scroll_area.setProperty("class", "game-grid")
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
-        self.grid = GameGrid(mode="infinite")
+        self.grid = GameGrid(mode=MODE_INFINITE)
         self.grid.game_selected.connect(self.game_selected.emit)
-        self.scroll_area.setWidget(self.grid)
+        main_layout.addWidget(self.grid)
 
-        self.scroll_area.verticalScrollBar().valueChanged.connect(self.on_scroll)
-        main_layout.addWidget(self.scroll_area)
+        # Debounce: só para digitação do usuário (campo com foco); setText programático aplica na hora
+        self._debounce = QTimer(self)
+        self._debounce.setSingleShot(True)
+        self._debounce.setInterval(FILTER_DEBOUNCE_MS)
+        self._debounce.timeout.connect(self.apply_filter)
 
-    def set_games(self, games: list):
-        self.all_games_source = list(games)
+    # --- dados ---
+    @property
+    def all_games_source(self) -> List[dict]:
+        """Lista completa (sem filtro)."""
+        return self.grid.model.games
+
+    def set_games(self, games: list) -> None:
+        self.grid.set_games(games)
         self.apply_filter()
 
-    def set_filter_options(self, genres: list, developers: list, platforms: list, franchises: list):
+    def set_filter_options(self, genres: list, developers: list, platforms: list, franchises: list) -> None:
         self.filter_panel.set_options(genres, developers, platforms, franchises)
 
-    def on_search_changed(self, text: str):
-        self.apply_filter()
+    def update_game(self, game_data: dict) -> bool:
+        return self.grid.update_game(game_data)
 
-    def clear_search(self):
+    def remove_game(self, game_id: int) -> bool:
+        return self.grid.remove_game(game_id)
+
+    def insert_game(self, index: int, game_data: dict) -> None:
+        self.grid.insert_game(index, game_data)
+
+    # --- busca e filtros ---
+    def on_search_changed(self, text: str) -> None:
+        if self.search_input.hasFocus():
+            self._debounce.start()
+        else:
+            self.apply_filter()
+
+    def clear_search(self) -> None:
         self.search_input.blockSignals(True)
         self.search_input.clear()
         self.search_input.blockSignals(False)
         self.apply_filter()
 
-    def clear_filters(self):
+    def clear_filters(self) -> None:
         self.search_input.blockSignals(True)
         self.search_input.clear()
         self.search_input.blockSignals(False)
         self.filter_panel.clear_filters()
+        self.apply_filter()
+
+    def apply_filter(self) -> None:
+        self._debounce.stop()
+        self.grid.set_predicate(make_predicate(self.search_input.text(), self.filter_panel.build_matcher()))
 
 
-    def apply_filter(self):
-        query = self.search_input.text().strip().lower()
-        filtered = []
-        for g in self.all_games_source:
-            if query and query not in (g.get("title") or "").lower():
-                continue
-            if not self.filter_panel.matches(g):
-                continue
-            filtered.append(g)
-        
-        self.grid.set_games(filtered)
-        QTimer.singleShot(50, self.ensure_viewport_filled)
+def make_predicate(query: str, panel_matcher: Callable[[dict], bool]) -> Callable[[dict], bool]:
+    """Predicado de busca por título + filtros do painel (estado lido uma única vez)."""
+    needle = query.strip().lower()
 
-    def ensure_viewport_filled(self):
-        """Garante que a área visível seja preenchida com cards suficientes para ativar a barra de rolagem."""
-        if not self.grid.games or self.grid.rendered_count >= len(self.grid.games):
-            return
+    def predicate(game: dict) -> bool:
+        if needle and needle not in (game.get("title") or "").lower():
+            return False
+        return panel_matcher(game)
 
-        scroll_bar = self.scroll_area.verticalScrollBar()
-        loop_guard = 0
-        while scroll_bar.maximum() <= 100 and self.grid.rendered_count < len(self.grid.games) and loop_guard < 10:
-            loop_guard += 1
-            prev_rendered = self.grid.rendered_count
-            self.grid.load_more_cards()
-            self.scroll_area.widget().adjustSize()
-            if self.grid.rendered_count == prev_rendered:
-                break
-
-    def update_game(self, game_data: dict):
-        game_id = game_data.get("id")
-        for idx, g in enumerate(self.all_games_source):
-            if g.get("id") == game_id:
-                self.all_games_source[idx] = game_data
-                break
-        return self.grid.update_game(game_data)
-
-    def remove_game(self, game_id: int):
-        self.all_games_source = [g for g in self.all_games_source if g.get("id") != game_id]
-        res = self.grid.remove_game(game_id)
-        QTimer.singleShot(50, self.ensure_viewport_filled)
-        return res
-
-    def insert_game(self, index: int, game_data: dict):
-        self.all_games_source.insert(index, game_data)
-        query = self.search_input.text().strip().lower()
-        if (not query or query in (game_data.get("title") or "").lower()) and self.filter_panel.matches(game_data):
-            self.grid.insert_game(index, game_data)
-
-    def on_scroll(self, value: int):
-        if self.grid.is_loading:
-            return
-        scroll_bar = self.scroll_area.verticalScrollBar()
-        if value >= scroll_bar.maximum() * 0.60 or value >= scroll_bar.maximum() - 500:
-            self.grid.load_more_cards()
-
-    def wheelEvent(self, event):
-        super().wheelEvent(event)
-        if self.scroll_area.verticalScrollBar().maximum() == 0 and self.grid.rendered_count < len(self.grid.games):
-            self.grid.load_more_cards()
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        QTimer.singleShot(100, self.ensure_viewport_filled)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.grid.relayout_cards()
-        QTimer.singleShot(100, self.ensure_viewport_filled)
-
-
+    return predicate

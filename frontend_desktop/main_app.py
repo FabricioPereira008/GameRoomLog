@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication
 from app_logging import setup_logging
 from frontend_desktop.theme import apply_theme, setup_live_stylesheet
 from frontend_desktop.views.main_window import MainWindow
+from frontend_desktop.workers import shutdown_workers
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ def create_app() -> QApplication:
     app.setOrganizationName("GameRoom")
     apply_theme(app)
     setup_live_stylesheet(app)
+    app.aboutToQuit.connect(lambda: shutdown_workers(app))
     return app
 
 

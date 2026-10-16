@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
     QComboBox, QSpinBox, QPushButton, QCompleter, QSizePolicy
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QStringListModel
 from frontend_desktop.ui_helpers import set_button_icon
 
 class FilterPanel(QWidget):
@@ -145,10 +145,16 @@ class FilterPanel(QWidget):
             names = [it.get("name") if isinstance(it, dict) else str(it) for it in items]
             combo.addItems(names)
             
-            completer = QCompleter(names, self)
-            completer.setCaseSensitivity(Qt.CaseInsensitive)
-            completer.setFilterMode(Qt.MatchContains)
-            combo.setCompleter(completer)
+            # O completer é criado uma vez por combo; depois só a lista de nomes é atualizada
+            names_model = getattr(combo, "_names_model", None)
+            if names_model is None:
+                names_model = QStringListModel(self)
+                combo._names_model = names_model
+                completer = QCompleter(names_model, self)
+                completer.setCaseSensitivity(Qt.CaseInsensitive)
+                completer.setFilterMode(Qt.MatchContains)
+                combo.setCompleter(completer)
+            names_model.setStringList(names)
 
             # Restaura texto se possível
             idx = combo.findText(cur_text)
@@ -217,46 +223,40 @@ class FilterPanel(QWidget):
 
         self._on_any_change()
 
+    def build_matcher(self):
+        """Lê o estado dos filtros uma única vez e devolve `game -> bool` (para filtrar listas grandes)."""
+        def active(combo):
+            value = combo.currentText().strip()
+            return value.lower() if value and not value.startswith("(") else ""
+
+        gen, dev = active(self.combo_genre), active(self.combo_dev)
+        plat, fran = active(self.combo_plat), active(self.combo_fran)
+        target_hltb = self.spin_hltb.value()
+        op = self.combo_hltb_op.currentText()
+        at_least, at_most = "≥" in op, "≤" in op
+
+        def name_of(value) -> str:
+            return (value.get("name") if isinstance(value, dict) else str(value or "")).strip().lower()
+
+        def matcher(game: dict) -> bool:
+            if gen and not any(name_of(g) == gen for g in game.get("genres") or []):
+                return False
+            if dev and (game.get("developer") or "").strip().lower() != dev:
+                return False
+            if plat and name_of(game.get("platform")) != plat:
+                return False
+            if fran and name_of(game.get("franchise")) != fran:
+                return False
+            if target_hltb > 0:
+                hltb = float(game.get("hltb_hours") or 0.0)
+                if at_least and hltb < target_hltb:
+                    return False
+                if at_most and (hltb == 0.0 or hltb > target_hltb):
+                    return False
+            return True
+
+        return matcher
+
     def matches(self, game_data: dict) -> bool:
         """Verifica se o jogo atende a todos os critérios de filtro ativos."""
-        # 1. Gênero
-        gen_val = self.combo_genre.currentText().strip()
-        if gen_val and not gen_val.startswith("("):
-            game_genres = [g.get("name", "") if isinstance(g, dict) else str(g) for g in game_data.get("genres", [])]
-            if not any(gen_val.lower() == g.lower() for g in game_genres):
-                return False
-
-        # 2. Desenvolvedora
-        dev_val = self.combo_dev.currentText().strip()
-        if dev_val and not dev_val.startswith("("):
-            game_dev = (game_data.get("developer") or "").strip()
-            if dev_val.lower() != game_dev.lower():
-                return False
-
-        # 3. Plataforma
-        plat_val = self.combo_plat.currentText().strip()
-        if plat_val and not plat_val.startswith("("):
-            game_plat = game_data.get("platform")
-            game_plat_name = (game_plat.get("name") if isinstance(game_plat, dict) else str(game_plat or "")).strip()
-            if plat_val.lower() != game_plat_name.lower():
-                return False
-
-        # 4. Franquia
-        fran_val = self.combo_fran.currentText().strip()
-        if fran_val and not fran_val.startswith("("):
-            game_fran = game_data.get("franchise")
-            game_fran_name = (game_fran.get("name") if isinstance(game_fran, dict) else str(game_fran or "")).strip()
-            if fran_val.lower() != game_fran_name.lower():
-                return False
-
-        # 5. Tempo HLTB
-        target_hltb = self.spin_hltb.value()
-        if target_hltb > 0:
-            game_hltb = float(game_data.get("hltb_hours") or 0.0)
-            op = self.combo_hltb_op.currentText()
-            if "≥" in op and game_hltb < target_hltb:
-                return False
-            elif "≤" in op and (game_hltb == 0.0 or game_hltb > target_hltb):
-                return False
-
-        return True
+        return self.build_matcher()(game_data)

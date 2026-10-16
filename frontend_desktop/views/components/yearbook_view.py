@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QFrame, QScrollArea, QSizePolicy
 )
 from PySide6.QtCore import Signal, Qt
-from frontend_desktop.views.components.game_grid import GameGrid
+from frontend_desktop.views.components.game_grid import GameGrid, MODE_FULL
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.workers import run_async
 from frontend_desktop import icons
@@ -143,7 +143,7 @@ class YearbookView(QWidget):
         self.sub_label.setProperty("class", "section-header")
         sec_layout.addWidget(self.sub_label)
 
-        self.game_grid = GameGrid()
+        self.game_grid = GameGrid(mode=MODE_FULL)
         self.game_grid.game_selected.connect(self.game_selected.emit)
         sec_layout.addWidget(self.game_grid)
 
