@@ -66,6 +66,8 @@ def load_fonts() -> bool:
             loaded += 1
     if not loaded:
         logger.warning("Fontes embutidas não encontradas; usando fontes do sistema.")
+    else:
+        logger.info("Fontes embutidas carregadas: %d/%d", loaded, len(_FONT_FILES))
     return bool(loaded)
 
 

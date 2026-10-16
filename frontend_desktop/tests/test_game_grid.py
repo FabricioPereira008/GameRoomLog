@@ -305,3 +305,18 @@ def test_render_cover_image_crops_and_rounds(qapp, tmp_path):
     assert out.pixelColor(0, 0).alpha() == 0          # canto arredondado transparente
     assert out.pixelColor(40, 60).alpha() == 255
     assert cl.render_cover_image(str(tmp_path / "nao-existe.png"), 10, 10) is None
+
+
+def test_empty_state_message_follows_results(qapp):
+    from frontend_desktop.views.components.game_grid import MODE_INFINITE
+    grid = GameGrid(mode=MODE_INFINITE)
+    grid.resize(800, 500)
+    grid.set_games([])
+    assert not grid.empty_label.isHidden()
+    grid.set_games(games(3))
+    assert grid.empty_label.isHidden()
+    grid.set_predicate(lambda g: False)
+    assert not grid.empty_label.isHidden()
+    section = GameGrid(mode=MODE_BUTTON)
+    section.set_games([])
+    assert section.empty_label.isHidden()  # seções do Game Room simplesmente somem

@@ -75,8 +75,14 @@ class GameDialog(QDialog):
         lbl.setProperty("class", "form-label")
         return lbl
 
+    def _section_heading(self, form_layout, text: str):
+        label = QLabel(text.upper())
+        label.setProperty("class", "nav-section")
+        form_layout.addRow(label)
+
     def _build_identity_fields(self, form_layout):
         """Título, desenvolvedora, status, plataforma, franquia e gênero."""
+        self._section_heading(form_layout, "Identificação")
         # 1. Título
         self.input_title = QLineEdit()
         self.input_title.setPlaceholderText("Ex: The Legend of Zelda: Tears of the Kingdom")
@@ -125,6 +131,7 @@ class GameDialog(QDialog):
 
     def _build_progress_fields(self, form_layout):
         """Horas, avaliação e datas."""
+        self._section_heading(form_layout, "Progresso")
         # 7. Horas (Inteiros)
         hours_layout = QHBoxLayout()
         hours_layout.setSpacing(8)
@@ -199,6 +206,7 @@ class GameDialog(QDialog):
 
     def _build_play_fields(self, form_layout):
         """Tipo de jogada, formato e favorito."""
+        self._section_heading(form_layout, "Jogada")
         # 10. Tipo de Jogada e Campo Condicional de Rejogada
         play_layout = QHBoxLayout()
         play_layout.setSpacing(8)
@@ -234,6 +242,7 @@ class GameDialog(QDialog):
 
     def _build_cover_fields(self, form_layout):
         """Capa: arquivo local, link, busca automática e preview."""
+        self._section_heading(form_layout, "Capa")
         # 12. Imagem de Capa (Arquivo Local, Link/URL ou Busca Automática)
         cover_layout = QHBoxLayout()
         cover_layout.setSpacing(6)
@@ -293,6 +302,7 @@ class GameDialog(QDialog):
         form_layout.addRow("", cover_preview_layout)
 
     def _build_notes_field(self, form_layout):
+        self._section_heading(form_layout, "Anotações")
         # 13. Anotações
         self.input_notes = QTextEdit()
         self.input_notes.setPlaceholderText("Escreva aqui suas impressões, review ou dicas...")

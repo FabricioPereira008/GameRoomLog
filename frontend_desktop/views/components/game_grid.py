@@ -4,7 +4,7 @@ from typing import Callable, List, Optional
 
 from PySide6.QtCore import QModelIndex, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView, QHBoxLayout, QLineEdit, QListView, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+    QAbstractItemView, QHBoxLayout, QLabel, QLineEdit, QListView, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 )
 
 from frontend_desktop.cover_loader import cover_loader
@@ -84,6 +84,12 @@ class GameGrid(QWidget):
         layout.setSpacing(8)
         layout.addWidget(self.view)
 
+        self.empty_label = QLabel("Nenhum jogo encontrado.")
+        self.empty_label.setProperty("class", "empty-state-text")
+        self.empty_label.setAlignment(Qt.AlignCenter)
+        self.empty_label.setVisible(False)
+        layout.addWidget(self.empty_label)
+
         self.more_button = QPushButton("Mostrar mais")
         self.more_button.setProperty("class", "small-btn")
         self.more_button.setCursor(Qt.PointingHandCursor)
@@ -98,7 +104,13 @@ class GameGrid(QWidget):
             self.proxy.modelReset.connect(self._schedule_height_update)
             self.proxy.layoutChanged.connect(self._schedule_height_update)
 
+        for signal in (self.proxy.rowsInserted, self.proxy.rowsRemoved, self.proxy.modelReset, self.proxy.layoutChanged):
+            signal.connect(self._update_empty_state)
         cover_loader.loaded.connect(self._on_cover_loaded)
+
+    def _update_empty_state(self, *args) -> None:
+        """Mensagem amigável quando a lista (ou o resultado da busca) está vazia; seções do Game Room somem sozinhas."""
+        self.empty_label.setVisible(self.mode != MODE_BUTTON and self.proxy.rowCount() == 0)
 
     # --- dados ---
     @property

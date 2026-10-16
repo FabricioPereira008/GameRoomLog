@@ -6,7 +6,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![PySide6](https://img.shields.io/badge/PySide6-Qt6-41CD52?style=for-the-badge&logo=qt&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
-![Pytest](https://img.shields.io/badge/Tests-107%20Passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)
+![Pytest](https://img.shields.io/badge/Tests-150%20Passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 **Seu gerenciador pessoal de backlog de jogos, histórico de gameplay e anuário gamer definitivo.**
@@ -29,7 +29,7 @@ O **GameRoomLog** é um aplicativo desktop nativo e moderno desenvolvido para ge
 - ⚡ **Performance Zero-Stutter:** Cache inteligente em memória para capas (`QPixmap`), rolagem antecipada suave e carregamento sob demanda em lotes dinâmicos.
 - 🏷️ **Gestão Completa de Categorias:** Organização por Plataformas, Gêneros, Desenvolvedoras e Franquias com autocompletar inteligente e auto-criação.
 - 📦 **Importador do Notion:** Migre facilmente seu banco de dados anterior do Notion (CSV/Markdown) com detecção automática de capas e metadados.
-- 🧪 **Bem testado:** 107 testes automatizados (API, services, migrações, segurança de uploads, ApiClient, janelas assíncronas e performance), com ~78% de cobertura e mínimo de 70% exigido no CI.
+- 🧪 **Bem testado:** 150 testes automatizados (API, services, migrações, segurança de uploads, ApiClient, models/grades virtualizadas, tema e performance), com ~84% de cobertura e mínimo de 70% exigido no CI.
 
 ---
 

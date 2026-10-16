@@ -8,7 +8,7 @@ from frontend_desktop.models.game_table_model import GameTableModel, GameTablePr
 from frontend_desktop.ui_helpers import add_search_icon
 from frontend_desktop.views import game_status as gs
 
-COLUMN_WIDTHS = {1: 110, 2: 150, 3: 140, 4: 160, 5: 60, 6: 70, 7: 95, 8: 100, 9: 115, 10: 130}
+COLUMN_WIDTHS = {0: 300, 1: 100, 2: 130, 3: 110, 4: 150, 5: 60, 6: 65, 7: 90, 8: 95, 9: 105, 10: 120}
 
 
 class GameTable(QWidget):
@@ -81,8 +81,9 @@ class GameTable(QWidget):
         self.table.setCursor(Qt.PointingHandCursor)
 
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Stretch)
-        for col in range(1, self.model.columnCount()):
+        header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        header.setStretchLastSection(False)
+        for col in range(self.model.columnCount()):
             header.setSectionResizeMode(col, QHeaderView.Interactive)
             self.table.setColumnWidth(col, COLUMN_WIDTHS.get(col, 100))
         header.setSortIndicatorShown(True)

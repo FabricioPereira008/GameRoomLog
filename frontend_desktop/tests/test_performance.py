@@ -32,7 +32,7 @@ def test_loading_600_games_into_grid_is_fast(qapp):
     qapp.processEvents()
     print(f"\n[PERFORMANCE] 600 jogos carregados em {ms:.2f} ms")
     assert len(grid.grid.games) == 600
-    assert ms < 150 * PERF_FACTOR, f"Carga de 600 jogos levou {ms:.2f}ms"
+    assert ms < 80 * PERF_FACTOR, f"Carga de 600 jogos levou {ms:.2f}ms"
     grid.close()
 
 
@@ -43,7 +43,7 @@ def test_filtering_600_games_is_fast(qapp):
     ms = timed(lambda: grid.search_input.setText("Game 55"))
     print(f"\n[PERFORMANCE] Filtro sobre 600 jogos em {ms:.2f} ms")
     assert 0 < len(grid.grid.games) < 600
-    assert ms < 100 * PERF_FACTOR, f"Filtro levou {ms:.2f}ms"
+    assert ms < 50 * PERF_FACTOR, f"Filtro levou {ms:.2f}ms"
 
 
 def test_proxy_refilter_speed(qapp):
@@ -54,7 +54,7 @@ def test_proxy_refilter_speed(qapp):
     pred = make_predicate("game 1", lambda g: True)
     ms = timed(lambda: proxy.set_predicate(pred))
     print(f"\n[PERFORMANCE] Proxy refiltrou 2000 jogos em {ms:.2f} ms")
-    assert ms < 120 * PERF_FACTOR
+    assert ms < 80 * PERF_FACTOR
 
 
 def test_in_place_insert_remove_do_not_rebuild(qapp):
@@ -71,7 +71,7 @@ def test_in_place_insert_remove_do_not_rebuild(qapp):
     ms = timed(mutate)
     print(f"\n[PERFORMANCE] 100 inserts + 100 removes em {ms:.2f} ms")
     assert len(grid.games) == 600
-    assert ms < 400 * PERF_FACTOR
+    assert ms < 100 * PERF_FACTOR
 
 
 def test_game_room_section_render_is_bounded(qapp):
@@ -82,5 +82,5 @@ def test_game_room_section_render_is_bounded(qapp):
     qapp.processEvents()
     print(f"\n[PERFORMANCE] Seção com 300 jogos em {ms:.2f} ms")
     assert grid.rendered_count < 300  # só as linhas abertas
-    assert ms < 100 * PERF_FACTOR
+    assert ms < 40 * PERF_FACTOR
     grid.close()

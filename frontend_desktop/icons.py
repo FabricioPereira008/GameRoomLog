@@ -1,4 +1,5 @@
 """Ícones SVG (Lucide, ISC) tingidos em tempo de execução, com cache."""
+import logging
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -8,6 +9,8 @@ from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
 from frontend_desktop.styles.tokens import COLORS
+
+logger = logging.getLogger(__name__)
 
 
 def icons_dir() -> Path:
@@ -19,7 +22,10 @@ def icons_dir() -> Path:
 @lru_cache(maxsize=None)
 def _svg_source(name: str) -> str:
     path = icons_dir() / f"{name}.svg"
-    return path.read_text(encoding="utf-8") if path.exists() else ""
+    if not path.exists():
+        logger.warning("Ícone SVG não encontrado: %s (%s)", name, path)
+        return ""
+    return path.read_text(encoding="utf-8")
 
 
 def export_tinted_svg(name: str, color: str, dest_dir: Path) -> str:
