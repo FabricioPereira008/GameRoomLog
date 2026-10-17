@@ -1,9 +1,75 @@
 from PySide6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
-    QComboBox, QSpinBox, QPushButton, QCompleter, QSizePolicy
+    QComboBox, QSpinBox, QPushButton, QCompleter, QLineEdit
 )
-from PySide6.QtCore import Signal, Qt, QStringListModel
+from PySide6.QtCore import Signal, Qt, QStringListModel, QTimer
 from frontend_desktop.ui_helpers import set_button_icon
+
+FIELD_DEBOUNCE_MS = 150
+
+
+class SuggestField(QLineEdit):
+    """Campo de texto com sugestões: filtra por "contém" enquanto se digita; ao escolher uma sugestão o valor é exato.
+
+    Vazio = sem filtro. `changed` é emitido com debounce quando o usuário digita (campo com foco) e na hora
+    quando o texto é alterado por código.
+    """
+    changed = Signal()
+
+    def __init__(self, placeholder: str, parent=None):
+        super().__init__(parent)
+        self.default_placeholder = placeholder
+        self.setPlaceholderText(placeholder)
+        self.setClearButtonEnabled(True)
+        self.setProperty("class", "filter-combo")
+        self._exact = False
+
+        self.names_model = QStringListModel(self)
+        completer = QCompleter(self.names_model, self)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchContains)
+        completer.setCompletionMode(QCompleter.PopupCompletion)
+        completer.activated[str].connect(self._on_picked)
+        self.setCompleter(completer)
+
+        self._debounce = QTimer(self)
+        self._debounce.setSingleShot(True)
+        self._debounce.setInterval(FIELD_DEBOUNCE_MS)
+        self._debounce.timeout.connect(self.changed.emit)
+        self.textEdited.connect(self._on_edited)
+        self.textChanged.connect(self._on_text_changed)
+
+    def set_names(self, names: list) -> None:
+        self.names_model.setStringList(names)
+
+    def value(self) -> tuple:
+        """(texto em minúsculas, exato?) — texto vazio significa "sem filtro"."""
+        if not self.isEnabled():  # bloqueado: mostra o nome da categoria, mas não filtra
+            return "", False
+        return self.text().strip().lower(), self._exact
+
+    def _on_edited(self, _text: str) -> None:
+        self._exact = False
+
+    def _on_picked(self, _text: str) -> None:
+        self._exact = True
+        self._debounce.stop()
+        self.changed.emit()
+
+    def _on_text_changed(self, _text: str) -> None:
+        if not self.text():
+            self._exact = False
+        if self.hasFocus():
+            self._debounce.start()
+        else:
+            self._debounce.stop()
+            self.changed.emit()
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        if not self.text() and self.names_model.rowCount():
+            self.completer().setCompletionPrefix("")
+            self.completer().complete()  # campo vazio: abre a lista completa, como um dropdown
 
 class FilterPanel(QWidget):
     """
@@ -20,6 +86,7 @@ class FilterPanel(QWidget):
         self.developers_list = []
         self.platforms_list = []
         self.franchises_list = []
+        self._fields = {}  # kind -> (label, campo)
 
         self.init_ui()
 
@@ -55,31 +122,21 @@ class FilterPanel(QWidget):
             lbl.setProperty("class", "filter-label")
             return lbl
 
-        def setup_editable_combo(placeholder):
-            combo = QComboBox()
-            combo.setEditable(True)
-            combo.setInsertPolicy(QComboBox.NoInsert)
-            combo.lineEdit().setPlaceholderText(placeholder)
-            combo.setProperty("class", "filter-combo")
-            return combo
+        def add_field(kind, label_text, placeholder, row, col):
+            label = make_label(label_text)
+            field = SuggestField(placeholder)
+            grid.addWidget(label, row, col)
+            grid.addWidget(field, row, col + 1)
+            self._fields[kind] = (label, field)
+            return field
 
         # Linha 0: Gênero e Desenvolvedora
-        grid.addWidget(make_label("Gênero:"), 0, 0)
-        self.combo_genre = setup_editable_combo("(Todos os Gêneros)")
-        grid.addWidget(self.combo_genre, 0, 1)
-
-        grid.addWidget(make_label("Desenvolvedora:"), 0, 2)
-        self.combo_dev = setup_editable_combo("(Todas as Desenvolvedoras)")
-        grid.addWidget(self.combo_dev, 0, 3)
+        self.combo_genre = add_field("genre", "Gênero:", "Todos os gêneros", 0, 0)
+        self.combo_dev = add_field("developer", "Desenvolvedora:", "Todas as desenvolvedoras", 0, 2)
 
         # Linha 1: Plataforma e Franquia
-        grid.addWidget(make_label("Plataforma:"), 1, 0)
-        self.combo_plat = setup_editable_combo("(Todas as Plataformas)")
-        grid.addWidget(self.combo_plat, 1, 1)
-
-        grid.addWidget(make_label("Franquia / Série:"), 1, 2)
-        self.combo_fran = setup_editable_combo("(Todas as Franquias)")
-        grid.addWidget(self.combo_fran, 1, 3)
+        self.combo_plat = add_field("platform", "Plataforma:", "Todas as plataformas", 1, 0)
+        self.combo_fran = add_field("franchise", "Franquia / Série:", "Todas as franquias", 1, 2)
 
         # Linha 2: Tempo HLTB e Botão Limpar
         grid.addWidget(make_label("Tempo HLTB:"), 2, 0)
@@ -119,10 +176,8 @@ class FilterPanel(QWidget):
         grid.addLayout(actions_layout, 2, 2, 1, 2)
 
         # Conectar eventos de mudança para disparo em tempo real
-        self.combo_genre.currentTextChanged.connect(self._on_any_change)
-        self.combo_dev.currentTextChanged.connect(self._on_any_change)
-        self.combo_plat.currentTextChanged.connect(self._on_any_change)
-        self.combo_fran.currentTextChanged.connect(self._on_any_change)
+        for _label, field in self._fields.values():
+            field.changed.connect(self._on_any_change)
         self.combo_hltb_op.currentIndexChanged.connect(self._on_any_change)
         self.spin_hltb.valueChanged.connect(self._on_any_change)
 
@@ -137,56 +192,36 @@ class FilterPanel(QWidget):
         self.platforms_list = list(platforms)
         self.franchises_list = list(franchises)
 
-        def populate(combo, items, default_label):
-            cur_text = combo.currentText()
-            combo.blockSignals(True)
-            combo.clear()
-            combo.addItem(default_label, "")
-            names = [it.get("name") if isinstance(it, dict) else str(it) for it in items]
-            combo.addItems(names)
-            
-            # O completer é criado uma vez por combo; depois só a lista de nomes é atualizada
-            names_model = getattr(combo, "_names_model", None)
-            if names_model is None:
-                names_model = QStringListModel(self)
-                combo._names_model = names_model
-                completer = QCompleter(names_model, self)
-                completer.setCaseSensitivity(Qt.CaseInsensitive)
-                completer.setFilterMode(Qt.MatchContains)
-                combo.setCompleter(completer)
-            names_model.setStringList(names)
+        def names_of(items):
+            return [it.get("name") if isinstance(it, dict) else str(it) for it in items]
 
-            # Restaura texto se possível
-            idx = combo.findText(cur_text)
-            if idx >= 0:
-                combo.setCurrentIndex(idx)
+        self.combo_genre.set_names(names_of(self.genres_list))
+        self.combo_dev.set_names(names_of(self.developers_list))
+        self.combo_plat.set_names(names_of(self.platforms_list))
+        self.combo_fran.set_names(names_of(self.franchises_list))
+
+    def set_locked_filters(self, locked) -> None:
+        """Bloqueia os filtros das dimensões em `locked` ({kind: nome}, kind em genre/developer/platform/franchise).
+
+        Dentro da página de um gênero o filtro de gênero continua visível, mas desabilitado, mostrando o nome
+        da categoria; ele é zerado e não conta como filtro ativo."""
+        locked = dict(locked or {})
+        for kind, (_label, field) in self._fields.items():
+            if kind in locked:
+                field.setEnabled(False)
+                field.setText(locked[kind])
+                field.setPlaceholderText(field.default_placeholder)
             else:
-                combo.setEditText(cur_text)
-            combo.blockSignals(False)
-
-        populate(self.combo_genre, self.genres_list, "(Todos os Gêneros)")
-        populate(self.combo_dev, self.developers_list, "(Todas as Desenvolvedoras)")
-        populate(self.combo_plat, self.platforms_list, "(Todas as Plataformas)")
-        populate(self.combo_fran, self.franchises_list, "(Todas as Franquias)")
+                if not field.isEnabled():
+                    field.clear()
+                field.setEnabled(True)
 
     def _on_any_change(self):
         self.update_button_badge()
         self.filters_changed.emit()
 
     def count_active_filters(self) -> int:
-        count = 0
-        gen = self.combo_genre.currentText().strip()
-        if gen and not gen.startswith("("):
-            count += 1
-        dev = self.combo_dev.currentText().strip()
-        if dev and not dev.startswith("("):
-            count += 1
-        plat = self.combo_plat.currentText().strip()
-        if plat and not plat.startswith("("):
-            count += 1
-        fran = self.combo_fran.currentText().strip()
-        if fran and not fran.startswith("("):
-            count += 1
+        count = sum(1 for _label, field in self._fields.values() if field.value()[0])
         if self.spin_hltb.value() > 0:
             count += 1
         return count
@@ -203,34 +238,23 @@ class FilterPanel(QWidget):
         self.btn_toggle.style().polish(self.btn_toggle)
 
     def clear_filters(self):
-        self.combo_genre.blockSignals(True)
-        self.combo_dev.blockSignals(True)
-        self.combo_plat.blockSignals(True)
-        self.combo_fran.blockSignals(True)
+        for _label, field in self._fields.values():
+            if not field.isEnabled():
+                continue  # filtro bloqueado pela página não é limpo
+            field.blockSignals(True)
+            field.clear()
+            field._exact = False
+            field.blockSignals(False)
         self.spin_hltb.blockSignals(True)
-
-        self.combo_genre.setCurrentIndex(0)
-        self.combo_dev.setCurrentIndex(0)
-        self.combo_plat.setCurrentIndex(0)
-        self.combo_fran.setCurrentIndex(0)
         self.spin_hltb.setValue(0)
-
-        self.combo_genre.blockSignals(False)
-        self.combo_dev.blockSignals(False)
-        self.combo_plat.blockSignals(False)
-        self.combo_fran.blockSignals(False)
         self.spin_hltb.blockSignals(False)
 
         self._on_any_change()
 
     def build_matcher(self):
         """Lê o estado dos filtros uma única vez e devolve `game -> bool` (para filtrar listas grandes)."""
-        def active(combo):
-            value = combo.currentText().strip()
-            return value.lower() if value and not value.startswith("(") else ""
-
-        gen, dev = active(self.combo_genre), active(self.combo_dev)
-        plat, fran = active(self.combo_plat), active(self.combo_fran)
+        gen, dev = self.combo_genre.value(), self.combo_dev.value()
+        plat, fran = self.combo_plat.value(), self.combo_fran.value()
         target_hltb = self.spin_hltb.value()
         op = self.combo_hltb_op.currentText()
         at_least, at_most = "≥" in op, "≤" in op
@@ -238,14 +262,18 @@ class FilterPanel(QWidget):
         def name_of(value) -> str:
             return (value.get("name") if isinstance(value, dict) else str(value or "")).strip().lower()
 
+        def hit(wanted: tuple, actual: str) -> bool:
+            text, exact = wanted
+            return actual == text if exact else text in actual
+
         def matcher(game: dict) -> bool:
-            if gen and not any(name_of(g) == gen for g in game.get("genres") or []):
+            if gen[0] and not any(hit(gen, name_of(g)) for g in game.get("genres") or []):
                 return False
-            if dev and (game.get("developer") or "").strip().lower() != dev:
+            if dev[0] and not hit(dev, (game.get("developer") or "").strip().lower()):
                 return False
-            if plat and name_of(game.get("platform")) != plat:
+            if plat[0] and not hit(plat, name_of(game.get("platform"))):
                 return False
-            if fran and name_of(game.get("franchise")) != fran:
+            if fran[0] and not hit(fran, name_of(game.get("franchise"))):
                 return False
             if target_hltb > 0:
                 hltb = float(game.get("hltb_hours") or 0.0)

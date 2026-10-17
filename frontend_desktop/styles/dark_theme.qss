@@ -222,6 +222,7 @@ QPushButton[class="delete-btn"]:hover { background-color: $danger; color: $bg; }
 QPushButton[class="delete-btn"]:disabled { color: $text_dim; border-color: $border; background: transparent; }
 
 /* ===== Busca e filtros ===== */
+QLineEdit[class~="filter-combo"]:disabled { color: $text_muted; }
 QLineEdit[class~="search-input"] {
     background-color: $surface; border: 1px solid $border; border-radius: $r_md; padding: 9px 14px;
 }
@@ -277,6 +278,11 @@ QLabel[class="stat-value"] { font-size: $fs_xl; font-weight: 700; color: $text; 
 QLabel[class="stat-label"] { font-size: $fs_xs; font-weight: 600; color: $text_muted; }
 QLabel[class="manage-card-title"] { font-size: $fs_lg; font-weight: 600; color: $text; }
 QLabel[class="manage-card-count"] { color: $text_muted; font-size: $fs_xs; }
+QToolButton[class="card-menu-btn"] {
+    background-color: rgba(0, 0, 0, 170); color: #ffffff; border: none; border-radius: 6px; font-size: $fs_lg; font-weight: 700;
+}
+QToolButton[class="card-menu-btn"]:hover { background-color: rgba(0, 0, 0, 220); }
+QToolButton[class="card-menu-btn"]::menu-indicator { image: none; }
 QLabel[class="color-dot"] { border-radius: 6px; border: 1px solid $overlay; }
 
 /* ===== Listas e tabelas ===== */

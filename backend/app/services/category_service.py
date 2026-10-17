@@ -14,6 +14,7 @@ from backend.app.schemas.category_detail import CategoryDetailResponse
 from backend.app.schemas.game import GameResponse
 
 COMPLETED_STATUSES = [GameStatus.ZERADO, GameStatus.PLATINADO]
+MAX_COVER_SAMPLES = 4
 
 
 class CategoryNotFoundError(Exception):
@@ -59,12 +60,33 @@ class CategoryService:
         """Mapa id -> quantidade de jogos concluídos, em uma única consulta agrupada."""
         raise NotImplementedError
 
+    def completed_rows(self, db: Session) -> list:
+        """Linhas (category_id, cover_image, played_hours) dos jogos concluídos, melhor nota/mais horas primeiro."""
+        raise NotImplementedError
+
+    def completed_summary(self, db: Session) -> dict:
+        """Mapa id -> {"hours": total de horas, "covers": até MAX_COVER_SAMPLES capas} (uma consulta)."""
+        summary: dict = {}
+        for category_id, cover, hours in self.completed_rows(db):
+            if category_id is None:
+                continue
+            entry = summary.setdefault(category_id, {"hours": 0.0, "covers": []})
+            entry["hours"] += hours or 0.0
+            if cover and len(entry["covers"]) < MAX_COVER_SAMPLES and cover not in entry["covers"]:
+                entry["covers"].append(cover)
+        return summary
+
     def list_with_counts(self, db: Session, response_cls: Type[Any]) -> List[Any]:
         counts = self.completed_counts(db)
+        summary = self.completed_summary(db)
         results = []
         for obj in db.query(self.model).order_by(self.model.name.asc()).all():
             resp = response_cls.model_validate(obj)
             resp.games_count = counts.get(obj.id, 0)
+            info = summary.get(obj.id)
+            if info:
+                resp.total_hours = round(info["hours"], 1)
+                resp.cover_samples = info["covers"]
             results.append(resp)
         return results
 
@@ -133,6 +155,15 @@ class CategoryService:
         db.commit()
 
 
+def _ranked_completed(db: Session, *columns):
+    """Consulta dos jogos concluídos com `columns` + capa + horas, ordenada por nota e depois horas."""
+    return (
+        db.query(*columns, Game.cover_image, func.coalesce(Game.played_hours, Game.hltb_hours, 0.0))
+        .filter(Game.status.in_(COMPLETED_STATUSES))
+        .order_by(Game.score.desc().nullslast(), Game.played_hours.desc().nullslast(), Game.id.asc())
+    )
+
+
 def _group_counts(db: Session, key_column, *conditions) -> dict:
     rows = (
         db.query(key_column, func.count(Game.id))
@@ -161,6 +192,13 @@ class GenreService(CategoryService):
         )
         return {k: c for k, c in rows}
 
+    def completed_rows(self, db: Session) -> list:
+        return (
+            _ranked_completed(db, game_genres.c.genre_id)
+            .join(game_genres, game_genres.c.game_id == Game.id)
+            .all()
+        )
+
     def create(self, db: Session, **fields):
         fields["color"] = fields.get("color") or "#4f46e5"
         return super().create(db, **fields)
@@ -181,6 +219,9 @@ class PlatformService(CategoryService):
     def completed_counts(self, db: Session) -> dict:
         return _group_counts(db, Game.platform_id)
 
+    def completed_rows(self, db: Session) -> list:
+        return _ranked_completed(db, Game.platform_id).all()
+
     def details(self, db: Session, category_id: int, **extra):
         return super().details(db, category_id, attrs=("icon_name",))
 
@@ -195,6 +236,9 @@ class FranchiseService(CategoryService):
 
     def completed_counts(self, db: Session) -> dict:
         return _group_counts(db, Game.franchise_id)
+
+    def completed_rows(self, db: Session) -> list:
+        return _ranked_completed(db, Game.franchise_id).all()
 
 
 class DeveloperService(CategoryService):
@@ -212,6 +256,13 @@ class DeveloperService(CategoryService):
         for dev in db.query(Developer).all():
             counts[dev.id] = counts.get(dev.id, 0) + by_name.get(dev.name.lower(), 0)
         return counts
+
+    def completed_rows(self, db: Session) -> list:
+        by_name = {d.name.lower(): d.id for d in db.query(Developer).all()}
+        rows = []
+        for dev_id, dev_name, cover, hours in _ranked_completed(db, Game.developer_id, Game.developer).all():
+            rows.append((dev_id if dev_id is not None else by_name.get((dev_name or "").lower()), cover, hours))
+        return rows
 
 
 genre_service = GenreService()

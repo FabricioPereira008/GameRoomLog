@@ -98,3 +98,49 @@ def test_shutdown_workers_waits_for_running_threads(qapp):
     shutdown_workers(qapp)
     qapp.processEvents()
     assert done == ["ok"] and not any(w.isRunning() for w in owner._workers)
+
+
+def test_management_card_shows_cover_mosaic_hours_and_menu(qapp):
+    from frontend_desktop.views.components.management_view import ManageItemCard
+    card = ManageItemCard("genre", {"id": 1, "name": "RPG", "color": "#ff0000", "games_count": 3,
+                                    "total_hours": 42.5, "cover_samples": ["a.jpg", "b.jpg"]})
+    assert card.mosaic.covers == ["a.jpg", "b.jpg"] and card.mosaic.accent_color == "#ff0000"
+    from PySide6.QtWidgets import QLabel
+    texts = [l.text() for l in card.findChildren(QLabel)]
+    assert "3 jogos · 42.5h" in texts
+    assert [a.text() for a in card.menu.actions()] == ["Editar", "Excluir"]
+    assert card.menu_btn.isHidden()
+    card.enterEvent(None)
+    assert not card.menu_btn.isHidden()
+    card.leaveEvent(None)
+    assert card.menu_btn.isHidden()
+
+
+def test_management_card_platform_badge_and_empty_cover(qapp):
+    from frontend_desktop.views.components.management_view import ManageItemCard
+    card = ManageItemCard("platform", {"id": 2, "name": "PC", "icon_name": "pc", "games_count": 1})
+    assert card.mosaic.badge_icon == "monitor" and card.mosaic.covers == []
+    card.mosaic.resize(230, 150)
+    card.mosaic.grab()  # pinta o placeholder com a inicial sem falhar
+
+
+def test_tile_rects_are_side_by_side_slots_inside_the_area():
+    from frontend_desktop.views.components.cover_mosaic import tile_rects
+    for count in (1, 2, 3, 4):
+        rects = tile_rects(count, 240, 160)
+        assert len(rects) == count
+        assert all(r.left() >= 0 and r.right() < 240 and r.top() >= 0 and r.bottom() < 160 for r in rects)
+        assert all(a.right() < b.left() for a, b in zip(rects, rects[1:]))  # sem sobreposição
+
+
+def test_render_cover_image_contain_keeps_whole_cover(qapp, tmp_path):
+    from PySide6.QtGui import QImage, QColor
+    from frontend_desktop import cover_loader as cl
+    src = QImage(200, 300, QImage.Format_RGB32)
+    src.fill(QColor("red"))
+    path = str(tmp_path / "c.png")
+    src.save(path)
+    out = cl.render_cover_image(path, 100, 100, contain=True)
+    assert (out.width(), out.height()) in ((66, 100), (67, 100))  # 2:3 inteira, sem recorte
+    cropped = cl.render_cover_image(path, 100, 100)
+    assert (cropped.width(), cropped.height()) == (100, 100)

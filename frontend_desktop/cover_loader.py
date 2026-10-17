@@ -14,11 +14,18 @@ COVER_RADIUS = 8
 MAX_CACHED_COVERS = 600
 
 
-def render_cover_image(path: str, width: int, height: int, radius: int = COVER_RADIUS) -> Optional[QImage]:
-    """Carrega, escala (cobrindo a área), recorta no centro e arredonda os cantos. Thread-safe (só QImage)."""
+def render_cover_image(path: str, width: int, height: int, radius: int = COVER_RADIUS,
+                       contain: bool = False) -> Optional[QImage]:
+    """Carrega, escala (cobrindo a área), recorta no centro e arredonda os cantos. Thread-safe (só QImage).
+
+    Com `contain=True` a capa inteira é encaixada na área (sem recorte); o resultado tem o tamanho escalado,
+    que pode ser menor que `width` x `height` em uma das dimensões."""
     source = QImage(path)
     if source.isNull():
         return None
+    if contain:
+        source = source.scaled(width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        width, height = source.width(), source.height()
     scaled = source.scaled(width, height, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
     out = QImage(width, height, QImage.Format_ARGB32_Premultiplied)
     out.fill(Qt.transparent)
@@ -33,25 +40,27 @@ def render_cover_image(path: str, width: int, height: int, radius: int = COVER_R
 
 
 class _Signals(QObject):
-    done = Signal(str, int, int, QImage)  # filename, w, h, imagem (nula se falhou)
+    done = Signal(str, int, int, bool, QImage)  # filename, w, h, contain, imagem (nula se falhou)
 
 
 class _CoverTask(QRunnable):
-    def __init__(self, filename: str, width: int, height: int, signals: _Signals):
+    def __init__(self, filename: str, width: int, height: int, signals: _Signals, contain: bool = False):
         super().__init__()
         self.filename, self.width, self.height, self.signals = filename, width, height, signals
+        self.contain = contain
 
     def run(self):
         image = QImage()
         try:
             path = api_client.get_cover_path(self.filename)
             if path:
-                rendered = render_cover_image(path, self.width, self.height)
+                rendered = render_cover_image(path, self.width, self.height,
+                                              radius=4 if self.contain else COVER_RADIUS, contain=self.contain)
                 if rendered is not None:
                     image = rendered
         except Exception:
             logger.warning("Falha ao carregar capa %s", self.filename, exc_info=True)
-        self.signals.done.emit(self.filename, self.width, self.height, image)
+        self.signals.done.emit(self.filename, self.width, self.height, self.contain, image)
 
 
 class CoverLoader(QObject):
@@ -70,19 +79,20 @@ class CoverLoader(QObject):
         self._signals = _Signals()
         self._signals.done.connect(self._on_done)
 
-    def request(self, filename: str, width: int, height: int) -> Optional[QPixmap]:
-        key = (filename, width, height)
+    def request(self, filename: str, width: int, height: int, contain: bool = False) -> Optional[QPixmap]:
+        """`contain=True` pede a capa inteira encaixada na área (sem recorte); o pixmap pode ser menor que a área."""
+        key = (filename, width, height, contain)
         pixmap = self._cache.get(key)
         if pixmap is not None:
             self._cache.move_to_end(key)
             return pixmap
         if key not in self._pending and key not in self._failed:
             self._pending.add(key)
-            self._pool.start(_CoverTask(filename, width, height, self._signals))
+            self._pool.start(_CoverTask(filename, width, height, self._signals, contain))
         return None
 
-    def _on_done(self, filename: str, width: int, height: int, image: QImage):
-        key = (filename, width, height)
+    def _on_done(self, filename: str, width: int, height: int, contain: bool, image: QImage):
+        key = (filename, width, height, contain)
         self._pending.discard(key)
         if image.isNull():
             self._failed.add(key)  # evita refazer HTTP a cada repaint; invalidate() libera

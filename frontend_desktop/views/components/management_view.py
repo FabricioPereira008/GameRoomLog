@@ -1,13 +1,14 @@
 import logging
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QScrollArea, QGridLayout, QFrame, QMessageBox, QInputDialog, QColorDialog, QSizePolicy
+    QScrollArea, QGridLayout, QFrame, QMessageBox, QInputDialog, QColorDialog, QSizePolicy, QToolButton, QMenu
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.workers import run_async
-from frontend_desktop.ui_helpers import add_search_icon, make_color_dot, set_button_icon
+from frontend_desktop.ui_helpers import add_search_icon, set_button_icon
+from frontend_desktop.views.components.cover_mosaic import CoverMosaic
 from frontend_desktop.styles.tokens import COLORS
 
 logger = logging.getLogger(__name__)
@@ -29,50 +30,63 @@ class ManageItemCard(QFrame):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(8, 8, 8, 12)
+        layout.setSpacing(10)
 
-        # Cabeçalho do Card
-        header = QHBoxLayout()
+        # Capa em mosaico (jogos do item); gênero ganha faixa de cor e plataforma, um selo de ícone
+        is_genre = self.category_type == "genre"
+        is_platform = self.category_type == "platform"
+        self.mosaic = CoverMosaic(
+            self.item_data.get("cover_samples") or [],
+            title=self.item_data.get("name", ""),
+            accent_color=self.item_data.get("color", "#4f46e5") if is_genre else None,
+            badge_icon=("monitor" if self.item_data.get("icon_name") == "pc" else "gamepad-2") if is_platform else None,
+        )
+        layout.addWidget(self.mosaic)
+
+        # Editar/Excluir ficam num menu "⋯" que só aparece no hover (também no clique direito)
+        self.menu_btn = QToolButton()
+        self.menu_btn.setText("⋯")
+        self.menu_btn.setProperty("class", "card-menu-btn")
+        self.menu_btn.setCursor(Qt.PointingHandCursor)
+        self.menu_btn.setFixedSize(30, 26)
+        self.menu_btn.setPopupMode(QToolButton.InstantPopup)
+        self.menu = QMenu(self.menu_btn)
+        self.menu.addAction("Editar", self.on_edit)
+        self.menu.addAction("Excluir", self.on_delete)
+        self.menu_btn.setMenu(self.menu)
+        self.mosaic.set_corner_widget(self.menu_btn)
+        self.menu_btn.setVisible(False)
+
+        info = QVBoxLayout()
+        info.setContentsMargins(8, 0, 8, 0)
+        info.setSpacing(2)
         name_label = QLabel(self.item_data.get("name", ""))
         name_label.setProperty("class", "manage-card-title")
-        header.addWidget(name_label)
-        header.addStretch()
+        name_label.setToolTip(self.item_data.get("name", ""))
+        info.addWidget(name_label)
 
-        if self.category_type == "genre":
-            color = self.item_data.get("color", "#4f46e5")
-            header.addWidget(make_color_dot(color))
-
-        layout.addLayout(header)
-
-        # Contador de Jogos Zerados
         count = self.item_data.get("games_count", 0)
-        count_label = QLabel(f"{count} {'jogo zerado' if count == 1 else 'jogos zerados'} · clique para ver")
+        hours = self.item_data.get("total_hours", 0) or 0
+        text = f"{count} {'jogo' if count == 1 else 'jogos'}"
+        if hours:
+            text += f" · {hours:g}h"
+        count_label = QLabel(text)
         count_label.setProperty("class", "manage-card-count")
-        layout.addWidget(count_label)
+        info.addWidget(count_label)
+        layout.addLayout(info)
 
+    def enterEvent(self, event):
+        self.menu_btn.setVisible(True)
+        super().enterEvent(event)
 
-        # Botões de Ação
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(8)
+    def leaveEvent(self, event):
+        if not self.menu.isVisible():
+            self.menu_btn.setVisible(False)
+        super().leaveEvent(event)
 
-        btn_edit = QPushButton("Editar")
-
-        set_button_icon(btn_edit, "pencil")
-        btn_edit.setProperty("class", "small-btn")
-        btn_edit.setCursor(Qt.PointingHandCursor)
-        btn_edit.clicked.connect(self.on_edit)
-        btn_layout.addWidget(btn_edit)
-
-        btn_delete = QPushButton("Excluir")
-
-        set_button_icon(btn_delete, "trash-2", COLORS["danger"])
-        btn_delete.setProperty("class", "delete-btn")
-        btn_delete.setCursor(Qt.PointingHandCursor)
-        btn_delete.clicked.connect(self.on_delete)
-        btn_layout.addWidget(btn_delete)
-
-        layout.addLayout(btn_layout)
+    def contextMenuEvent(self, event):
+        self.menu.exec(event.globalPos())
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:

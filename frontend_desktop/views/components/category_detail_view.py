@@ -88,6 +88,7 @@ class CategoryDetailView(QWidget):
 
         # Grid de Cards dos Jogos
         self.game_grid = ScrollableGameGrid()
+        self.game_grid.enable_sorting()
         self.game_grid.game_selected.connect(self.game_selected.emit)
         main_layout.addWidget(self.game_grid)
 
@@ -97,9 +98,16 @@ class CategoryDetailView(QWidget):
         "franchise": ("get_franchise_details", "{}"),
     }
 
+    def set_filter_options(self, genres: list, developers: list, platforms: list, franchises: list) -> None:
+        self.game_grid.set_filter_options(genres, developers, platforms, franchises)
+
     def load_category(self, category_type: str, category_id: int):
+        if (category_type, category_id) != (self.category_type, self.category_id):
+            self.game_grid.clear_filters()  # busca/filtros de outra categoria não devem vazar para esta
         self.category_type = category_type
         self.category_id = category_id
+        # Dentro de um gênero o filtro de gênero fica visível, mas bloqueado (idem plataforma, franquia...)
+        self.game_grid.set_locked_filters({category_type: ""})
         if category_type not in self.DETAIL_FETCHERS:
             self._on_category_loaded(category_type, category_id, {})
             return
@@ -114,6 +122,7 @@ class CategoryDetailView(QWidget):
     def _on_category_loaded(self, category_type: str, category_id: int, data: dict):
         if (category_type, category_id) != (self.category_type, self.category_id):
             return  # usuário já navegou para outra categoria
+        self.game_grid.set_locked_filters({category_type: data.get("name") or ""})
         if category_type in self.DETAIL_FETCHERS:
             self.title_label.setText(self.DETAIL_FETCHERS[category_type][1].format(data.get("name")))
         is_genre = category_type == "genre"

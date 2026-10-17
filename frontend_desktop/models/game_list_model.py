@@ -78,6 +78,22 @@ class GameFilterProxy(QSortFilterProxyModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._predicate: Optional[Callable[[dict], bool]] = None
+        self._sort_key: Optional[Callable[[dict], object]] = None
+
+    def set_sort(self, key: Optional[Callable[[dict], object]], descending: bool = False) -> None:
+        """Ordena a exibição por `key(game)` (None volta à ordem original do model)."""
+        self._sort_key = key
+        if key is None:
+            self.sort(-1)
+        else:
+            self.invalidate()
+            self.sort(0, Qt.DescendingOrder if descending else Qt.AscendingOrder)
+
+    def lessThan(self, left, right) -> bool:
+        if self._sort_key is None:
+            return left.row() < right.row()
+        a, b = left.data(GameRole), right.data(GameRole)
+        return self._sort_key(a) < self._sort_key(b)
 
     def set_predicate(self, predicate: Optional[Callable[[dict], bool]]) -> None:
         if hasattr(self, "beginFilterChange"):  # Qt >= 6.9 (invalidateFilter foi descontinuado)

@@ -57,6 +57,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(980, 640)
         self.previous_nav_index = 0
         self.all_games = []
+        self._filter_options = None
         self._loader = None
         self._loading = False
         self._refresh_pending = False
@@ -194,6 +195,8 @@ class MainWindow(QMainWindow):
         view = CategoryDetailView()
         view.back_requested.connect(self.return_from_category_detail)
         view.game_selected.connect(self.open_edit_game_dialog)
+        if self._filter_options:
+            view.set_filter_options(*self._filter_options)
         return view
 
     view_yearbook = property(lambda self: self._ensure_view(ViewId.YEARBOOK))
@@ -278,6 +281,9 @@ class MainWindow(QMainWindow):
             self.all_games = games
 
             if options:
+                self._filter_options = options
+                if ViewId.CATEGORY_DETAIL in self._views:
+                    self.view_category_detail.set_filter_options(*options)
                 for view in [
                     self.view_game_room, self.view_queue_grid, self.view_disponiveis_grid,
                     self.view_zerados_grid, self.view_platinados_grid, self.view_wishlist_grid

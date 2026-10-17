@@ -4,7 +4,7 @@ from typing import Callable, List, Optional
 
 from PySide6.QtCore import QModelIndex, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView, QHBoxLayout, QLabel, QLineEdit, QListView, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+    QAbstractItemView, QComboBox, QHBoxLayout, QLabel, QLineEdit, QListView, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 )
 
 from frontend_desktop.cover_loader import cover_loader
@@ -192,6 +192,13 @@ class GameGrid(QWidget):
         self._update_height()
 
 
+SORT_OPTIONS = {
+    "name": ("Nome", lambda g: (g.get("title") or "").casefold()),
+    "score": ("Nota", lambda g: float(g.get("score") if g.get("score") is not None else -1)),
+    "hours": ("Horas", lambda g: float(g.get("played_hours") or g.get("hltb_hours") or 0)),
+}
+
+
 class ScrollableGameGrid(QWidget):
     """Grade com busca, painel de filtros e rolagem nativa. A busca digitada usa debounce."""
     game_selected = Signal(dict)
@@ -221,6 +228,25 @@ class ScrollableGameGrid(QWidget):
         self.filter_panel.filters_changed.connect(self.apply_filter)
         top_bar_layout.addWidget(self.filter_panel.btn_toggle)
 
+        # Ordenação (opcional): critério + direção; só aparece após enable_sorting()
+        self.sort_combo = QComboBox()
+        self.sort_combo.setProperty("class", "filter-combo")
+        for key, (label, _fn) in SORT_OPTIONS.items():
+            self.sort_combo.addItem(f"Ordenar: {label}", key)
+        self.sort_combo.currentIndexChanged.connect(self._on_sort_key_changed)
+        self.sort_combo.setVisible(False)
+        self._sorting = False
+        top_bar_layout.addWidget(self.sort_combo)
+
+        self.sort_dir_btn = QPushButton("A→Z")
+        self.sort_dir_btn.setProperty("class", "small-btn")
+        self.sort_dir_btn.setCheckable(True)
+        self.sort_dir_btn.setCursor(Qt.PointingHandCursor)
+        self.sort_dir_btn.setToolTip("Alternar direção da ordenação")
+        self.sort_dir_btn.toggled.connect(self._apply_sort)
+        self.sort_dir_btn.setVisible(False)
+        top_bar_layout.addWidget(self.sort_dir_btn)
+
         main_layout.addLayout(top_bar_layout)
         main_layout.addWidget(self.filter_panel)
 
@@ -247,6 +273,9 @@ class ScrollableGameGrid(QWidget):
     def set_filter_options(self, genres: list, developers: list, platforms: list, franchises: list) -> None:
         self.filter_panel.set_options(genres, developers, platforms, franchises)
 
+    def set_locked_filters(self, locked) -> None:
+        self.filter_panel.set_locked_filters(locked)
+
     def update_game(self, game_data: dict) -> bool:
         return self.grid.update_game(game_data)
 
@@ -255,6 +284,31 @@ class ScrollableGameGrid(QWidget):
 
     def insert_game(self, index: int, game_data: dict) -> None:
         self.grid.insert_game(index, game_data)
+
+    # --- ordenação ---
+    def enable_sorting(self) -> None:
+        """Mostra o seletor de ordenação e aplica o padrão (nome A–Z)."""
+        self._sorting = True
+        self.sort_combo.setVisible(True)
+        self.sort_dir_btn.setVisible(True)
+        self._apply_sort()
+
+    def _on_sort_key_changed(self, *args) -> None:
+        # Nome começa A→Z; nota e horas começam do maior para o menor
+        self.sort_dir_btn.blockSignals(True)
+        self.sort_dir_btn.setChecked(self.sort_combo.currentData() != "name")
+        self.sort_dir_btn.blockSignals(False)
+        self._apply_sort()
+
+    def _apply_sort(self, *args) -> None:
+        descending = self.sort_dir_btn.isChecked()
+        key = self.sort_combo.currentData()
+        if key == "name":
+            self.sort_dir_btn.setText("Z→A" if descending else "A→Z")
+        else:
+            self.sort_dir_btn.setText("Menor→Maior" if not descending else "Maior→Menor")
+        if self._sorting:
+            self.grid.proxy.set_sort(SORT_OPTIONS[key][1], descending)
 
     # --- busca e filtros ---
     def on_search_changed(self, text: str) -> None:

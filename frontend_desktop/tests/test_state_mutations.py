@@ -92,32 +92,32 @@ def test_filter_panel_logic(qapp):
     assert panel.count_active_filters() == 0
 
     # 1. Filtro de Desenvolvedora
-    panel.combo_dev.setCurrentText("FromSoftware")
+    panel.combo_dev.setText("FromSoftware")
     assert panel.matches(game) is True
-    panel.combo_dev.setCurrentText("Nintendo")
+    panel.combo_dev.setText("Nintendo")
     assert panel.matches(game) is False
-    panel.combo_dev.setCurrentIndex(0)
+    panel.combo_dev.clear()
 
     # 2. Filtro de Gênero
-    panel.combo_genre.setCurrentText("RPG")
+    panel.combo_genre.setText("RPG")
     assert panel.matches(game) is True
-    panel.combo_genre.setCurrentText("Ação")
+    panel.combo_genre.setText("Ação")
     assert panel.matches(game) is False
-    panel.combo_genre.setCurrentIndex(0)
+    panel.combo_genre.clear()
 
     # 3. Filtro de Plataforma
-    panel.combo_plat.setCurrentText("PC")
+    panel.combo_plat.setText("PC")
     assert panel.matches(game) is True
-    panel.combo_plat.setCurrentText("Switch")
+    panel.combo_plat.setText("Switch")
     assert panel.matches(game) is False
-    panel.combo_plat.setCurrentIndex(0)
+    panel.combo_plat.clear()
 
     # 4. Filtro de Franquia
-    panel.combo_fran.setCurrentText("Souls")
+    panel.combo_fran.setText("Souls")
     assert panel.matches(game) is True
-    panel.combo_fran.setCurrentText("Zelda")
+    panel.combo_fran.setText("Zelda")
     assert panel.matches(game) is False
-    panel.combo_fran.setCurrentIndex(0)
+    panel.combo_fran.clear()
 
     # 5. Filtro de HLTB (>= 40h e <= 40h)
     panel.combo_hltb_op.setCurrentText("≥ Maior ou igual a")
@@ -156,7 +156,7 @@ def test_scrollable_game_grid_combined_search_and_filter(qapp):
 
     # Busca por "Super" + Filtro de Gênero "RPG"
     scroll_grid.search_input.setText("Super")
-    scroll_grid.filter_panel.combo_genre.setCurrentText("RPG")
+    scroll_grid.filter_panel.combo_genre.setText("RPG")
     assert len(scroll_grid.grid.games) == 1
     assert scroll_grid.grid.games[0]["title"] == "Super Mario RPG"
 
@@ -335,7 +335,6 @@ def test_filter_panel_reuses_completers_when_options_change(qapp):
     panel.set_options([{"name": "RPG"}, {"name": "Ação"}], [], [], [])
     assert panel.combo_genre.completer() is completer
     assert completer.model().stringList() == ["RPG", "Ação"]
-    assert panel.combo_genre.findText("Ação") >= 0
 
 
 # --- diálogo de jogo: campos em branco, tipos de campo e payload ---
@@ -482,3 +481,92 @@ def test_optional_date_edit_behaviour(qapp):
     w.wheelEvent(QWheelEvent(QPointF(1, 1), QPointF(1, 1), QPoint(0, 0), QPoint(0, 120), Qt.NoButton,
                              Qt.NoModifier, Qt.NoScrollPhase, False))
     w.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Up, Qt.NoModifier))
+
+
+def test_filter_field_matches_partial_while_typing_and_exact_when_picked(qapp):
+    panel = FilterPanel()
+    zelda = {"id": 1, "franchise": {"name": "Zelda"}, "genres": []}
+    zelda2 = {"id": 2, "franchise": {"name": "Zelda II"}, "genres": []}
+    other = {"id": 3, "franchise": {"name": "Mario"}, "genres": []}
+    panel.combo_fran.setText("zel")  # digitação parcial: já filtra, sem o nome inteiro
+    assert [panel.matches(g) for g in (zelda, zelda2, other)] == [True, True, False]
+    panel.combo_fran._on_picked("Zelda")  # escolhido na lista: exato
+    panel.combo_fran.setText("Zelda")
+    assert [panel.matches(g) for g in (zelda, zelda2, other)] == [True, False, False]
+    panel.combo_fran.textEdited.emit("Zelda")  # voltou a digitar: contém de novo
+    assert panel.matches(zelda2) is True
+    assert panel.count_active_filters() == 1
+
+
+def test_filter_field_debounces_typing_and_emits_for_programmatic_text(qapp, monkeypatch):
+    panel = FilterPanel()
+    fired = []
+    panel.filters_changed.connect(lambda: fired.append(1))
+    panel.combo_genre.setText("RPG")  # sem foco = alteração programática: imediato
+    assert fired == [1]
+    monkeypatch.setattr(panel.combo_genre, "hasFocus", lambda: True)
+    panel.combo_genre.setText("RPGs")
+    assert fired == [1] and panel.combo_genre._debounce.isActive()
+    panel.combo_genre._debounce.timeout.emit()
+    assert fired == [1, 1]
+
+
+def test_filter_locked_dimension_is_visible_disabled_and_ignored(qapp):
+    panel = FilterPanel()
+    panel.combo_genre.setText("RPG")
+    panel.set_locked_filters({"genre": "Aventura"})
+    assert not panel.combo_genre.isHidden() and not panel.combo_genre.isEnabled()
+    assert panel.combo_genre.text() == "Aventura"  # visível, mas não filtra
+    assert panel.combo_dev.isEnabled() and panel.count_active_filters() == 0
+    assert panel.matches({"id": 1, "genres": [{"name": "Ação"}]}) is True
+    panel.set_locked_filters({})
+    assert panel.combo_genre.isEnabled() and panel.combo_genre.text() == ""
+
+
+def test_filter_clear_resets_all_fields(qapp):
+    panel = FilterPanel()
+    panel.combo_plat.setText("PC")
+    panel.spin_hltb.setValue(10)
+    panel.clear_filters()
+    assert panel.combo_plat.text() == "" and panel.count_active_filters() == 0
+
+
+def test_scrollable_grid_sorting_by_name_score_and_hours(qapp):
+    grid = ScrollableGameGrid()
+    grid.set_games([
+        {"id": 1, "title": "banana", "score": 5, "played_hours": 30},
+        {"id": 2, "title": "Abacaxi", "score": None, "played_hours": 10},
+        {"id": 3, "title": "Cereja", "score": 9, "hltb_hours": 50},
+    ])
+    ids = lambda: [g["id"] for g in grid.grid.games]
+    grid.enable_sorting()
+    assert ids() == [2, 1, 3]  # nome A–Z (sem diferenciar maiúsculas)
+    grid.sort_dir_btn.setChecked(True)
+    assert ids() == [3, 1, 2]
+    grid.sort_combo.setCurrentIndex(grid.sort_combo.findData("score"))  # nota: maior primeiro
+    assert ids() == [3, 1, 2] and grid.sort_dir_btn.isChecked()
+    grid.sort_dir_btn.setChecked(False)
+    assert ids() == [2, 1, 3]  # sem nota vem primeiro (-1) em ordem crescente
+    grid.sort_combo.setCurrentIndex(grid.sort_combo.findData("hours"))
+    assert ids() == [3, 1, 2]
+    grid.sort_combo.setCurrentIndex(grid.sort_combo.findData("name"))
+    assert not grid.sort_dir_btn.isChecked() and ids() == [2, 1, 3]
+
+
+def test_category_detail_locks_own_dimension_and_enables_sorting(qapp):
+    from frontend_desktop.views.components.category_detail_view import CategoryDetailView
+    view = CategoryDetailView()
+    assert not view.game_grid.sort_combo.isHidden()
+    view.game_grid.filter_panel.combo_genre.setText("RPG")
+    view.load_category("country", 1)  # tipo desconhecido não quebra
+    view.load_category("genre", 1)
+    panel = view.game_grid.filter_panel
+    assert not panel.combo_genre.isEnabled() and panel.combo_plat.isEnabled()
+    view._on_category_loaded("genre", 1, {"name": "Aventura"})
+    assert panel.combo_genre.text() == "Aventura"
+    view.set_filter_options([{"name": "RPG"}], [], [{"name": "PC"}], [])
+    assert panel.combo_plat.completer().model().stringList() == ["PC"]
+    view.load_category("platform", 2)
+    assert panel.combo_genre.isEnabled() and not panel.combo_plat.isEnabled()
+    view._on_category_loaded("platform", 2, {"name": "Switch"})
+    assert panel.combo_plat.text() == "Switch" and panel.combo_genre.text() == ""

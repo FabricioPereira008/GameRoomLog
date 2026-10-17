@@ -251,6 +251,46 @@ def test_category_counts_only_completed_and_delete_unlinks_games():
     assert game["platform_id"] is None
 
 
+def test_category_list_includes_cover_samples_and_hours():
+    plat = client.post("/api/v1/platforms/", json={"name": "PC"}).json()
+    gen = client.post("/api/v1/genres/", json={"name": "RPG"}).json()
+    dev = client.post("/api/v1/developers/", json={"name": "Studio"}).json()
+    fr = client.post("/api/v1/franchises/", json={"name": "Saga"}).json()
+    empty = client.post("/api/v1/franchises/", json={"name": "Vazia"}).json()
+    base = {"platform_id": plat["id"], "genre_ids": [gen["id"]], "developer_id": dev["id"], "franchise_id": fr["id"]}
+    specs = [  # título, nota, horas, status, capa
+        ("Baixa", 5, 10, "Zerado", "low.jpg"),
+        ("Alta", 9, 20, "Platinado", "high.jpg"),
+        ("SemCapa", 10, 5, "Zerado", None),
+        ("Media", 7, 3, "Zerado", "mid.jpg"),
+        ("Fila", 10, 99, "Fila", "queued.jpg"),
+        ("Extra1", 1, 1, "Zerado", "x1.jpg"),
+        ("Extra2", 2, 1, "Zerado", "x2.jpg"),
+    ]
+    for title, score, hours, status, cover in specs:
+        r = client.post("/api/v1/games/", json={**base, "title": title, "score": score, "played_hours": hours,
+                                                "status": status, "cover_image": cover})
+        assert r.status_code == 201, r.text
+
+    for ep, obj in [("platforms", plat), ("genres", gen), ("developers", dev), ("franchises", fr)]:
+        row = next(x for x in client.get(f"/api/v1/{ep}/").json() if x["id"] == obj["id"])
+        # só concluídos com capa, melhor nota primeiro, limitado a 4
+        assert row["cover_samples"] == ["high.jpg", "mid.jpg", "low.jpg", "x2.jpg"], ep
+        assert row["total_hours"] == 40.0, ep  # 10+20+5+3+1+1
+
+    row = next(x for x in client.get("/api/v1/franchises/").json() if x["id"] == empty["id"])
+    assert row["cover_samples"] == [] and row["total_hours"] == 0
+
+
+def test_developer_cover_samples_match_legacy_games_by_name():
+    dev = client.post("/api/v1/developers/", json={"name": "Legado"}).json()
+    r = client.post("/api/v1/games/", json={"title": "Old", "developer": "legado", "status": "Zerado",
+                                            "cover_image": "old.jpg", "played_hours": 4})
+    assert r.status_code == 201
+    row = next(x for x in client.get("/api/v1/developers/").json() if x["id"] == dev["id"])
+    assert row["cover_samples"] == ["old.jpg"] and row["total_hours"] == 4.0
+
+
 def test_game_validation_limits():
     assert client.post("/api/v1/games/", json={"title": ""}).status_code == 422
     assert client.post("/api/v1/games/", json={"title": "X", "score": 11}).status_code == 422
