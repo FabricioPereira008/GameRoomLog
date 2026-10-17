@@ -5,6 +5,16 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.4.0] - 2026-10-16
+### Adicionado
+- Sincronização de bibliotecas de lojas: nova tela “Sincronizar lojas” lista os jogos da Steam, Epic, GOG e Amazon que ainda não estão no GameRoom e importa os escolhidos (tudo vem desmarcado, com busca, filtro por loja e “só jogados”).
+- Steam via API oficial (API key e SteamID64 salvos apenas no computador); Epic, GOG e Amazon lidos do Heroic Games Launcher, em modo somente leitura.
+- Jogos já cadastrados à mão são vinculados automaticamente à loja pelo título; jogos ignorados não reaparecem e podem ser restaurados.
+- Capas dos jogos importados são buscadas em segundo plano.
+
+### Modificado
+- Nova migração de banco (vínculos de loja e lista de ignorados); bancos existentes são atualizados sem perda de dados.
+
 ## [0.3.1] - 2026-10-16
 ### Corrigido
 - AppImage agora abre em distribuições sem libfuse.so.2 (ex.: Arch/CachyOS com apenas FUSE 3): o build passou a usar o appimagetool atual, com runtime estático.
