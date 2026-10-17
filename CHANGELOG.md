@@ -5,6 +5,17 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.4.1] - 2026-10-16
+### Modificado
+- Janela de adicionar/editar jogo redesenhada: campos organizados em cartões (Identificação, Progresso, Jogada, Anotações), rótulos acima dos campos, coluna própria para a capa com preview maior e botão Enter para salvar.
+- Ao criar um jogo, todos os campos começam em branco ou com texto neutro (status, plataforma e formato com “Selecione…”, datas vazias, horas e notas sem valor); título e status são obrigatórios.
+- Tipo de jogada virou o checkbox “Esta é uma rejogada”; as datas de conclusão começam vazias e abrem o calendário no mês atual.
+
+### Corrigido
+- Desenvolvedora, franquia e gênero vinham preenchidos com o primeiro item da lista em jogos novos.
+- Ajustar recorte da capa falhava ao limpar o arquivo temporário (faltava importar os).
+- Jogos da Steam com apóstrofo no título (ex.: Dragon's Dogma 2) agora são reconhecidos como já cadastrados.
+
 ## [0.4.0] - 2026-10-16
 ### Adicionado
 - Sincronização de bibliotecas de lojas: nova tela “Sincronizar lojas” lista os jogos da Steam, Epic, GOG e Amazon que ainda não estão no GameRoom e importa os escolhidos (tudo vem desmarcado, com busca, filtro por loja e “só jogados”).
