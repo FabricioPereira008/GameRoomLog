@@ -173,6 +173,7 @@ class MainWindow(QMainWindow):
         view = SettingsView()
         view.settings_changed.connect(self.refresh_all_data)
         view.data_imported.connect(self.refresh_all_data)
+        view.game_saved.connect(self.apply_game_mutation)
         return view
 
     def _create_sync(self):

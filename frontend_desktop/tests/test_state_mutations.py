@@ -208,6 +208,23 @@ def test_game_dialog_survives_offline_api(qapp, monkeypatch):
     assert dialog.input_title.text() == "Teste"
 
 
+def test_game_dialog_prefills_new_game_without_id(qapp, monkeypatch):
+    """Jogo novo vindo da caixa de entrada do portátil: abre como 'Novo Jogo', já preenchido."""
+    from frontend_desktop.views.dialogs import game_dialog as gd
+    monkeypatch.setattr(gd.GameDialog, "fetch_options", staticmethod(lambda: {
+        "developers": [], "platforms": [{"id": 4, "name": "Android"}], "franchises": [], "genres": []}))
+    dialog = gd.GameDialog(game_data={"title": "Dead Cells", "status": "Zerado", "finish_date": "2026-10-12",
+                                      "played_hours": 20.0, "platform": {"id": 4}})
+    _wait_dialog(dialog, qapp)
+    assert dialog.is_edit is False and dialog.windowTitle() == "Novo Jogo"
+    assert dialog.input_title.text() == "Dead Cells"
+    assert dialog.combo_status.currentText() == "Zerado"
+    assert dialog.combo_platform.currentData() == 4
+    assert dialog.spin_played.value() == 20
+    payload = dialog._build_payload("Dead Cells")
+    assert payload["finish_date"] == "2026-10-12"
+
+
 def test_game_dialog_auto_cover_runs_async(qapp, monkeypatch):
     from frontend_desktop.views.dialogs import game_dialog as gd
     monkeypatch.setattr(gd.GameDialog, "fetch_options", staticmethod(lambda: {"developers": [], "platforms": [], "franchises": [], "genres": []}))

@@ -1,0 +1,10 @@
+{
+  "format": "gameroom-catalog",
+  "version": 1,
+  "exported_at": "2026-10-01T10:00:00Z",
+  "games": [
+    { "id": 42, "title": "Celeste", "platform": "PC", "status": "Jogando" },
+    { "id": 7, "title": "Hollow Knight", "platform": null, "status": "Fila" }
+  ],
+  "platforms": ["Android", "Nintendo Switch", "PC"]
+}

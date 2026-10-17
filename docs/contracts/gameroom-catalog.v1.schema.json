@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gameroomlog.local/contracts/gameroom-catalog.v1.schema.json",
+  "title": "gameroom-catalog v1",
+  "description": "Snapshot opcional exportado pelo GameRoom para o app sugerir títulos e plataformas. O status é um rótulo de exibição.",
+  "type": "object",
+  "required": ["format", "version", "exported_at", "games", "platforms"],
+  "properties": {
+    "format": { "const": "gameroom-catalog" },
+    "version": { "const": 1 },
+    "exported_at": { "type": "string", "format": "date-time" },
+    "games": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "status"],
+        "properties": {
+          "id": { "type": "integer" },
+          "title": { "type": "string" },
+          "platform": { "type": ["string", "null"] },
+          "status": { "type": "string" }
+        }
+      }
+    },
+    "platforms": { "type": "array", "items": { "type": "string" } }
+  }
+}

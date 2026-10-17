@@ -251,5 +251,23 @@ class ApiClient:
     def save_library_settings(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self._json("PUT", "library/settings", json=data)
 
+    # --- CAIXA DE ENTRADA DO APP DO PORTÁTIL ---
+    def inbox_import(self, package: Dict[str, Any]) -> Dict[str, Any]:
+        return self._json("POST", "inbox/import", timeout=IMPORT_TIMEOUT, json=package)
+
+    def inbox_pending(self, threshold: Optional[int] = None) -> Dict[str, Any]:
+        params = {"threshold": threshold} if threshold else None
+        return self._json("GET", "inbox/pending", params=params)
+
+    def inbox_proposal(self, event_ids: List[int], game_id: int, threshold: Optional[int] = None) -> Dict[str, Any]:
+        params = {"threshold": threshold} if threshold else None
+        return self._json("POST", "inbox/proposal", params=params, json={"event_ids": event_ids, "game_id": game_id})
+
+    def inbox_resolve(self, event_ids: List[int], action: str, game_id: Optional[int] = None) -> Dict[str, Any]:
+        return self._json("POST", "inbox/resolve", json={"event_ids": event_ids, "action": action, "game_id": game_id})
+
+    def inbox_catalog(self) -> Dict[str, Any]:
+        return self._json("GET", "inbox/catalog")
+
 
 api_client = ApiClient()

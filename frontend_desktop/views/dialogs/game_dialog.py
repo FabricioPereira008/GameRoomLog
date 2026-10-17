@@ -442,7 +442,8 @@ class GameDialog(QDialog):
         set_status(self.lbl_cover_status, "error", "Não foi possível carregar as listas (API offline?).")
 
     def populate_data(self):
-        if not self.is_edit:
+        # Sem id também pode vir pré-preenchido (ex.: jogo novo vindo do app do portátil)
+        if not self.game_data:
             return
 
         self.input_title.setText(self.game_data.get("title", ""))

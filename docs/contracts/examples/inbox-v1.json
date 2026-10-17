@@ -1,0 +1,35 @@
+{
+  "format": "gameroom-inbox",
+  "version": 1,
+  "exported_at": "2026-10-20T21:15:00Z",
+  "events": [
+    {
+      "id": "2f6c1d0e-6a7b-4c39-9a51-0c1f5c3e8a01",
+      "type": "playing",
+      "title": "Hollow Knight",
+      "platform": "Nintendo Switch",
+      "date": "2026-10-05",
+      "created_at": "2026-10-05T14:02:11Z"
+    },
+    {
+      "id": "8b0e3f52-1d7a-4f0c-b6a4-5d2e9c7f1b02",
+      "type": "finished",
+      "title": "Hollow Knight",
+      "platform": "Nintendo Switch",
+      "date": "2026-10-12",
+      "created_at": "2026-10-12T22:40:00Z",
+      "played_hours": 38,
+      "score": 9.5,
+      "difficulty": 8,
+      "notes": "Final verdadeiro."
+    },
+    {
+      "id": "c4a9e7d1-0b3f-4e2a-8c6d-7f1a2b3c4d03",
+      "type": "platinum",
+      "title": "Celeste",
+      "platform": "Android",
+      "game_id": 42,
+      "date": "2026-10-15"
+    }
+  ]
+}

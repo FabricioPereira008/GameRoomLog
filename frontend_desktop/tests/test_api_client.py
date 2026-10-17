@@ -1,3 +1,4 @@
+import json
 import pytest
 from app_version import __version__
 import responses
@@ -168,3 +169,28 @@ def test_library_endpoints(client):
     assert client.library_unignore(9) is False
     assert client.get_library_settings()["steam_id"] == ""
     assert client.save_library_settings({"steam_id": "1"})["steam_api_key_set"] is True
+
+
+@responses.activate
+def test_inbox_endpoints(client):
+    base = "http://test-server:8000/api/v1/inbox"
+    responses.add(responses.POST, f"{base}/import", json={"received": 1, "imported": 1, "duplicates": 0, "rejected": []})
+    responses.add(responses.GET, f"{base}/pending", json={"total_events": 0, "groups": []})
+    responses.add(responses.POST, f"{base}/proposal", json={"game_id": 3})
+    responses.add(responses.POST, f"{base}/resolve", json={"resolved": 2})
+    responses.add(responses.GET, f"{base}/catalog", json={"format": "gameroom-catalog"})
+
+    assert client.inbox_import({"format": "gameroom-inbox", "version": 1, "events": []})["imported"] == 1
+    assert client.inbox_pending(threshold=90)["total_events"] == 0
+    assert "threshold=90" in responses.calls[1].request.url
+    assert client.inbox_proposal([1], 3)["game_id"] == 3
+    assert client.inbox_resolve([1, 2], "applied", game_id=3)["resolved"] == 2
+    assert json.loads(responses.calls[3].request.body) == {"event_ids": [1, 2], "action": "applied", "game_id": 3}
+    assert client.inbox_catalog()["format"] == "gameroom-catalog"
+
+
+@responses.activate
+def test_inbox_import_raises_on_unsupported_version(client):
+    responses.add(responses.POST, "http://test-server:8000/api/v1/inbox/import", json={"detail": "Versão 2"}, status=422)
+    with pytest.raises(Exception):
+        client.inbox_import({"format": "gameroom-inbox", "version": 2, "events": []})

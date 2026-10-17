@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gameroomlog.local/contracts/gameroom-inbox.v1.schema.json",
+  "title": "gameroom-inbox v1",
+  "description": "Pacote de eventos que o app do portátil envia ao GameRoom. Campos desconhecidos são ignorados; campos novos sempre entram como opcionais.",
+  "type": "object",
+  "required": ["format", "version", "events"],
+  "properties": {
+    "format": { "const": "gameroom-inbox" },
+    "version": { "const": 1 },
+    "exported_at": { "type": "string", "format": "date-time" },
+    "events": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": { "$ref": "#/$defs/event" }
+    }
+  },
+  "$defs": {
+    "event": {
+      "type": "object",
+      "required": ["id", "type", "title"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "description": "UUID gerado no app. Editar um evento já exportado gera um UUID novo." },
+        "type": { "enum": ["playing", "finished", "platinum"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "platform": { "type": ["string", "null"], "maxLength": 100 },
+        "game_id": { "type": ["integer", "null"], "description": "id do jogo no catálogo exportado pelo GameRoom, se o app o tiver." },
+        "date": { "type": ["string", "null"], "format": "date", "description": "YYYY-MM-DD. Ausente: data de created_at." },
+        "created_at": { "type": ["string", "null"], "format": "date-time" },
+        "played_hours": { "type": ["number", "null"], "minimum": 0, "description": "Total acumulado, não incremento." },
+        "score": { "type": ["number", "null"], "minimum": 0, "maximum": 10 },
+        "difficulty": { "type": ["number", "null"], "minimum": 0, "maximum": 10 },
+        "notes": { "type": ["string", "null"], "maxLength": 5000 }
+      }
+    }
+  }
+}
