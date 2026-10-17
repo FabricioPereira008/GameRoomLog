@@ -84,3 +84,4 @@ class Game(Base):
     franchise = relationship("Franchise", back_populates="games")
     developer_rel = relationship("Developer", back_populates="games")
     genres = relationship("Genre", secondary="game_genres", back_populates="games")
+    store_links = relationship("GameStoreLink", back_populates="game", cascade="all, delete-orphan")
