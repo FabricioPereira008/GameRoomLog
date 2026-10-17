@@ -14,10 +14,17 @@ def window(qapp, monkeypatch):
     monkeypatch.setattr(mw.api_client, "get_games", lambda **kw: list(games))
     for name in ("get_genres", "get_developers", "get_platforms", "get_franchises"):
         monkeypatch.setattr(mw.api_client, name, lambda: [])
+    # Views criadas sob demanda disparam workers; sem rede real (e sem log de falha) em threads de fundo
+    monkeypatch.setattr(mw.api_client, "get_library_settings", lambda: {"steam_api_key_set": False, "steam_id": "", "heroic_path": ""})
+    monkeypatch.setattr(mw.api_client, "inbox_pending", lambda threshold=None: {"total_events": 0, "groups": []})
     w = MainWindow(auto_load=False)
     w.refresh_all_data_sync()
     yield w
     w.close()
+    # Nenhuma QThread pode sobreviver à janela (crash no PySide 6.12)
+    for owner in [w, *w._views.values()]:
+        for worker in list(owner.__dict__.get("_workers", ())):
+            worker.wait(5000)
 
 
 def _ids(grid):
