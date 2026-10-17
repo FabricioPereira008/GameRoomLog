@@ -5,6 +5,15 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.4.2] - 2026-10-16
+### Modificado
+- Páginas de Gêneros, Plataformas e Séries / Franquias redesenhadas: cards estilo pôster com mosaico das capas dos jogos (inteiras, sem corte), faixa com a cor do gênero, selo de plataforma, total de horas e menu ⋯ (Editar/Excluir) ao passar o mouse.
+- A API de categorias passa a devolver `cover_samples` e `total_hours`.
+- Páginas de detalhe ganharam ordenação por nome, nota ou horas; o filtro da própria categoria fica visível, mas bloqueado.
+
+### Corrigido
+- Filtros por gênero, desenvolvedora, plataforma e franquia agora filtram enquanto você digita (por trecho do nome) e o campo de seleção abre a lista de sugestões.
+
 ## [0.4.1] - 2026-10-16
 ### Modificado
 - Janela de adicionar/editar jogo redesenhada: campos organizados em cartões (Identificação, Progresso, Jogada, Anotações), rótulos acima dos campos, coluna própria para a capa com preview maior e botão Enter para salvar.
