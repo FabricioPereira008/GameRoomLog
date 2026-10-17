@@ -255,7 +255,7 @@ class SettingsView(QWidget):
         self.spin_inbox_threshold.setRange(50, 100)
         self.spin_inbox_threshold.setSuffix("%")
         self.spin_inbox_threshold.setValue(self.inbox_threshold)
-        self.spin_inbox_threshold.valueChanged.connect(lambda v: self.settings.setValue("inbox_threshold", v))
+        self.spin_inbox_threshold.valueChanged.connect(self._save_inbox_threshold)
         threshold_row.addWidget(self.spin_inbox_threshold)
         threshold_row.addStretch()
         layout.addLayout(threshold_row)
@@ -285,6 +285,9 @@ class SettingsView(QWidget):
         self.lbl_inbox_status.setWordWrap(True)
         layout.addWidget(self.lbl_inbox_status)
         return group
+
+    def _save_inbox_threshold(self, value: int):
+        self.settings.setValue("inbox_threshold", value)
 
     @property
     def inbox_threshold(self) -> int:

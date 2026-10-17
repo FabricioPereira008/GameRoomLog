@@ -347,3 +347,8 @@ def test_settings_review_forwards_saved_games(settings_view, monkeypatch):
     settings_view.open_inbox_review()
     assert received == [(1, True)]
     assert "1 jogo(s) atualizado(s)" in settings_view.lbl_inbox_status.text()
+
+
+def test_threshold_spin_persists_setting(settings_view):
+    settings_view.spin_inbox_threshold.setValue(92)
+    assert settings_view.inbox_threshold == 92

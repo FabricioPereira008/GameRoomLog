@@ -101,7 +101,7 @@ class GamePickerDialog(QDialog):
         self.input_filter.textChanged.connect(self._refill)
         layout.addWidget(self.input_filter)
         self.list = QListWidget()
-        self.list.itemDoubleClicked.connect(lambda *_: self._accept())
+        self.list.itemDoubleClicked.connect(self._accept)
         layout.addWidget(self.list, 1)
 
         buttons = QHBoxLayout()
@@ -130,7 +130,7 @@ class GamePickerDialog(QDialog):
         if self.list.count():
             self.list.setCurrentRow(0)
 
-    def _accept(self):
+    def _accept(self, *_):
         item = self.list.currentItem()
         if item is not None:
             self.selected_id = item.data(Qt.UserRole)
