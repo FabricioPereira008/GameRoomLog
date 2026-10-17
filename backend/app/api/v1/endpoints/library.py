@@ -3,8 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.schemas.library import (
-    IgnoredResponse, IgnoreRequest, ImportRequest, ImportResponse, ScanRequest, ScanResponse,
+    IgnoredResponse, IgnoreRequest, ImportRequest, ImportResponse, LibrarySettingsResponse,
+    LibrarySettingsUpdate, ScanRequest, ScanResponse,
 )
+from backend.app.services.library.settings_store import LibrarySettings, load_settings, save_settings
 from backend.app.services.library_service import UnknownStoreError, library_service
 
 router = APIRouter()
@@ -38,3 +40,23 @@ def list_ignored(db: Session = Depends(get_db)):
 def unignore_game(ignored_id: int, db: Session = Depends(get_db)):
     if not library_service.unignore(db, ignored_id):
         raise HTTPException(status_code=404, detail="Item ignorado não encontrado")
+
+
+def _settings_response(cfg: LibrarySettings) -> LibrarySettingsResponse:
+    return LibrarySettingsResponse(steam_api_key_set=bool(cfg.steam_api_key), steam_id=cfg.steam_id)
+
+
+@router.get("/settings", response_model=LibrarySettingsResponse)
+def get_library_settings():
+    return _settings_response(load_settings())
+
+
+@router.put("/settings", response_model=LibrarySettingsResponse)
+def update_library_settings(payload: LibrarySettingsUpdate):
+    cfg = load_settings()
+    if payload.steam_api_key is not None:
+        cfg.steam_api_key = payload.steam_api_key.strip()
+    if payload.steam_id is not None:
+        cfg.steam_id = payload.steam_id.strip()
+    save_settings(cfg)
+    return _settings_response(cfg)

@@ -13,6 +13,7 @@ from frontend_desktop.views.components.yearbook_view import YearbookView
 from frontend_desktop.views.components.management_view import ManagementView
 from frontend_desktop.views.components.category_detail_view import CategoryDetailView
 from frontend_desktop.views.components.settings_view import SettingsView
+from frontend_desktop.views.components.library_sync_view import LibrarySyncView
 from frontend_desktop.views.dialogs.game_dialog import GameDialog
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.views import game_status as gs
@@ -129,6 +130,7 @@ class MainWindow(QMainWindow):
             ViewId.PLATFORMS: lambda: self._create_management("platform", "Plataforma"),
             ViewId.FRANCHISES: lambda: self._create_management("franchise", "Série / Franquia"),
             ViewId.SETTINGS: self._create_settings,
+            ViewId.SYNC: self._create_sync,
             ViewId.CATEGORY_DETAIL: self._create_category_detail,
         }
 
@@ -171,6 +173,22 @@ class MainWindow(QMainWindow):
         view.settings_changed.connect(self.refresh_all_data)
         view.data_imported.connect(self.refresh_all_data)
         return view
+
+    def _create_sync(self):
+        view = LibrarySyncView()
+        view.games_imported.connect(self._on_games_imported)
+        view.games_updated.connect(self._on_games_updated)
+        return view
+
+    def _on_games_imported(self, games: list):
+        """Insere os jogos importados in-place (sem recarregar as telas)."""
+        for game in reversed(games):
+            self.apply_game_mutation(game, is_new=True)
+        self.statusBar().showMessage(f"{len(games)} jogo(s) importado(s). Total: {len(self.all_games)}")
+
+    def _on_games_updated(self, games: list):
+        for game in games:
+            self.apply_game_mutation(game, is_new=False, old_status=game.get("status"))
 
     def _create_category_detail(self):
         view = CategoryDetailView()

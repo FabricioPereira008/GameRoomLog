@@ -123,3 +123,17 @@ def test_sidebar_has_a_button_for_each_nav_view(window):
     from frontend_desktop.views.view_ids import NAV_SECTIONS
     expected = {int(v) for _, ids in NAV_SECTIONS for v in ids} | {11}
     assert {window.sidebar.button_group.id(b) for b in window.sidebar.button_group.buttons()} == expected
+
+
+def test_sync_view_is_lazy_and_imports_in_place(window):
+    from frontend_desktop.views.view_ids import ViewId
+    assert ViewId.SYNC not in window._views
+    window.switch_view(int(ViewId.SYNC))
+    assert window.current_view_id == ViewId.SYNC
+    assert window.view_title_label.text() == "Sincronizar bibliotecas"
+    before = len(window.all_games)
+    new = {"id": 9001, "title": "Importado", "status": "Disponível"}
+    window._views[ViewId.SYNC].games_imported.emit([new])
+    assert len(window.all_games) == before + 1 and window.all_games[0]["id"] == 9001
+    window._views[ViewId.SYNC].games_updated.emit([dict(new, cover_image="c.jpg")])
+    assert next(g for g in window.all_games if g["id"] == 9001)["cover_image"] == "c.jpg"

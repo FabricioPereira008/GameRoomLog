@@ -8,6 +8,7 @@ DEFAULT_BASE_URL = "http://127.0.0.1:8000/api/v1"
 DEFAULT_TIMEOUT = 5
 UPLOAD_TIMEOUT = 15
 IMPORT_TIMEOUT = 120
+SCAN_TIMEOUT = 90
 
 
 def get_default_base_url() -> str:
@@ -226,5 +227,29 @@ class ApiClient:
             "POST", f"uploads/auto-cover-game/{game_id}", timeout=20,
             json={"api_key": api_key} if api_key else {},
         )
+
+    # --- SINCRONIZAÇÃO DE BIBLIOTECAS (Steam, Heroic...) ---
+    def library_scan(self, include_all: bool = False, stores: Optional[List[str]] = None) -> Dict[str, Any]:
+        return self._json("POST", "library/scan", timeout=SCAN_TIMEOUT,
+                          json={"include_all": include_all, "stores": stores})
+
+    def library_import(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return self._json("POST", "library/import", timeout=IMPORT_TIMEOUT, json={"items": items})
+
+    def library_ignore(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return self._json("POST", "library/ignored", json={"items": items})
+
+    def library_ignored(self) -> List[Dict[str, Any]]:
+        return self._json("GET", "library/ignored")
+
+    def library_unignore(self, ignored_id: int) -> bool:
+        return self._delete(f"library/ignored/{ignored_id}")
+
+    def get_library_settings(self) -> Dict[str, Any]:
+        return self._json("GET", "library/settings")
+
+    def save_library_settings(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self._json("PUT", "library/settings", json=data)
+
 
 api_client = ApiClient()

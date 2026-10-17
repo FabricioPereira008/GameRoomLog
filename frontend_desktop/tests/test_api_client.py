@@ -145,3 +145,26 @@ def test_base_url_from_env(monkeypatch):
 def test_is_backend_online_rejects_foreign_service(client):
     responses.add(responses.GET, "http://test-server:8000/", body="<html>other service</html>", status=200)
     assert client.is_backend_online() is False
+
+
+@responses.activate
+def test_library_endpoints(client):
+    base = "http://test-server:8000/api/v1/library"
+    responses.add(responses.POST, f"{base}/scan", json={"candidates": [], "auto_linked": 0, "errors": []})
+    responses.add(responses.POST, f"{base}/import", json={"imported": [], "skipped": 0}, status=201)
+    responses.add(responses.POST, f"{base}/ignored", json={"ignored": 1}, status=201)
+    responses.add(responses.GET, f"{base}/ignored", json=[{"id": 3}])
+    responses.add(responses.DELETE, f"{base}/ignored/3", status=204)
+    responses.add(responses.DELETE, f"{base}/ignored/9", status=404)
+    responses.add(responses.GET, f"{base}/settings", json={"steam_api_key_set": False, "steam_id": ""})
+    responses.add(responses.PUT, f"{base}/settings", json={"steam_api_key_set": True, "steam_id": "1"})
+
+    assert client.library_scan(include_all=True)["errors"] == []
+    assert responses.calls[0].request.body == b'{"include_all": true, "stores": null}'
+    assert client.library_import([{"store": "steam"}])["skipped"] == 0
+    assert client.library_ignore([{"store": "steam"}])["ignored"] == 1
+    assert client.library_ignored() == [{"id": 3}]
+    assert client.library_unignore(3) is True
+    assert client.library_unignore(9) is False
+    assert client.get_library_settings()["steam_id"] == ""
+    assert client.save_library_settings({"steam_id": "1"})["steam_api_key_set"] is True
