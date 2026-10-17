@@ -43,7 +43,8 @@ def unignore_game(ignored_id: int, db: Session = Depends(get_db)):
 
 
 def _settings_response(cfg: LibrarySettings) -> LibrarySettingsResponse:
-    return LibrarySettingsResponse(steam_api_key_set=bool(cfg.steam_api_key), steam_id=cfg.steam_id)
+    return LibrarySettingsResponse(steam_api_key_set=bool(cfg.steam_api_key), steam_id=cfg.steam_id,
+                                   heroic_path=cfg.heroic_path)
 
 
 @router.get("/settings", response_model=LibrarySettingsResponse)
@@ -58,5 +59,7 @@ def update_library_settings(payload: LibrarySettingsUpdate):
         cfg.steam_api_key = payload.steam_api_key.strip()
     if payload.steam_id is not None:
         cfg.steam_id = payload.steam_id.strip()
+    if payload.heroic_path is not None:
+        cfg.heroic_path = payload.heroic_path.strip()
     save_settings(cfg)
     return _settings_response(cfg)

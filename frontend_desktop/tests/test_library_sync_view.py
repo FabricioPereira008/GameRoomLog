@@ -16,7 +16,7 @@ def sync_workers(monkeypatch):
             return None
         on_success(result)
     monkeypatch.setattr(lsv, "run_async", run_async)
-    monkeypatch.setattr(lsv.api_client, "get_library_settings", lambda: {"steam_api_key_set": True, "steam_id": "42"})
+    monkeypatch.setattr(lsv.api_client, "get_library_settings", lambda: {"steam_api_key_set": True, "steam_id": "42", "heroic_path": "/h"})
 
 
 CANDS = [
@@ -39,20 +39,21 @@ def titles(view, visible_only=True):
 def test_loads_saved_settings(qapp):
     view = LibrarySyncView()
     assert view.input_steam_id.text() == "42"
+    assert view.input_heroic_path.text() == "/h"
     assert "já salva" in view.input_steam_key.placeholderText()
 
 
 def test_save_settings_omits_empty_key(qapp, monkeypatch):
     sent = []
     monkeypatch.setattr(lsv.api_client, "save_library_settings",
-                        lambda p: sent.append(p) or {"steam_api_key_set": True, "steam_id": p["steam_id"]})
+                        lambda p: sent.append(p) or {"steam_api_key_set": True, "steam_id": p["steam_id"], "heroic_path": "/h"})
     view = LibrarySyncView()
     view.input_steam_id.setText(" 99 ")
     view.save_settings()
-    assert sent[-1] == {"steam_id": "99"}
+    assert sent[-1] == {"steam_id": "99", "heroic_path": "/h"}
     view.input_steam_key.setText("KEY")
     view.save_settings()
-    assert sent[-1] == {"steam_id": "99", "steam_api_key": "KEY"}
+    assert sent[-1] == {"steam_id": "99", "heroic_path": "/h", "steam_api_key": "KEY"}
     assert view.input_steam_key.text() == "" and "salvas" in view.config_status.text()
 
 

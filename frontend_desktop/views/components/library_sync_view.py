@@ -15,7 +15,7 @@ from frontend_desktop.workers import run_async
 
 logger = logging.getLogger(__name__)
 
-STORE_LABELS = {"steam": "Steam", "epic": "Epic", "gog": "GOG", "amazon": "Amazon"}
+STORE_LABELS = {"heroic": "Heroic", "steam": "Steam", "epic": "Epic", "gog": "GOG", "amazon": "Amazon"}
 COL_TITLE, COL_STORE, COL_HOURS = range(3)
 
 
@@ -127,7 +127,9 @@ class LibrarySyncView(QWidget):
         desc = QLabel(
             "<b>Steam</b>: crie uma API key em steamcommunity.com/dev/apikey e informe o seu SteamID64. "
             "Nas configurações de privacidade do perfil, deixe os <b>detalhes dos jogos públicos</b>.<br>"
-            "A key fica salva apenas neste computador."
+            "A key fica salva apenas neste computador.<br><br>"
+            "<b>Epic, GOG e Amazon</b>: lidos do Heroic Games Launcher (faça login nas lojas e abra a biblioteca nele). "
+            "A pasta é detectada automaticamente; preencha só se estiver em outro lugar."
         )
         desc.setWordWrap(True)
         desc.setProperty("class", "settings-desc")
@@ -139,6 +141,9 @@ class LibrarySyncView(QWidget):
         self.input_steam_id.setPlaceholderText("7656119...")
         form.addRow("Steam API key", self.input_steam_key)
         form.addRow("SteamID64", self.input_steam_id)
+        self.input_heroic_path = QLineEdit()
+        self.input_heroic_path.setPlaceholderText("Automático (ex.: ~/.config/heroic)")
+        form.addRow("Pasta do Heroic", self.input_heroic_path)
         layout.addLayout(form)
         row = QHBoxLayout()
         self.btn_save = QPushButton("Salvar")
@@ -172,10 +177,14 @@ class LibrarySyncView(QWidget):
 
     def _on_settings_loaded(self, cfg: dict):
         self.input_steam_id.setText(cfg.get("steam_id", ""))
+        self.input_heroic_path.setText(cfg.get("heroic_path", ""))
         self.input_steam_key.setPlaceholderText("(já salva — deixe vazio para manter)" if cfg.get("steam_api_key_set") else "")
 
     def save_settings(self):
-        payload: Dict[str, str] = {"steam_id": self.input_steam_id.text().strip()}
+        payload: Dict[str, str] = {
+            "steam_id": self.input_steam_id.text().strip(),
+            "heroic_path": self.input_heroic_path.text().strip(),
+        }
         key = self.input_steam_key.text().strip()
         if key:  # vazio mantém a key já salva
             payload["steam_api_key"] = key

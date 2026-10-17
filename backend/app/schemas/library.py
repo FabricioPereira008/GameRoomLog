@@ -57,8 +57,10 @@ class IgnoredResponse(LibraryEntryBase):
 class LibrarySettingsResponse(BaseModel):
     steam_api_key_set: bool  # a key nunca é devolvida
     steam_id: str
+    heroic_path: str = ""
 
 
 class LibrarySettingsUpdate(BaseModel):
     steam_api_key: Optional[str] = Field(default=None, max_length=200)  # None mantém; "" apaga
     steam_id: Optional[str] = Field(default=None, max_length=40)
+    heroic_path: Optional[str] = Field(default=None, max_length=500)

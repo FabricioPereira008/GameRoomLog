@@ -11,6 +11,7 @@ from backend.app.core.config import settings
 class LibrarySettings:
     steam_api_key: str = ""
     steam_id: str = ""
+    heroic_path: str = ""  # vazio = detectar automaticamente
 
 
 def settings_path() -> Path:
@@ -27,6 +28,7 @@ def load_settings() -> LibrarySettings:
     return LibrarySettings(
         steam_api_key=str(raw.get("steam_api_key") or ""),
         steam_id=str(raw.get("steam_id") or ""),
+        heroic_path=str(raw.get("heroic_path") or ""),
     )
 
 

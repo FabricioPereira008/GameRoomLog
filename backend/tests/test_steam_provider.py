@@ -101,13 +101,15 @@ def test_invalid_json(monkeypatch):
 
 def test_settings_api_never_returns_key_and_supports_partial_update():
     res = client.get("/api/v1/library/settings").json()
-    assert res == {"steam_api_key_set": False, "steam_id": ""}
+    assert res == {"steam_api_key_set": False, "steam_id": "", "heroic_path": ""}
     res = client.put("/api/v1/library/settings", json={"steam_api_key": " K ", "steam_id": "123"}).json()
-    assert res == {"steam_api_key_set": True, "steam_id": "123"}
+    assert res == {"steam_api_key_set": True, "steam_id": "123", "heroic_path": ""}
     assert "K" not in json.dumps(client.get("/api/v1/library/settings").json()).replace("steam_api_key_set", "")
     # None mantém a key; "" apaga
     client.put("/api/v1/library/settings", json={"steam_id": "456"})
     assert load_settings().steam_api_key == "K" and load_settings().steam_id == "456"
+    client.put("/api/v1/library/settings", json={"heroic_path": " /x "})
+    assert load_settings().heroic_path == "/x"
     assert client.put("/api/v1/library/settings", json={"steam_api_key": ""}).json()["steam_api_key_set"] is False
 
 
