@@ -5,6 +5,18 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [1.0.0] - 2026-10-17
+### Adicionado
+- Integração com o app Android **GameRoom Portátil** ([GameRoomApp](https://github.com/FabricioPereira008/GameRoomApp)): registre no portátil o que está jogando, zerou ou platinou e importe no PC.
+- Caixa de entrada em **Configurações → App do Portátil**: importar o arquivo do app, revisar os pendentes e exportar o catálogo para o app sugerir títulos e plataformas.
+- Revisão por jogo, com correspondência por semelhança (limite configurável), confirmação de jogos parecidos, aviso de plataforma diferente e tabela atual → proposto. Também é possível vincular a outro jogo ou criar um jogo novo já preenchido.
+- Regras automáticas: rejogada sugerida quando o jogo já está zerado, platina sem data de zeramento propõe a mesma data, horas/nota/dificuldade usam o último valor e observações são acrescentadas.
+- Contratos JSON versionados em `docs/contracts/` (`gameroom-inbox` v1 e `gameroom-catalog` v1) e API `/api/v1/inbox` (import, pending, proposal, resolve, catalog).
+
+### Modificado
+- Reimportar o mesmo arquivo não duplica nada (UUID por evento, nova tabela `inbox_events`).
+- A janela de jogo aceita dados pré-preenchidos também para jogos novos.
+
 ## [0.4.2] - 2026-10-16
 ### Modificado
 - Páginas de Gêneros, Plataformas e Séries / Franquias redesenhadas: cards estilo pôster com mosaico das capas dos jogos (inteiras, sem corte), faixa com a cor do gênero, selo de plataforma, total de horas e menu ⋯ (Editar/Excluir) ao passar o mouse.
