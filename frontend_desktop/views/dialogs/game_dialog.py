@@ -1,6 +1,7 @@
 import logging
+import os
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, QComboBox,
+    QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QFrame, QLineEdit, QComboBox,
     QSpinBox, QDoubleSpinBox, QDateEdit, QTextEdit, QPushButton, QLabel, QFileDialog,
     QCheckBox, QMessageBox, QScrollArea, QWidget, QInputDialog, QCompleter
 )
@@ -17,6 +18,62 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+COVER_PREVIEW_SIZE = (160, 240)
+STATUSES = ["Disponível", "Fila", "Próximo", "Jogando", "Pausado", "Zerado", "Platinado", "Lista de Desejos", "Desisti"]
+FORMATS = ["Digital", "Físico", "Emulado"]
+
+
+class OptionalDateEdit(QDateEdit):
+    """Campo de data que começa vazio ("Selecione a data") e só assume um valor quando o usuário interage."""
+    BLANK = QDate(1970, 1, 1)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCalendarPopup(True)
+        self.setDisplayFormat("dd/MM/yyyy")
+        self.setMinimumDate(self.BLANK)
+        self.setSpecialValueText("Selecione a data")
+        self.setDate(self.BLANK)
+
+    def is_blank(self) -> bool:
+        return self.date() == self.BLANK
+
+    def date_or_none(self):
+        return None if self.is_blank() else self.date()
+
+    def set_optional_date(self, value) -> None:
+        self.setDate(value if value is not None and value.isValid() else self.BLANK)
+
+    def _start_today(self) -> bool:
+        if self.is_blank():
+            self.setDate(QDate.currentDate())
+            return True
+        return False
+
+    def mousePressEvent(self, event):
+        # o calendário abre no mês atual, não em 1970; o clique que preenche não conta como passo das setas
+        self._skip_step = self._start_today()
+        super().mousePressEvent(event)
+        self._skip_step = False
+
+    def stepBy(self, steps):
+        if getattr(self, "_skip_step", False) or self._start_today():
+            return
+        super().stepBy(steps)
+
+    def wheelEvent(self, event):
+        if self.is_blank():
+            event.ignore()  # rolar a página não deve preencher a data sem querer
+            return
+        super().wheelEvent(event)
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Delete, Qt.Key_Backspace):
+            self.setDate(self.BLANK)
+            return
+        super().keyPressEvent(event)
+
+
 class GameDialog(QDialog):
     def __init__(self, game_data: dict = None, parent=None):
         super().__init__(parent)
@@ -27,9 +84,8 @@ class GameDialog(QDialog):
         self.is_deleted = False
 
         self.setWindowTitle("Editar Jogo" if self.is_edit else "Novo Jogo")
-        self.setFixedWidth(640)
-        self.setMinimumHeight(680)
-        self.resize(640, 720)
+        self.setMinimumSize(820, 600)
+        self.resize(900, 780)
 
         self.init_ui()
         cover_loader.loaded.connect(self._on_cover_loaded)
@@ -40,34 +96,41 @@ class GameDialog(QDialog):
         self.setAttribute(Qt.WA_StyledBackground, True)
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setContentsMargins(24, 20, 24, 20)
         main_layout.setSpacing(14)
 
-        # Scroll área vertical (desabilitando scroll horizontal)
+        self._build_header(main_layout)
+
         scroll = QScrollArea()
         scroll.setObjectName("gameDialogScrollArea")
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setAttribute(Qt.WA_StyledBackground, True)
-        
+
         container = QWidget()
         container.setObjectName("gameDialogContainer")
         container.setAttribute(Qt.WA_StyledBackground, True)
-        form_layout = QFormLayout(container)
-        form_layout.setSpacing(12)
-        form_layout.setLabelAlignment(Qt.AlignRight)
+        body = QHBoxLayout(container)
+        body.setContentsMargins(0, 0, 8, 0)
+        body.setSpacing(16)
 
-        self._build_identity_fields(form_layout)
-        self._build_progress_fields(form_layout)
-        self._build_play_fields(form_layout)
-        self._build_cover_fields(form_layout)
-        self._build_notes_field(form_layout)
+        body.addWidget(self._build_cover_card(), 0, Qt.AlignTop)
+        right = QVBoxLayout()
+        right.setSpacing(16)
+        right.addWidget(self._build_identity_card())
+        right.addWidget(self._build_progress_card())
+        right.addWidget(self._build_play_card())
+        right.addWidget(self._build_notes_card())
+        right.addStretch()
+        body.addLayout(right, 1)
 
         scroll.setWidget(container)
-        main_layout.addWidget(scroll)
+        main_layout.addWidget(scroll, 1)
 
         self._build_action_buttons(main_layout)
 
+    # --- blocos reutilizáveis ---
     @staticmethod
     def _make_label(text: str) -> QLabel:
         """Label estilizado do formulário."""
@@ -75,239 +138,218 @@ class GameDialog(QDialog):
         lbl.setProperty("class", "form-label")
         return lbl
 
-    def _section_heading(self, form_layout, text: str):
-        label = QLabel(text.upper())
-        label.setProperty("class", "nav-section")
-        form_layout.addRow(label)
+    @staticmethod
+    def _field(label: str, widget, required: bool = False) -> QWidget:
+        """Rótulo acima do campo; o conjunto pode ser mostrado/ocultado como uma unidade."""
+        box = QWidget()
+        lay = QVBoxLayout(box)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+        lay.addWidget(GameDialog._make_label(f"{label} *" if required else label))
+        if isinstance(widget, QWidget):
+            lay.addWidget(widget)
+        else:
+            lay.addLayout(widget)
+        return box
 
-    def _build_identity_fields(self, form_layout):
-        """Título, desenvolvedora, status, plataforma, franquia e gênero."""
-        self._section_heading(form_layout, "Identificação")
-        # 1. Título
+    @staticmethod
+    def _card(title: str):
+        """Cartão com título; devolve (frame, grid de 2 colunas)."""
+        frame = QFrame()
+        frame.setProperty("class", "form-card")
+        outer = QVBoxLayout(frame)
+        outer.setContentsMargins(18, 14, 18, 18)
+        outer.setSpacing(12)
+        heading = QLabel(title)
+        heading.setProperty("class", "card-title")
+        outer.addWidget(heading)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(12)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        outer.addLayout(grid)
+        return frame, grid
+
+    def _build_header(self, main_layout):
+        title = QLabel("Editar jogo" if self.is_edit else "Novo jogo")
+        title.setProperty("class", "view-title-large")
+        subtitle = QLabel(
+            "Altere as informações e salve." if self.is_edit
+            else "Preencha os dados do jogo. Os campos com * são obrigatórios."
+        )
+        subtitle.setProperty("class", "settings-desc")
+        main_layout.addWidget(title)
+        main_layout.addWidget(subtitle)
+
+    @staticmethod
+    def _blank_combo(combo: QComboBox, placeholder: str) -> None:
+        combo.setPlaceholderText(placeholder)
+        combo.setCurrentIndex(-1)
+
+    def _editable_combo(self, placeholder: str) -> QComboBox:
+        combo = QComboBox()
+        combo.setEditable(True)
+        combo.setInsertPolicy(QComboBox.NoInsert)
+        combo.lineEdit().setPlaceholderText(placeholder)
+        return combo
+
+    # --- cartões ---
+    def _build_identity_card(self) -> QFrame:
+        """Título, desenvolvedora, franquia, gênero, plataforma, status e formato."""
+        card, grid = self._card("Identificação")
+
         self.input_title = QLineEdit()
         self.input_title.setPlaceholderText("Ex: The Legend of Zelda: Tears of the Kingdom")
-        form_layout.addRow(self._make_label("Título *:"), self.input_title)
+        grid.addWidget(self._field("Título", self.input_title, required=True), 0, 0, 1, 2)
 
-        # 2. Desenvolvedora (Combobox Editável com Autocomplete)
-        self.combo_developer = QComboBox()
-        self.combo_developer.setEditable(True)
-        self.combo_developer.setInsertPolicy(QComboBox.NoInsert)
-        self.combo_developer.lineEdit().setPlaceholderText("Selecione ou digite a desenvolvedora...")
-        form_layout.addRow(self._make_label("Desenvolvedora:"), self.combo_developer)
+        self.combo_developer = self._editable_combo("Selecione ou digite…")
+        grid.addWidget(self._field("Desenvolvedora", self.combo_developer), 1, 0)
 
-        # 3. Status
-        self.combo_status = QComboBox()
-        statuses = ["Disponível", "Fila", "Próximo", "Jogando", "Pausado", "Zerado", "Platinado", "Lista de Desejos", "Desisti"]
-        for s in statuses:
-            self.combo_status.addItem(s, s)
-        form_layout.addRow(self._make_label("Status:"), self.combo_status)
+        self.combo_franchise = self._editable_combo("Selecione ou digite…")
+        grid.addWidget(self._field("Franquia / Série", self.combo_franchise), 1, 1)
 
-        # 4. Plataforma
+        self.combo_genre = self._editable_combo("Selecione ou digite…")
+        grid.addWidget(self._field("Gênero", self.combo_genre), 2, 0)
+
         plat_layout = QHBoxLayout()
         plat_layout.setSpacing(6)
         self.combo_platform = QComboBox()
+        self._blank_combo(self.combo_platform, "Selecione a plataforma…")
         btn_add_plat = QPushButton("+")
-        btn_add_plat.setFixedWidth(32)
+        btn_add_plat.setFixedWidth(34)
         btn_add_plat.setProperty("class", "small-btn")
         btn_add_plat.setToolTip("Adicionar nova plataforma")
         btn_add_plat.clicked.connect(self.add_new_platform)
-        plat_layout.addWidget(self.combo_platform)
+        plat_layout.addWidget(self.combo_platform, 1)
         plat_layout.addWidget(btn_add_plat)
-        form_layout.addRow(self._make_label("Plataforma:"), plat_layout)
+        grid.addWidget(self._field("Plataforma", plat_layout), 2, 1)
 
-        # 5. Franquia / Série (Combobox Editável com Autocomplete)
-        self.combo_franchise = QComboBox()
-        self.combo_franchise.setEditable(True)
-        self.combo_franchise.setInsertPolicy(QComboBox.NoInsert)
-        self.combo_franchise.lineEdit().setPlaceholderText("Selecione ou digite a franquia/série...")
-        form_layout.addRow(self._make_label("Franquia / Série:"), self.combo_franchise)
+        self.combo_status = QComboBox()
+        for s in STATUSES:
+            self.combo_status.addItem(s, s)
+        self._blank_combo(self.combo_status, "Selecione o status…")
+        grid.addWidget(self._field("Status", self.combo_status, required=True), 3, 0)
 
-        # 6. Gênero (Combobox Editável com Autocomplete)
-        self.combo_genre = QComboBox()
-        self.combo_genre.setEditable(True)
-        self.combo_genre.setInsertPolicy(QComboBox.NoInsert)
-        self.combo_genre.lineEdit().setPlaceholderText("Selecione ou digite o gênero...")
-        form_layout.addRow(self._make_label("Gênero:"), self.combo_genre)
+        self.combo_format = QComboBox()
+        self.combo_format.addItems(FORMATS)
+        self._blank_combo(self.combo_format, "Selecione o formato…")
+        grid.addWidget(self._field("Formato", self.combo_format), 3, 1)
+        return card
 
-    def _build_progress_fields(self, form_layout):
-        """Horas, avaliação e datas."""
-        self._section_heading(form_layout, "Progresso")
-        # 7. Horas (Inteiros)
-        hours_layout = QHBoxLayout()
-        hours_layout.setSpacing(8)
-        self.lbl_hltb = QLabel("HLTB:")
-        self.spin_hltb = QSpinBox()
-        self.spin_hltb.setRange(0, 99999)
-        self.spin_hltb.setSuffix(" h")
-        
-        self.lbl_played = QLabel("Jogadas:")
-        self.spin_played = QSpinBox()
-        self.spin_played.setRange(0, 99999)
-        self.spin_played.setSuffix(" h")
+    @staticmethod
+    def _hours_spin() -> QSpinBox:
+        spin = QSpinBox()
+        spin.setRange(0, 99999)
+        spin.setSuffix(" h")
+        spin.setSpecialValueText("—")  # 0 aparece como "não informado"
+        return spin
 
-        hours_layout.addWidget(self.lbl_hltb)
-        hours_layout.addWidget(self.spin_hltb)
-        hours_layout.addWidget(self.lbl_played)
-        hours_layout.addWidget(self.spin_played)
-        hours_layout.addStretch()
-        form_layout.addRow(self._make_label("Tempo:"), hours_layout)
+    @staticmethod
+    def _score_spin() -> QDoubleSpinBox:
+        spin = QDoubleSpinBox()
+        spin.setRange(0, 10)
+        spin.setDecimals(1)
+        spin.setSingleStep(0.5)
+        spin.setSpecialValueText("Sem nota")
+        return spin
 
-        # 8. Avaliação (0.0 a 10.0 com 1 decimal)
-        self.eval_widget = QWidget()
-        score_layout = QHBoxLayout(self.eval_widget)
-        score_layout.setContentsMargins(0, 0, 0, 0)
-        score_layout.setSpacing(8)
-        self.spin_score = QDoubleSpinBox()
-        self.spin_score.setRange(0, 10)
-        self.spin_score.setDecimals(1)
-        self.spin_score.setSingleStep(0.1)
-        self.spin_score.setSpecialValueText("Sem nota")
+    def _build_progress_card(self) -> QFrame:
+        """Horas, avaliação e datas (os campos de conclusão só aparecem para Zerado/Platinado)."""
+        card, grid = self._card("Progresso")
 
-        self.spin_diff = QDoubleSpinBox()
-        self.spin_diff.setRange(0, 10)
-        self.spin_diff.setDecimals(1)
-        self.spin_diff.setSingleStep(0.1)
-        self.spin_diff.setSpecialValueText("Sem nota")
+        self.spin_hltb = self._hours_spin()
+        grid.addWidget(self._field("Duração estimada (HowLongToBeat)", self.spin_hltb), 0, 0)
 
-        score_layout.addWidget(QLabel("Nota (0-10):"))
-        score_layout.addWidget(self.spin_score)
-        score_layout.addWidget(QLabel("Dificuldade (0-10):"))
-        score_layout.addWidget(self.spin_diff)
-        score_layout.addStretch()
+        self.spin_played = self._hours_spin()
+        self.field_played = self._field("Horas jogadas", self.spin_played)
+        grid.addWidget(self.field_played, 0, 1)
 
-        self.eval_label = self._make_label("Avaliação:")
-        form_layout.addRow(self.eval_label, self.eval_widget)
+        self.spin_score = self._score_spin()
+        self.field_score = self._field("Nota (0–10)", self.spin_score)
+        grid.addWidget(self.field_score, 1, 0)
 
-        # 9. Datas (Finalização e Platina automáticas conforme o Status)
-        self.dates_widget = QWidget()
-        dates_layout = QHBoxLayout(self.dates_widget)
-        dates_layout.setContentsMargins(0, 0, 0, 0)
-        dates_layout.setSpacing(8)
+        self.spin_diff = self._score_spin()
+        self.field_diff = self._field("Dificuldade (0–10)", self.spin_diff)
+        grid.addWidget(self.field_diff, 1, 1)
 
-        self.lbl_finish_date = QLabel("Zerou em:")
-        self.date_finish = QDateEdit(QDate.currentDate())
-        self.date_finish.setCalendarPopup(True)
+        self.date_finish = OptionalDateEdit()
+        self.field_finish = self._field("Zerou em", self.date_finish)
+        grid.addWidget(self.field_finish, 2, 0)
 
-        self.lbl_plat_date = QLabel("Platinou em:")
-        self.date_plat = QDateEdit(QDate.currentDate())
-        self.date_plat.setCalendarPopup(True)
-
-        dates_layout.addWidget(self.lbl_finish_date)
-        dates_layout.addWidget(self.date_finish)
-        dates_layout.addWidget(self.lbl_plat_date)
-        dates_layout.addWidget(self.date_plat)
-        dates_layout.addStretch()
-
-        self.dates_label = self._make_label("Datas:")
-        form_layout.addRow(self.dates_label, self.dates_widget)
+        self.date_plat = OptionalDateEdit()
+        self.field_plat = self._field("Platinou em", self.date_plat)
+        grid.addWidget(self.field_plat, 2, 1)
 
         self.combo_status.currentTextChanged.connect(self.on_status_changed)
         self.on_status_changed(self.combo_status.currentText())
+        return card
 
-    def _build_play_fields(self, form_layout):
-        """Tipo de jogada, formato e favorito."""
-        self._section_heading(form_layout, "Jogada")
-        # 10. Tipo de Jogada e Campo Condicional de Rejogada
-        play_layout = QHBoxLayout()
-        play_layout.setSpacing(8)
-        self.combo_play_type = QComboBox()
-        self.combo_play_type.addItems(["Primeira Jogada", "Rejogada"])
-        self.combo_play_type.currentIndexChanged.connect(self.on_play_type_changed)
+    def _build_play_card(self) -> QFrame:
+        """Rejogada e favorito."""
+        card, grid = self._card("Jogada")
 
-        self.lbl_play_count = QLabel("Nº da Jogada:")
+        self.chk_replay = QCheckBox("Esta é uma rejogada")
+        self.chk_replay.toggled.connect(self.on_play_type_changed)
+        grid.addWidget(self.chk_replay, 0, 0)
+
         self.spin_play_count = QSpinBox()
         self.spin_play_count.setRange(2, 99)
-        self.spin_play_count.setSuffix("ª Vez")
-        self.spin_play_count.setValue(2)
+        self.spin_play_count.setSuffix("ª vez")
+        self.field_play_count = self._field("Nº da jogada", self.spin_play_count)
+        self.field_play_count.setVisible(False)
+        grid.addWidget(self.field_play_count, 0, 1)
 
-        self.lbl_play_count.setVisible(False)
-        self.spin_play_count.setVisible(False)
-
-        play_layout.addWidget(self.combo_play_type)
-        play_layout.addWidget(self.lbl_play_count)
-        play_layout.addWidget(self.spin_play_count)
-        play_layout.addStretch()
-        form_layout.addRow(self._make_label("Tipo de Jogada:"), play_layout)
-
-        # 11. Formato e Favorito
-        format_layout = QHBoxLayout()
-        format_layout.setSpacing(12)
-        self.combo_format = QComboBox()
-        self.combo_format.addItems(["Digital", "Físico", "Emulado"])
         self.chk_favorite = QCheckBox("Favorito")
-        format_layout.addWidget(self.combo_format)
-        format_layout.addWidget(self.chk_favorite)
-        format_layout.addStretch()
-        form_layout.addRow(self._make_label("Formato:"), format_layout)
+        grid.addWidget(self.chk_favorite, 1, 0)
+        return card
 
-    def _build_cover_fields(self, form_layout):
-        """Capa: arquivo local, link, busca automática e preview."""
-        self._section_heading(form_layout, "Capa")
-        # 12. Imagem de Capa (Arquivo Local, Link/URL ou Busca Automática)
-        cover_layout = QHBoxLayout()
-        cover_layout.setSpacing(6)
+    def _build_cover_card(self) -> QFrame:
+        """Capa: preview, busca automática, link, arquivo local e recorte."""
+        card, grid = self._card("Capa")
+        card.setFixedWidth(210)
+
+        self.lbl_cover_preview = QLabel("Sem\ncapa")
+        self.lbl_cover_preview.setFixedSize(*COVER_PREVIEW_SIZE)
+        self.lbl_cover_preview.setProperty("class", "cover-preview")
+        self.lbl_cover_preview.setAlignment(Qt.AlignCenter)
+        grid.addWidget(self.lbl_cover_preview, 0, 0, 1, 2, Qt.AlignHCenter)
+
+        self.lbl_cover_status = QLabel("Nenhuma imagem selecionada")
+        self.lbl_cover_status.setProperty("class", "status-muted")
+        self.lbl_cover_status.setWordWrap(True)
+        grid.addWidget(self.lbl_cover_status, 1, 0, 1, 2)
 
         self.btn_auto_cover = QPushButton("Buscar automático")
-
         set_button_icon(self.btn_auto_cover, "wand-sparkles")
-        self.btn_auto_cover.setProperty("class", "small-btn")
         self.btn_auto_cover.setToolTip("Pesquisa e baixa a capa automaticamente pelo título do jogo")
         self.btn_auto_cover.clicked.connect(self.auto_search_cover)
 
         self.btn_url_cover = QPushButton("Link / URL…")
-
         set_button_icon(self.btn_url_cover, "link")
-        self.btn_url_cover.setProperty("class", "small-btn")
         self.btn_url_cover.clicked.connect(self.choose_cover_url)
 
         self.btn_select_cover = QPushButton("Arquivo…")
-
         set_button_icon(self.btn_select_cover, "folder-open")
-        self.btn_select_cover.setProperty("class", "small-btn")
         self.btn_select_cover.clicked.connect(self.choose_cover_image)
 
-        cover_layout.addWidget(self.btn_auto_cover)
-        cover_layout.addWidget(self.btn_url_cover)
-        cover_layout.addWidget(self.btn_select_cover)
-        form_layout.addRow(self._make_label("Capa do Jogo:"), cover_layout)
-
-        # Status da Capa e Preview Visual
-        cover_preview_layout = QHBoxLayout()
-        self.lbl_cover_preview = QLabel()
-        self.lbl_cover_preview.setFixedSize(120, 180)
-        self.lbl_cover_preview.setProperty("class", "cover-preview")
-        self.lbl_cover_preview.setAlignment(Qt.AlignCenter)
-        self.lbl_cover_preview.setText("Sem\nCapa")
-        
-        preview_info_layout = QVBoxLayout()
-        self.lbl_cover_status = QLabel("Nenhuma imagem selecionada")
-        self.lbl_cover_status.setProperty("class", "status-muted")
-        self.lbl_cover_status.setWordWrap(True)
-        
         self.btn_edit_cover = QPushButton("Ajustar recorte")
-        
         set_button_icon(self.btn_edit_cover, "crop")
-        self.btn_edit_cover.setProperty("class", "small-btn")
         self.btn_edit_cover.setVisible(False)
         self.btn_edit_cover.clicked.connect(self.open_image_cropper)
-        
-        preview_info_layout.addWidget(self.lbl_cover_status)
-        preview_info_layout.addWidget(self.btn_edit_cover)
-        preview_info_layout.addStretch()
-        
-        cover_preview_layout.addWidget(self.lbl_cover_preview)
-        cover_preview_layout.addLayout(preview_info_layout)
-        cover_preview_layout.addStretch()
-        
-        form_layout.addRow("", cover_preview_layout)
 
-    def _build_notes_field(self, form_layout):
-        self._section_heading(form_layout, "Anotações")
-        # 13. Anotações
+        for row, btn in enumerate((self.btn_auto_cover, self.btn_url_cover, self.btn_select_cover, self.btn_edit_cover), 2):
+            btn.setProperty("class", "small-btn")
+            grid.addWidget(btn, row, 0, 1, 2)
+        return card
+
+    def _build_notes_card(self) -> QFrame:
+        card, grid = self._card("Anotações")
         self.input_notes = QTextEdit()
         self.input_notes.setPlaceholderText("Escreva aqui suas impressões, review ou dicas...")
-        self.input_notes.setFixedHeight(85)
-        form_layout.addRow(self._make_label("Anotações:"), self.input_notes)
+        self.input_notes.setFixedHeight(90)
+        grid.addWidget(self.input_notes, 0, 0, 1, 2)
+        return card
 
     def _build_action_buttons(self, main_layout):
         btn_box = QHBoxLayout()
@@ -327,36 +369,20 @@ class GameDialog(QDialog):
 
         self.btn_save = QPushButton("Salvar Jogo")
         self.btn_save.setProperty("class", "action-btn")
+        self.btn_save.setDefault(True)
         self.btn_save.clicked.connect(self.save_game)
         btn_box.addWidget(self.btn_save)
 
         main_layout.addLayout(btn_box)
 
     def on_status_changed(self, status: str):
-        is_finished = (status in ["Zerado", "Platinado"])
-        is_platinum = (status == "Platinado")
+        is_finished = status in ("Zerado", "Platinado")
+        for field in (self.field_played, self.field_score, self.field_diff, self.field_finish):
+            field.setVisible(is_finished)
+        self.field_plat.setVisible(status == "Platinado")
 
-        # 1. Horas jogadas (dentro de Tempo)
-        self.lbl_played.setVisible(is_finished)
-        self.spin_played.setVisible(is_finished)
-
-        # 2. Avaliação (Nota e Dificuldade)
-        self.eval_label.setVisible(is_finished)
-        self.eval_widget.setVisible(is_finished)
-
-        # 3. Datas (Zerou em / Platinou em)
-        self.dates_label.setVisible(is_finished)
-        self.dates_widget.setVisible(is_finished)
-        self.lbl_finish_date.setVisible(is_finished)
-        self.date_finish.setVisible(is_finished)
-        self.lbl_plat_date.setVisible(is_platinum)
-        self.date_plat.setVisible(is_platinum)
-
-
-    def on_play_type_changed(self):
-        is_replay = self.combo_play_type.currentText() == "Rejogada"
-        self.lbl_play_count.setVisible(is_replay)
-        self.spin_play_count.setVisible(is_replay)
+    def on_play_type_changed(self, *_):
+        self.field_play_count.setVisible(self.chk_replay.isChecked())
 
     def _wait_workers(self):
         for w in list(self.__dict__.get("_workers", ())):
@@ -379,6 +405,7 @@ class GameDialog(QDialog):
     def _set_editable_combo(self, combo, names: list):
         combo.clear()
         combo.addItems(names)
+        combo.setCurrentIndex(-1)  # combo editável selecionaria o 1º item e o preencheria
         completer = QCompleter(names, self)
         completer.setCaseSensitivity(Qt.CaseInsensitive)
         completer.setFilterMode(Qt.MatchContains)
@@ -391,6 +418,7 @@ class GameDialog(QDialog):
         self.combo_platform.addItem("Nenhuma", None)
         for p in options["platforms"]:
             self.combo_platform.addItem(p["name"], p["id"])
+        self.combo_platform.setCurrentIndex(-1)
 
         self.franchises_list = options["franchises"]
         self._set_editable_combo(self.combo_franchise, [f["name"] for f in self.franchises_list])
@@ -460,26 +488,20 @@ class GameDialog(QDialog):
 
         # Datas
         if self.game_data.get("finish_date"):
-            fdate = QDate.fromString(self.game_data["finish_date"], "yyyy-MM-dd")
-            if fdate.isValid():
-                self.date_finish.setDate(fdate)
-
+            self.date_finish.set_optional_date(QDate.fromString(self.game_data["finish_date"], "yyyy-MM-dd"))
         if self.game_data.get("platinum_date"):
-            pdate = QDate.fromString(self.game_data["platinum_date"], "yyyy-MM-dd")
-            if pdate.isValid():
-                self.date_plat.setDate(pdate)
+            self.date_plat.set_optional_date(QDate.fromString(self.game_data["platinum_date"], "yyyy-MM-dd"))
 
         self.on_status_changed(self.combo_status.currentText())
 
 
         # Play type e Play count
-        play_type = self.game_data.get("play_type", "Primeira Jogada")
-        self.combo_play_type.setCurrentText(play_type)
-        if play_type == "Rejogada":
-            self.spin_play_count.setValue(self.game_data.get("play_count", 2))
-        self.on_play_type_changed()
+        is_replay = self.game_data.get("play_type") == "Rejogada"
+        self.chk_replay.setChecked(is_replay)
+        if is_replay:
+            self.spin_play_count.setValue(max(2, int(self.game_data.get("play_count") or 2)))
 
-        self.combo_format.setCurrentText(self.game_data.get("format", "Digital"))
+        self.combo_format.setCurrentText(self.game_data.get("format") or "Digital")
         self.chk_favorite.setChecked(bool(self.game_data.get("is_favorite")))
         self.input_notes.setText(self.game_data.get("notes") or "")
 
@@ -548,7 +570,7 @@ class GameDialog(QDialog):
         """Mostra a capa atual; o download/escala acontece em background (cover_loader)."""
         if not self.cover_filename:
             return
-        pixmap = cover_loader.request(self.cover_filename, 120, 180)
+        pixmap = cover_loader.request(self.cover_filename, *COVER_PREVIEW_SIZE)
         if pixmap is not None:
             self.lbl_cover_preview.setPixmap(pixmap)
             self.btn_edit_cover.setVisible(True)
@@ -614,7 +636,7 @@ class GameDialog(QDialog):
 
     def _build_payload(self, title: str) -> dict:
         """Lê o formulário (thread da UI) e monta o payload base, sem franquia/gênero."""
-        play_type = self.combo_play_type.currentText()
+        is_replay = self.chk_replay.isChecked()
         payload = {
             "title": title,
             "developer": self.combo_developer.currentText().strip() or None,
@@ -624,23 +646,27 @@ class GameDialog(QDialog):
             "played_hours": float(self.spin_played.value()),
             "score": round(self.spin_score.value(), 1) if self.spin_score.value() > 0 else None,
             "difficulty": round(self.spin_diff.value(), 1) if self.spin_diff.value() > 0 else None,
-            "play_type": play_type,
-            "play_count": self.spin_play_count.value() if play_type == "Rejogada" else 1,
-            "format": self.combo_format.currentText(),
+            "play_type": "Rejogada" if is_replay else "Primeira Jogada",
+            "play_count": self.spin_play_count.value() if is_replay else 1,
             "is_favorite": self.chk_favorite.isChecked(),
             "notes": self.input_notes.toPlainText().strip() or None,
             "cover_image": self.cover_filename,
         }
+        if self.combo_format.currentIndex() >= 0:  # sem escolha: mantém o padrão do servidor (Digital)
+            payload["format"] = self.combo_format.currentText()
 
         st = payload["status"]
+        finish, plat = self.date_finish.date_or_none(), self.date_plat.date_or_none()
+        fmt = lambda d: d.toString("yyyy-MM-dd") if d else None
         if st == "Zerado":
-            payload["finish_date"] = self.date_finish.date().toString("yyyy-MM-dd")
-            payload["completion_year"] = self.date_finish.date().year()
+            payload["finish_date"] = fmt(finish)
+            payload["completion_year"] = finish.year() if finish else None
             payload["platinum_date"] = None
         elif st == "Platinado":
-            payload["finish_date"] = self.date_finish.date().toString("yyyy-MM-dd")
-            payload["platinum_date"] = self.date_plat.date().toString("yyyy-MM-dd")
-            payload["completion_year"] = self.date_plat.date().year()
+            payload["finish_date"] = fmt(finish)
+            payload["platinum_date"] = fmt(plat)
+            reference = plat or finish
+            payload["completion_year"] = reference.year() if reference else None
         else:
             payload["finish_date"] = None
             payload["platinum_date"] = None
@@ -688,6 +714,9 @@ class GameDialog(QDialog):
         title = self.input_title.text().strip()
         if not title:
             QMessageBox.warning(self, "Aviso", "O título do jogo é obrigatório.")
+            return
+        if self.combo_status.currentIndex() < 0:
+            QMessageBox.warning(self, "Aviso", "Selecione o status do jogo.")
             return
 
         payload = self._build_payload(title)

@@ -240,6 +240,8 @@ def save_dialog(qapp, monkeypatch):
 def _fill(dialog, qapp, **kw):
     _wait_dialog(dialog, qapp)
     dialog.input_title.setText(kw.get("title", "Novo Jogo"))
+    if dialog.combo_status.currentIndex() < 0:
+        dialog.combo_status.setCurrentText(kw.get("status", "Fila"))
     dialog.combo_franchise.setCurrentText(kw.get("franchise", ""))
     dialog.combo_genre.setCurrentText(kw.get("genre", ""))
 
@@ -334,3 +336,149 @@ def test_filter_panel_reuses_completers_when_options_change(qapp):
     assert panel.combo_genre.completer() is completer
     assert completer.model().stringList() == ["RPG", "Ação"]
     assert panel.combo_genre.findText("Ação") >= 0
+
+
+# --- diálogo de jogo: campos em branco, tipos de campo e payload ---
+OPTIONS = {
+    "developers": [{"name": "Capcom"}], "platforms": [{"id": 1, "name": "PC"}],
+    "franchises": [{"id": 2, "name": "Saga"}], "genres": [{"id": 3, "name": "RPG"}],
+}
+
+
+def _dialog(qapp, monkeypatch, game_data=None):
+    from frontend_desktop.views.dialogs import game_dialog as gd
+    monkeypatch.setattr(gd.GameDialog, "fetch_options", staticmethod(lambda: OPTIONS))
+    dialog = gd.GameDialog(game_data=game_data)
+    _wait_dialog(dialog, qapp)
+    return gd, dialog
+
+
+def test_new_game_dialog_starts_completely_blank(qapp, monkeypatch):
+    _, d = _dialog(qapp, monkeypatch)
+    assert d.input_title.text() == ""
+    # combos editáveis não podem vir com o 1º item das listas
+    assert d.combo_developer.currentText() == "" and d.combo_franchise.currentText() == ""
+    assert d.combo_genre.currentText() == ""
+    assert d.combo_status.currentIndex() == -1 and d.combo_status.placeholderText()
+    assert d.combo_platform.currentIndex() == -1 and d.combo_platform.currentData() is None
+    assert d.combo_format.currentIndex() == -1
+    assert d.spin_hltb.value() == 0 and d.spin_hltb.text() == "—"
+    assert d.spin_score.text() == "Sem nota" and d.spin_diff.text() == "Sem nota"
+    assert d.date_finish.is_blank() and d.date_plat.is_blank()
+    assert d.date_finish.text() == "Selecione a data"
+    assert not d.chk_replay.isChecked() and not d.chk_favorite.isChecked()
+    assert d.input_notes.toPlainText() == "" and d.cover_filename is None
+
+
+def test_save_requires_status(qapp, monkeypatch):
+    gd, d = _dialog(qapp, monkeypatch)
+    warned = []
+    monkeypatch.setattr(gd.QMessageBox, "warning", lambda *a, **k: warned.append(a[2]))
+    sent = []
+    monkeypatch.setattr(gd.api_client, "create_game", lambda p: sent.append(p) or {**p, "id": 1})
+    d.input_title.setText("Zelda")
+    d.save_game()
+    assert warned == ["Selecione o status do jogo."] and not sent
+
+
+def test_conditional_fields_follow_status(qapp, monkeypatch):
+    _, d = _dialog(qapp, monkeypatch)
+    d.show()
+    d.combo_status.setCurrentText("Fila")
+    assert not any(f.isVisible() for f in (d.field_played, d.field_score, d.field_diff, d.field_finish, d.field_plat))
+    d.combo_status.setCurrentText("Zerado")
+    assert all(f.isVisible() for f in (d.field_played, d.field_score, d.field_diff, d.field_finish))
+    assert not d.field_plat.isVisible()
+    d.combo_status.setCurrentText("Platinado")
+    assert d.field_plat.isVisible()
+    assert not d.field_play_count.isVisible()
+    d.chk_replay.setChecked(True)
+    assert d.field_play_count.isVisible()
+    d.close()
+
+
+def test_payload_for_blank_new_game_omits_format_and_dates(qapp, monkeypatch):
+    _, d = _dialog(qapp, monkeypatch)
+    d.combo_status.setCurrentText("Zerado")
+    p = d._build_payload("Zelda")
+    assert "format" not in p and p["platform_id"] is None
+    assert p["finish_date"] is None and p["completion_year"] is None and p["platinum_date"] is None
+    assert p["score"] is None and p["play_type"] == "Primeira Jogada" and p["play_count"] == 1
+    d.combo_format.setCurrentText("Físico")
+    d.date_finish.setDate(d.date_finish.date().fromString("2024-05-20", "yyyy-MM-dd"))
+    p = d._build_payload("Zelda")
+    assert p["format"] == "Físico" and p["finish_date"] == "2024-05-20" and p["completion_year"] == 2024
+
+
+def test_payload_platinum_year_prefers_platinum_date(qapp, monkeypatch):
+    from PySide6.QtCore import QDate
+    _, d = _dialog(qapp, monkeypatch)
+    d.combo_status.setCurrentText("Platinado")
+    d.date_finish.setDate(QDate(2023, 12, 30))
+    assert d._build_payload("X")["completion_year"] == 2023
+    d.date_plat.setDate(QDate(2024, 1, 5))
+    p = d._build_payload("X")
+    assert p["completion_year"] == 2024 and p["platinum_date"] == "2024-01-05"
+
+
+def test_payload_replay(qapp, monkeypatch):
+    _, d = _dialog(qapp, monkeypatch)
+    d.combo_status.setCurrentText("Fila")
+    d.chk_replay.setChecked(True)
+    d.spin_play_count.setValue(3)
+    p = d._build_payload("X")
+    assert p["play_type"] == "Rejogada" and p["play_count"] == 3
+
+
+def test_edit_dialog_populates_all_fields(qapp, monkeypatch):
+    data = {
+        "id": 4, "title": "Elden Ring", "developer": "Capcom", "status": "Platinado",
+        "platform": {"id": 1, "name": "PC"}, "franchise": {"id": 2, "name": "Saga"},
+        "genres": [{"id": 3, "name": "RPG"}], "hltb_hours": 60, "played_hours": 120,
+        "score": 9.5, "difficulty": 7, "finish_date": "2024-03-01", "platinum_date": "2024-04-02",
+        "play_type": "Rejogada", "play_count": 3, "format": "Físico", "is_favorite": True, "notes": "ótimo",
+    }
+    _, d = _dialog(qapp, monkeypatch, data)
+    assert d.input_title.text() == "Elden Ring" and d.combo_developer.currentText() == "Capcom"
+    assert d.combo_status.currentText() == "Platinado" and d.combo_platform.currentText() == "PC"
+    assert d.combo_franchise.currentText() == "Saga" and d.combo_genre.currentText() == "RPG"
+    assert (d.spin_hltb.value(), d.spin_played.value()) == (60, 120)
+    assert d.spin_score.value() == 9.5 and d.spin_diff.value() == 7
+    assert d.date_finish.date().toString("yyyy-MM-dd") == "2024-03-01"
+    assert d.date_plat.date().toString("yyyy-MM-dd") == "2024-04-02"
+    assert d.chk_replay.isChecked() and d.spin_play_count.value() == 3
+    assert d.combo_format.currentText() == "Físico" and d.chk_favorite.isChecked()
+    assert d.input_notes.toPlainText() == "ótimo"
+
+
+def test_optional_date_edit_behaviour(qapp):
+    from PySide6.QtCore import QDate, Qt, QEvent, QPoint, QPointF
+    from PySide6.QtGui import QKeyEvent, QMouseEvent, QWheelEvent
+    from frontend_desktop.views.dialogs.game_dialog import OptionalDateEdit
+    w = OptionalDateEdit()
+    assert w.is_blank() and w.date_or_none() is None
+    # rodar a roda do mouse não preenche
+    w.wheelEvent(QWheelEvent(QPointF(1, 1), QPointF(1, 1), QPoint(0, 0), QPoint(0, 120), Qt.NoButton,
+                             Qt.NoModifier, Qt.NoScrollPhase, False))
+    assert w.is_blank()
+    # setas / clique partem de hoje
+    w.stepBy(1)
+    assert w.date() == QDate.currentDate()
+    w.stepBy(1)
+    assert w.date() == QDate.currentDate().addDays(1)
+    # Delete limpa
+    w.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Delete, Qt.NoModifier))
+    assert w.is_blank()
+    w.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, QPointF(2, 2), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    assert w.date() == QDate.currentDate()
+    w.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Backspace, Qt.NoModifier))
+    w.set_optional_date(QDate(2020, 1, 2))
+    assert w.date_or_none() == QDate(2020, 1, 2)
+    w.set_optional_date(None)
+    assert w.is_blank()
+    w.set_optional_date(QDate())  # inválida
+    assert w.is_blank()
+    w.setDate(QDate(2021, 6, 1))
+    w.wheelEvent(QWheelEvent(QPointF(1, 1), QPointF(1, 1), QPoint(0, 0), QPoint(0, 120), Qt.NoButton,
+                             Qt.NoModifier, Qt.NoScrollPhase, False))
+    w.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Up, Qt.NoModifier))

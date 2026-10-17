@@ -115,7 +115,12 @@ QLabel[class="status-muted"] { color: $text_muted; font-size: $fs_xs; }
 
 /* ===== Formulários e diálogos ===== */
 QDialog, QDialog > QWidget, QWidget#gameDialog, QWidget#gameDialogContainer { background-color: $surface; }
+QWidget#gameDialog, QWidget#gameDialogContainer { background-color: $bg; }
 QWidget#gameDialogScrollArea { background: transparent; }
+QWidget#gameDialog > QLabel { background: transparent; }
+QFrame[class="form-card"] { background-color: $surface; border: 1px solid $border; border-radius: $r_lg; }
+QFrame[class="form-card"] QLabel, QFrame[class="form-card"] QCheckBox { background: transparent; }
+QLabel[class="card-title"] { color: $accent_text; font-size: $fs_md; font-weight: 700; }
 
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QTextEdit {
     background-color: $surface_2;
