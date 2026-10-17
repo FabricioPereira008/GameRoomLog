@@ -34,6 +34,8 @@ def normalize_title(title: str) -> str:
     text = re.sub(r"[™®©]", "", title)  # antes do NFKD, que decomporia ™ em "TM"
     text = unicodedata.normalize("NFKD", text)
     text = "".join(c for c in text if not unicodedata.combining(c)).lower()
+    text = re.sub(r"['’`´]", "", text)  # "Dragon's" e "Dragons" devem coincidir
+    text = text.replace("&", " and ")
     text = re.sub(r"[^a-z0-9]+", " ", text)
     return text.strip()
 

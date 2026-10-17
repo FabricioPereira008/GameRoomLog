@@ -86,6 +86,11 @@ def test_normalize_title():
     assert normalize_title("™®") == ""
 
 
+def test_normalize_title_ignores_apostrophes_and_ampersand():
+    assert normalize_title("Dragon's Dogma 2") == normalize_title("Dragons Dogma 2") == normalize_title("Dragon’s Dogma 2")
+    assert normalize_title("Ratchet & Clank") == normalize_title("Ratchet and Clank")
+
+
 def test_non_game_heuristic():
     assert looks_like_non_game("Proton 9.0")
     assert looks_like_non_game("Hades Soundtrack")
