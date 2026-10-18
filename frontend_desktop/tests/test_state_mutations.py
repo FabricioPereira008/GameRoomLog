@@ -225,6 +225,20 @@ def test_game_dialog_prefills_new_game_without_id(qapp, monkeypatch):
     assert payload["finish_date"] == "2026-10-12"
 
 
+def test_game_dialog_prefills_platform_by_name(qapp, monkeypatch):
+    """Importação das lojas manda a plataforma só pelo nome ("PC"), sem id."""
+    from frontend_desktop.views.dialogs import game_dialog as gd
+    monkeypatch.setattr(gd.GameDialog, "fetch_options", staticmethod(lambda: {
+        "developers": [], "platforms": [{"id": 2, "name": "3DS"}, {"id": 1, "name": "pc"}], "franchises": [], "genres": []}))
+    dialog = gd.GameDialog(game_data={"title": "Hades", "status": "Disponível", "format": "Digital",
+                                      "played_hours": 12, "platform": {"name": "PC"}})
+    _wait_dialog(dialog, qapp)
+    assert dialog.is_edit is False
+    assert dialog.combo_platform.currentData() == 1
+    assert dialog.combo_status.currentText() == "Disponível"
+    assert dialog.spin_played.value() == 12
+
+
 def test_game_dialog_auto_cover_runs_async(qapp, monkeypatch):
     from frontend_desktop.views.dialogs import game_dialog as gd
     monkeypatch.setattr(gd.GameDialog, "fetch_options", staticmethod(lambda: {"developers": [], "platforms": [], "franchises": [], "genres": []}))

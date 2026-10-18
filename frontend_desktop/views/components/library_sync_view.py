@@ -4,13 +4,14 @@ from typing import Dict, List
 
 from PySide6.QtCore import Qt, QSettings, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QPushButton, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+    QListWidgetItem, QMessageBox, QPushButton, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.styles.tokens import COLORS
 from frontend_desktop.ui_helpers import add_search_icon, set_button_icon, set_status
+from frontend_desktop.views.dialogs.game_dialog import GameDialog
 from frontend_desktop.workers import run_async
 
 logger = logging.getLogger(__name__)
@@ -23,16 +24,28 @@ def store_label(store: str) -> str:
     return STORE_LABELS.get(store, store.capitalize())
 
 
-def fetch_covers(games: List[dict], api_key: str) -> List[dict]:
-    """Busca capas (uma a uma) dos jogos recém-importados; devolve os jogos que ganharam capa."""
-    updated = []
-    for game in games:
-        try:
-            if api_client.auto_cover_game(game["id"], api_key or None).get("success"):
-                updated.append(api_client.get_game(game["id"]))
-        except Exception as exc:
-            logger.warning("Falha ao buscar capa de %s: %s", game.get("title"), exc)
-    return updated
+def import_prefill(cand: dict) -> dict:
+    """Dados iniciais da tela de edição para um jogo vindo da loja (Digital/Disponível/PC)."""
+    return {
+        "title": cand["title"],
+        "status": "Disponível",
+        "format": "Digital",
+        "played_hours": cand.get("played_hours") or 0,
+        "platform": {"name": "PC"},
+    }
+
+
+def finish_import(game: dict, cand: dict, cover_key: str = ""):
+    """Vincula o jogo recém-salvo à loja e busca capa se não tiver; devolve o jogo se ganhou capa."""
+    api_client.library_link(game["id"], cand["store"], cand["external_id"])
+    if game.get("cover_image"):
+        return None
+    try:
+        if api_client.auto_cover_game(game["id"], cover_key or None).get("success"):
+            return api_client.get_game(game["id"])
+    except Exception as exc:
+        logger.warning("Falha ao buscar capa de %s: %s", game.get("title"), exc)
+    return None
 
 
 class LibrarySyncView(QWidget):
@@ -309,29 +322,53 @@ class LibrarySyncView(QWidget):
         ]
 
     def import_selected(self):
+        """Abre a tela de edição de cada jogo selecionado; só os que forem salvos entram no GameRoom."""
         items = self.checked_items()
         if not items or self._busy:
             return
         self._set_busy(True)
-        set_status(self.status_label, "muted", f"Importando {len(items)} jogo(s)...")
-        run_async(self, api_client.library_import, lambda res: self._on_imported(items, res),
-                  self._on_scan_failed, self._payload(items))
-
-    def _on_imported(self, items: List[QTreeWidgetItem], result: dict):
-        games = result.get("imported", [])
-        self._remove_items(items)
-        self._set_busy(False)
-        set_status(self.status_label, "ok", f"{len(games)} jogo(s) importado(s). Buscando capas em segundo plano...")
-        if not games:
-            return
-        self.games_imported.emit(games)
         key = QSettings("GameRoom", "GameRoomLog").value("steamgriddb_key", "")
-        run_async(self, fetch_covers, self._on_covers_done, lambda _m: None, games, key)
+        imported = 0
+        try:
+            for index, item in enumerate(items, 1):
+                cand = item.data(COL_TITLE, Qt.UserRole)
+                set_status(self.status_label, "muted", f"Importando {index} de {len(items)}: {cand['title']}")
+                game = self.edit_before_import(cand, index, len(items))
+                if game is None:
+                    if index < len(items) and not self.confirm_continue(len(items) - index):
+                        break
+                    continue
+                imported += 1
+                self._remove_items([item])
+                self.games_imported.emit([game])
+                run_async(self, finish_import, self._on_import_finished,
+                          lambda m, g=game: self._on_link_failed(g, m), game, cand, key)
+        finally:
+            self._set_busy(False)
+        set_status(self.status_label, "ok" if imported else "muted", f"{imported} jogo(s) importado(s).")
 
-    def _on_covers_done(self, updated: list):
+    def edit_before_import(self, cand: dict, index: int, total: int):
+        """Tela de edição pré-preenchida; devolve o jogo salvo ou None se cancelada."""
+        dialog = GameDialog(import_prefill(cand), self)
+        dialog.setWindowTitle(f"Importar jogo ({index} de {total}) — {store_label(cand['store'])}")
+        if dialog.exec() == QDialog.Accepted and dialog.saved_game and not dialog.is_deleted:
+            return dialog.saved_game
+        return None
+
+    def confirm_continue(self, remaining: int) -> bool:
+        answer = QMessageBox.question(
+            self, "Importação", f"Jogo não importado. Continuar com os próximos {remaining} jogo(s)?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+        )
+        return answer == QMessageBox.Yes
+
+    def _on_import_finished(self, updated):
         if updated:
-            self.games_updated.emit(updated)
-        set_status(self.status_label, "ok", f"Importação concluída ({len(updated)} capa(s) encontrada(s)).")
+            self.games_updated.emit([updated])
+
+    def _on_link_failed(self, game: dict, message: str):
+        set_status(self.status_label, "error",
+                   f"“{game.get('title')}” foi salvo, mas não foi vinculado à loja: {message}")
 
     def ignore_selected(self):
         items = self.checked_items()

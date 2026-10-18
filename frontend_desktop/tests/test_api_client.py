@@ -152,7 +152,7 @@ def test_is_backend_online_rejects_foreign_service(client):
 def test_library_endpoints(client):
     base = "http://test-server:8000/api/v1/library"
     responses.add(responses.POST, f"{base}/scan", json={"candidates": [], "auto_linked": 0, "errors": []})
-    responses.add(responses.POST, f"{base}/import", json={"imported": [], "skipped": 0}, status=201)
+    responses.add(responses.POST, f"{base}/link", json={"id": 1, "game_id": 7, "store": "steam", "external_id": "1"}, status=201)
     responses.add(responses.POST, f"{base}/ignored", json={"ignored": 1}, status=201)
     responses.add(responses.GET, f"{base}/ignored", json=[{"id": 3}])
     responses.add(responses.DELETE, f"{base}/ignored/3", status=204)
@@ -162,7 +162,8 @@ def test_library_endpoints(client):
 
     assert client.library_scan(include_all=True)["errors"] == []
     assert responses.calls[0].request.body == b'{"include_all": true, "stores": null}'
-    assert client.library_import([{"store": "steam"}])["skipped"] == 0
+    assert client.library_link(7, "steam", "1")["game_id"] == 7
+    assert responses.calls[1].request.body == b'{"game_id": 7, "store": "steam", "external_id": "1"}'
     assert client.library_ignore([{"store": "steam"}])["ignored"] == 1
     assert client.library_ignored() == [{"id": 3}]
     assert client.library_unignore(3) is True

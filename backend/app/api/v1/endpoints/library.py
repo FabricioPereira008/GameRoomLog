@@ -4,10 +4,12 @@ from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.schemas.library import (
     IgnoredResponse, IgnoreRequest, ImportRequest, ImportResponse, LibrarySettingsResponse,
-    LibrarySettingsUpdate, ScanRequest, ScanResponse,
+    LibrarySettingsUpdate, LinkRequest, LinkResponse, ScanRequest, ScanResponse,
 )
 from backend.app.services.library.settings_store import LibrarySettings, load_settings, save_settings
-from backend.app.services.library_service import UnknownStoreError, library_service
+from backend.app.services.library_service import (
+    GameNotFoundError, StoreLinkConflictError, UnknownStoreError, library_service,
+)
 
 router = APIRouter()
 
@@ -24,6 +26,16 @@ def scan_libraries(payload: ScanRequest, db: Session = Depends(get_db)):
 def import_games(payload: ImportRequest, db: Session = Depends(get_db)):
     games, skipped = library_service.import_items(db, payload.items)
     return ImportResponse(imported=games, skipped=skipped)
+
+
+@router.post("/link", response_model=LinkResponse, status_code=status.HTTP_201_CREATED)
+def link_game(payload: LinkRequest, db: Session = Depends(get_db)):
+    try:
+        return library_service.link_game(db, payload.game_id, payload.store, payload.external_id)
+    except GameNotFoundError:
+        raise HTTPException(status_code=404, detail="Jogo não encontrado")
+    except StoreLinkConflictError:
+        raise HTTPException(status_code=409, detail="Este item da loja já está vinculado a outro jogo")
 
 
 @router.post("/ignored", status_code=status.HTTP_201_CREATED)

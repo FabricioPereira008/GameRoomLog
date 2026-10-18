@@ -44,6 +44,17 @@ class ImportResponse(BaseModel):
     skipped: int  # já vinculados anteriormente
 
 
+class LinkRequest(BaseModel):
+    game_id: int
+    store: str = Field(min_length=1, max_length=30)
+    external_id: str = Field(min_length=1, max_length=100)
+
+
+class LinkResponse(LinkRequest):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
 class IgnoreRequest(BaseModel):
     items: List[LibraryEntryBase] = Field(min_length=1)
 

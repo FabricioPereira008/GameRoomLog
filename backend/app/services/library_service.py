@@ -29,6 +29,14 @@ class UnknownStoreError(Exception):
     pass
 
 
+class GameNotFoundError(Exception):
+    pass
+
+
+class StoreLinkConflictError(Exception):
+    pass
+
+
 def normalize_title(title: str) -> str:
     """Minúsculas, sem acentos, sem ™/®/©, sem pontuação, espaços colapsados."""
     text = re.sub(r"[™®©]", "", title)  # antes do NFKD, que decomporia ™ em "TM"
@@ -144,6 +152,23 @@ class LibraryService:
         for game in created:
             db.refresh(game)
         return created, skipped
+
+    @staticmethod
+    def link_game(db: Session, game_id: int, store: str, external_id: str) -> GameStoreLink:
+        """Vincula um jogo já cadastrado (ex.: criado pela tela de edição) à loja. Idempotente."""
+        if not db.query(Game.id).filter(Game.id == game_id).first():
+            raise GameNotFoundError()
+        link = db.query(GameStoreLink).filter_by(store=store, external_id=external_id).first()
+        if link:
+            if link.game_id != game_id:
+                raise StoreLinkConflictError()
+            return link
+        link = GameStoreLink(game_id=game_id, store=store, external_id=external_id)
+        db.add(link)
+        db.query(IgnoredStoreGame).filter_by(store=store, external_id=external_id).delete()
+        db.commit()
+        db.refresh(link)
+        return link
 
     @staticmethod
     def ignore(db: Session, items: Sequence[LibraryEntryBase]) -> int:

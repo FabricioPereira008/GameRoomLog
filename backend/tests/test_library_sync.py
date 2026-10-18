@@ -168,6 +168,35 @@ def test_import_validation_errors():
     assert client.post("/api/v1/library/import", json={"items": [bad]}).status_code == 422
 
 
+def test_link_existing_game_hides_candidate_and_clears_ignored():
+    use(e("1", "Hades"), e("2", "Zelda"))
+    item = {"store": "fake", "external_id": "1", "title": "Hades"}
+    client.post("/api/v1/library/ignored", json={"items": [item]})
+    game_id = client.post("/api/v1/games/", json={"title": "Hades (meu título)"}).json()["id"]
+    link = {"game_id": game_id, "store": "fake", "external_id": "1"}
+    res = client.post("/api/v1/library/link", json=link)
+    assert res.status_code == 201
+    assert res.json()["game_id"] == game_id and res.json()["id"]
+    assert client.get("/api/v1/library/ignored").json() == []
+    assert [c["title"] for c in scan()["candidates"]] == ["Zelda"]
+    # idempotente para o mesmo jogo
+    assert client.post("/api/v1/library/link", json=link).status_code == 201
+    db = TestingSessionLocal()
+    assert db.query(GameStoreLink).filter_by(external_id="1").count() == 1
+    db.close()
+
+
+def test_link_errors():
+    game_id = client.post("/api/v1/games/", json={"title": "Hades"}).json()["id"]
+    other_id = client.post("/api/v1/games/", json={"title": "Celeste"}).json()["id"]
+    link = {"game_id": game_id, "store": "fake", "external_id": "1"}
+    assert client.post("/api/v1/library/link", json={**link, "game_id": 9999}).status_code == 404
+    assert client.post("/api/v1/library/link", json=link).status_code == 201
+    assert client.post("/api/v1/library/link", json={**link, "game_id": other_id}).status_code == 409
+    assert client.post("/api/v1/library/link", json={**link, "store": ""}).status_code == 422
+    assert client.post("/api/v1/library/link", json={"store": "fake", "external_id": "1"}).status_code == 422
+
+
 def test_manual_game_is_auto_linked_by_normalized_title():
     client.post("/api/v1/games/", json={"title": "Pokémon Vermelho"})
     use(e("7", "POKEMON vermelho™"))

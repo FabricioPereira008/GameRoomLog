@@ -1,7 +1,9 @@
 import pytest
 from PySide6.QtCore import Qt
 from frontend_desktop.views.components import library_sync_view as lsv
-from frontend_desktop.views.components.library_sync_view import COL_TITLE, LibrarySyncView, fetch_covers
+from frontend_desktop.views.components.library_sync_view import (
+    COL_TITLE, LibrarySyncView, finish_import, import_prefill,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -112,22 +114,106 @@ def test_filters_and_select_visible(qapp, monkeypatch):
     assert view.checked_items() == []
 
 
-def test_import_removes_items_and_emits(qapp, monkeypatch):
+def check(view, *names):
+    for item in view._items():
+        if any(item.text(0).startswith(n) for n in names):
+            item.setCheckState(COL_TITLE, Qt.Checked)
+
+
+def test_import_opens_editor_then_links_and_emits(qapp, monkeypatch):
     view = LibrarySyncView()
     scanned(view, monkeypatch)
-    sent, imported, updated = [], [], []
-    game = {"id": 7, "title": "Hades", "status": "Disponível"}
-    monkeypatch.setattr(lsv.api_client, "library_import",
-                        lambda items: sent.append(items) or {"imported": [game], "skipped": 0})
-    monkeypatch.setattr(lsv, "fetch_covers", lambda games, key: [dict(game, cover_image="x.jpg")])
+    opened, linked, imported, updated = [], [], [], []
+    game = {"id": 7, "title": "Hades", "status": "Fila", "cover_image": None}
+    monkeypatch.setattr(view, "edit_before_import",
+                        lambda cand, i, n: opened.append((cand["title"], i, n)) or game)
+    monkeypatch.setattr(lsv.api_client, "library_link", lambda *a: linked.append(a) or {"id": 1})
+    monkeypatch.setattr(lsv.api_client, "auto_cover_game", lambda gid, key: {"success": True})
+    monkeypatch.setattr(lsv.api_client, "get_game", lambda gid: dict(game, cover_image="x.jpg"))
     view.games_imported.connect(imported.append)
     view.games_updated.connect(updated.append)
-    next(i for i in view._items() if i.text(0) == "Hades").setCheckState(COL_TITLE, Qt.Checked)
+    check(view, "Hades")
     view.import_selected()
-    assert sent[0] == [{"store": "steam", "external_id": "1", "title": "Hades", "played_hours": 12.0}]
+    assert opened == [("Hades", 1, 1)]
+    assert linked == [(7, "steam", "1")]
     assert titles(view) == ["Celeste", "Doom  (título ambíguo)"]
     assert imported == [[game]] and updated[0][0]["cover_image"] == "x.jpg"
-    assert "concluída" in view.status_label.text()
+    assert "1 jogo(s) importado(s)" in view.status_label.text() and view.btn_scan.isEnabled()
+
+
+def test_cancelled_editor_keeps_item_and_can_stop_batch(qapp, monkeypatch):
+    view = LibrarySyncView()
+    scanned(view, monkeypatch)
+    opened, asked = [], []
+    monkeypatch.setattr(view, "edit_before_import", lambda cand, i, n: opened.append(cand["title"]) or None)
+    monkeypatch.setattr(view, "confirm_continue", lambda remaining: asked.append(remaining) or False)
+    emitted = []
+    view.games_imported.connect(emitted.append)
+    check(view, "Hades", "Celeste", "Doom")
+    view.import_selected()
+    assert len(opened) == 1 and asked == [2]  # parou após o primeiro cancelamento
+    assert emitted == [] and len(view._items()) == 3
+    assert "0 jogo(s)" in view.status_label.text() and view.btn_import.isEnabled()
+
+
+def test_cancel_one_and_continue_with_next(qapp, monkeypatch):
+    view = LibrarySyncView()
+    scanned(view, monkeypatch)
+    results = iter([None, {"id": 9, "title": "Hades", "cover_image": "c.jpg"}])
+    monkeypatch.setattr(view, "edit_before_import", lambda cand, i, n: next(results))
+    monkeypatch.setattr(view, "confirm_continue", lambda remaining: True)
+    monkeypatch.setattr(lsv.api_client, "library_link", lambda *a: {"id": 1})
+    updated = []
+    view.games_updated.connect(updated.append)
+    check(view, "Hades", "Celeste")
+    view.import_selected()
+    assert titles(view) == ["Celeste", "Doom  (título ambíguo)"]  # ordem alfabética: Celeste veio 1º
+    assert updated == []  # já tinha capa
+
+
+def test_link_failure_is_reported(qapp, monkeypatch):
+    view = LibrarySyncView()
+    scanned(view, monkeypatch)
+    monkeypatch.setattr(view, "edit_before_import", lambda cand, i, n: {"id": 7, "title": "Hades"})
+
+    def boom(*a):
+        raise RuntimeError("conflito")
+    monkeypatch.setattr(lsv.api_client, "library_link", boom)
+    emitted = []
+    view.games_imported.connect(emitted.append)
+    check(view, "Hades")
+    view.import_selected()
+    assert emitted == [[{"id": 7, "title": "Hades"}]]  # o jogo foi salvo mesmo sem o vínculo
+    view._on_link_failed({"title": "Hades"}, "conflito")
+    assert "não foi vinculado" in view.status_label.text() and "conflito" in view.status_label.text()
+
+
+def test_edit_before_import_uses_prefilled_dialog(qapp, monkeypatch):
+    view = LibrarySyncView()
+    created = []
+
+    class FakeDialog:
+        def __init__(self, data, parent):
+            created.append(data)
+            self.saved_game, self.is_deleted = {"id": 1}, False
+
+        def setWindowTitle(self, text):
+            created.append(text)
+
+        def exec(self):
+            return lsv.QDialog.Accepted
+    monkeypatch.setattr(lsv, "GameDialog", FakeDialog)
+    assert view.edit_before_import(CANDS[0], 2, 3) == {"id": 1}
+    assert created[0]["platform"] == {"name": "PC"} and created[0]["played_hours"] == 12.0
+    assert created[1] == "Importar jogo (2 de 3) — Steam"
+    FakeDialog.exec = lambda self: lsv.QDialog.Rejected
+    assert view.edit_before_import(CANDS[0], 1, 1) is None
+
+
+def test_import_prefill_defaults():
+    data = import_prefill({"store": "gog", "external_id": "x", "title": "Doom", "played_hours": None})
+    assert data == {"title": "Doom", "status": "Disponível", "format": "Digital",
+                    "played_hours": 0, "platform": {"name": "PC"}}
 
 
 def test_import_without_selection_does_nothing(qapp, monkeypatch):
@@ -136,17 +222,6 @@ def test_import_without_selection_does_nothing(qapp, monkeypatch):
     view.import_selected()
     view.ignore_selected()
     assert len(view._items()) == 3
-
-
-def test_import_with_no_new_games(qapp, monkeypatch):
-    view = LibrarySyncView()
-    scanned(view, monkeypatch)
-    monkeypatch.setattr(lsv.api_client, "library_import", lambda items: {"imported": [], "skipped": 1})
-    emitted = []
-    view.games_imported.connect(emitted.append)
-    view._items()[0].setCheckState(COL_TITLE, Qt.Checked)
-    view.import_selected()
-    assert emitted == []
 
 
 def test_ignore_selected_and_manage_ignored_tab(qapp, monkeypatch):
@@ -169,25 +244,24 @@ def test_ignore_selected_and_manage_ignored_tab(qapp, monkeypatch):
     assert removed == [5] and view.ignored_list.count() == 0
 
 
-def test_import_error_reenables(qapp, monkeypatch):
+def test_finish_import_links_and_fetches_cover_only_when_missing(monkeypatch):
+    linked, covers = [], []
+    monkeypatch.setattr(lsv.api_client, "library_link", lambda *a: linked.append(a))
+    monkeypatch.setattr(lsv.api_client, "auto_cover_game", lambda gid, key: covers.append(key) or {"success": False})
+    cand = {"store": "epic", "external_id": "abc"}
+    assert finish_import({"id": 1, "cover_image": "a.jpg"}, cand) is None
+    assert finish_import({"id": 2}, cand, "k") is None
+    assert linked == [(1, "epic", "abc"), (2, "epic", "abc")] and covers == ["k"]
+
+    def boom(gid, key):
+        raise RuntimeError("x")
+    monkeypatch.setattr(lsv.api_client, "auto_cover_game", boom)
+    assert finish_import({"id": 3}, cand) is None
+
+
+def test_confirm_continue_asks_user(qapp, monkeypatch):
     view = LibrarySyncView()
-    scanned(view, monkeypatch)
-
-    def boom(items):
-        raise RuntimeError("falhou")
-    monkeypatch.setattr(lsv.api_client, "library_import", boom)
-    view._items()[0].setCheckState(COL_TITLE, Qt.Checked)
-    view.import_selected()
-    assert view.btn_scan.isEnabled() and "falhou" in view.status_label.text()
-    assert len(view._items()) == 3
-
-
-def test_fetch_covers_collects_only_successes(monkeypatch):
-    def auto(gid, key):
-        if gid == 2:
-            raise RuntimeError("x")
-        return {"success": gid == 1}
-    monkeypatch.setattr(lsv.api_client, "auto_cover_game", auto)
-    monkeypatch.setattr(lsv.api_client, "get_game", lambda gid: {"id": gid, "cover_image": "c.jpg"})
-    games = [{"id": 1}, {"id": 2}, {"id": 3}]
-    assert fetch_covers(games, "") == [{"id": 1, "cover_image": "c.jpg"}]
+    monkeypatch.setattr(lsv.QMessageBox, "question", lambda *a, **k: lsv.QMessageBox.Yes)
+    assert view.confirm_continue(2) is True
+    monkeypatch.setattr(lsv.QMessageBox, "question", lambda *a, **k: lsv.QMessageBox.No)
+    assert view.confirm_continue(2) is False

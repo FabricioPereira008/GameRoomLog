@@ -233,8 +233,9 @@ class ApiClient:
         return self._json("POST", "library/scan", timeout=SCAN_TIMEOUT,
                           json={"include_all": include_all, "stores": stores})
 
-    def library_import(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
-        return self._json("POST", "library/import", timeout=IMPORT_TIMEOUT, json={"items": items})
+    def library_link(self, game_id: int, store: str, external_id: str) -> Dict[str, Any]:
+        return self._json("POST", "library/link",
+                          json={"game_id": game_id, "store": store, "external_id": external_id})
 
     def library_ignore(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
         return self._json("POST", "library/ignored", json={"items": items})

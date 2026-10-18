@@ -458,7 +458,9 @@ class GameDialog(QDialog):
         # Platform
         plat = self.game_data.get("platform")
         if plat:
-            idx = self.combo_platform.findData(plat.get("id"))
+            # Sem id, procura pelo nome (ex.: "PC" na importação das lojas)
+            idx = (self.combo_platform.findData(plat["id"]) if plat.get("id")
+                   else self.combo_platform.findText(plat.get("name") or "", Qt.MatchFixedString))
             if idx >= 0:
                 self.combo_platform.setCurrentIndex(idx)
 
