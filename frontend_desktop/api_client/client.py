@@ -24,6 +24,11 @@ def get_cover_cache_dir() -> Path:
     return base / "gameroomlog" / "covers"
 
 
+def _scope_params(scope: Optional[str]) -> Optional[Dict[str, str]]:
+    """Escopo das categorias: None/"completed" = só concluídos (padrão da API), "all" = todos os jogos."""
+    return {"scope": scope} if scope else None
+
+
 class ApiClient:
     def __init__(self, base_url: Optional[str] = None, cover_cache_dir: Optional[Path] = None):
         self.base_url = (base_url or get_default_base_url()).rstrip("/")
@@ -147,11 +152,11 @@ class ApiClient:
         return None
 
     # --- GÊNEROS ---
-    def get_genres(self) -> List[Dict[str, Any]]:
-        return self._json("GET", "genres/")
+    def get_genres(self, scope: Optional[str] = None) -> List[Dict[str, Any]]:
+        return self._json("GET", "genres/", params=_scope_params(scope))
 
-    def get_genre_details(self, genre_id: int) -> Dict[str, Any]:
-        return self._json("GET", f"genres/{genre_id}/details")
+    def get_genre_details(self, genre_id: int, scope: Optional[str] = None) -> Dict[str, Any]:
+        return self._json("GET", f"genres/{genre_id}/details", params=_scope_params(scope))
 
     def create_genre(self, name: str, color: str = "#4A5568") -> Dict[str, Any]:
         return self._json("POST", "genres/", json={"name": name, "color": color})
@@ -163,11 +168,11 @@ class ApiClient:
         return self._delete(f"genres/{genre_id}")
 
     # --- PLATAFORMAS ---
-    def get_platforms(self) -> List[Dict[str, Any]]:
-        return self._json("GET", "platforms/")
+    def get_platforms(self, scope: Optional[str] = None) -> List[Dict[str, Any]]:
+        return self._json("GET", "platforms/", params=_scope_params(scope))
 
-    def get_platform_details(self, platform_id: int) -> Dict[str, Any]:
-        return self._json("GET", f"platforms/{platform_id}/details")
+    def get_platform_details(self, platform_id: int, scope: Optional[str] = None) -> Dict[str, Any]:
+        return self._json("GET", f"platforms/{platform_id}/details", params=_scope_params(scope))
 
     def create_platform(self, name: str, icon_name: Optional[str] = None) -> Dict[str, Any]:
         return self._json("POST", "platforms/", json={"name": name, "icon_name": icon_name})
@@ -179,11 +184,11 @@ class ApiClient:
         return self._delete(f"platforms/{platform_id}")
 
     # --- FRANQUIAS ---
-    def get_franchises(self) -> List[Dict[str, Any]]:
-        return self._json("GET", "franchises/")
+    def get_franchises(self, scope: Optional[str] = None) -> List[Dict[str, Any]]:
+        return self._json("GET", "franchises/", params=_scope_params(scope))
 
-    def get_franchise_details(self, franchise_id: int) -> Dict[str, Any]:
-        return self._json("GET", f"franchises/{franchise_id}/details")
+    def get_franchise_details(self, franchise_id: int, scope: Optional[str] = None) -> Dict[str, Any]:
+        return self._json("GET", f"franchises/{franchise_id}/details", params=_scope_params(scope))
 
     def create_franchise(self, name: str) -> Dict[str, Any]:
         return self._json("POST", "franchises/", json={"name": name})
@@ -195,8 +200,8 @@ class ApiClient:
         return self._delete(f"franchises/{franchise_id}")
 
     # --- DESENVOLVEDORAS ---
-    def get_developers(self) -> List[Dict[str, Any]]:
-        return self._json("GET", "developers/")
+    def get_developers(self, scope: Optional[str] = None) -> List[Dict[str, Any]]:
+        return self._json("GET", "developers/", params=_scope_params(scope))
 
     def create_developer(self, name: str) -> Dict[str, Any]:
         return self._json("POST", "developers/", json={"name": name})
@@ -215,13 +220,6 @@ class ApiClient:
         return self._json("GET", "stats/overall")
 
     # --- IMPORTAÇÃO DO NOTION ---
-    def import_notion(self, folder_path: str, auto_fetch_covers: bool = True) -> Dict[str, Any]:
-        return self._json(
-            "POST", "imports/notion", timeout=IMPORT_TIMEOUT,
-            json={"folder_path": folder_path, "auto_fetch_covers": auto_fetch_covers},
-        )
-
-    # --- CAPAS AUTOMÁTICAS ---
     def auto_cover_game(self, game_id: int, api_key: Optional[str] = None) -> Dict[str, Any]:
         return self._json(
             "POST", f"uploads/auto-cover-game/{game_id}", timeout=20,

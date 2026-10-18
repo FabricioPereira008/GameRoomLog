@@ -144,3 +144,61 @@ def test_sync_view_is_lazy_and_imports_in_place(window):
     assert len(window.all_games) == before + 1 and window.all_games[0]["id"] == 9001
     window._views[ViewId.SYNC].games_updated.emit([dict(new, cover_image="c.jpg")])
     assert next(g for g in window.all_games if g["id"] == 9001)["cover_image"] == "c.jpg"
+
+
+def test_view_all_opens_list_pages_and_portable_view_is_lazy(window):
+    from frontend_desktop.views.view_ids import ViewId
+    window.open_list_view("zerados")
+    assert window.current_view_id == ViewId.FINISHED
+    window.view_game_room.view_all_requested.emit("queue")
+    assert window.current_view_id == ViewId.QUEUE
+    window.open_list_view("desconhecida")
+    assert window.current_view_id == ViewId.QUEUE
+    assert ViewId.PORTABLE not in window._views
+    window.switch_view(int(ViewId.PORTABLE))
+    assert window.current_view_id == ViewId.PORTABLE and window.view_title_label.text() == "App do portátil"
+
+
+def test_quick_search_opens_edit_dialog(window, monkeypatch):
+    from frontend_desktop.views import main_window as mw
+    opened = []
+
+    class FakeSearch:
+        def __init__(self, games, parent):
+            self.selected_game = games[1]
+
+        def exec(self):
+            return True
+    monkeypatch.setattr(mw, "QuickSearchDialog", FakeSearch)
+    monkeypatch.setattr(window, "open_edit_game_dialog", opened.append)
+    window.open_quick_search()
+    assert opened and opened[0]["id"] == window.all_games[1]["id"]
+    assert {s.key().toString() for s in window._shortcuts} >= {"Ctrl+N", "Ctrl+F", "Del"}
+
+
+def test_delete_selected_game_confirms_and_removes(window, monkeypatch):
+    from frontend_desktop.views import main_window as mw
+    grid = window.view_queue_grid.grid
+    view = grid.view
+    view.setCurrentIndex(grid.proxy.index(0, 0))
+    game = mw.MainWindow.selected_game_in(view.viewport())
+    assert game and game["id"] == 1
+
+    deleted = []
+    monkeypatch.setattr(mw, "run_async", lambda owner, fn, ok, err, *args: ok(fn(*args)))
+    monkeypatch.setattr(mw.api_client, "delete_game", lambda gid: deleted.append(gid) or True)
+    monkeypatch.setattr(mw.QApplication, "focusWidget", staticmethod(lambda: view))
+    monkeypatch.setattr(mw.QMessageBox, "question", lambda *a, **k: mw.QMessageBox.No)
+    window.delete_selected_game()
+    assert deleted == []
+    monkeypatch.setattr(mw.QMessageBox, "question", lambda *a, **k: mw.QMessageBox.Yes)
+    window.delete_selected_game()
+    assert deleted == [1] and all(g["id"] != 1 for g in window.all_games)
+
+    table = window.view_table
+    table.table.setCurrentIndex(table.proxy.index(0, 3))
+    assert mw.MainWindow.selected_game_in(table.table)["id"] == table.proxy.index(0, 0).data(mw.GameRole)["id"]
+    assert mw.MainWindow.selected_game_in(window.sidebar) is None
+    monkeypatch.setattr(mw.QApplication, "focusWidget", staticmethod(lambda: None))
+    window.delete_selected_game()  # nada selecionado: não faz nada
+    assert deleted == [1]

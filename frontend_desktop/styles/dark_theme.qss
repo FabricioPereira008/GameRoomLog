@@ -106,6 +106,7 @@ QLabel[class="section-header-small"] { font-size: $fs_lg; font-weight: 600; colo
 QLabel[class="empty-state-text"] { color: $text_dim; font-size: $fs_md; padding: 24px; }
 QLabel[class="form-label"] { color: $text_muted; font-weight: 600; font-size: $fs_sm; }
 QLabel[class="settings-desc"] { color: $text_muted; font-size: $fs_sm; }
+QLabel[class="settings-hint"] { color: $text_dim; font-size: $fs_sm; margin-left: 26px; margin-bottom: 4px; }
 QLabel[class="yearbook-title"] { font-size: $fs_xl; font-weight: 700; color: $text; }
 QLabel[class="yearbook-year"] { color: $text_muted; font-weight: 600; }
 QLabel[class="yearbook-subtitle"] { font-size: $fs_lg; font-weight: 600; color: $text; margin-top: 10px; }
@@ -317,3 +318,41 @@ QGraphicsView[class="crop-view-plain"] { border: none; background-color: transpa
 /* ===== Barra de status ===== */
 QStatusBar { background-color: $surface; color: $text_muted; border-top: 1px solid $border; font-size: $fs_sm; }
 QStatusBar::item { border: none; }
+
+/* ===== Seletor segmentado (tamanho dos cards) ===== */
+QToolButton[class~="segmented-btn"] {
+    background-color: $surface; color: $text_muted; border: 1px solid $border;
+    padding: 7px 11px; font-weight: 600; font-size: $fs_sm; min-height: 20px;
+}
+QToolButton[class~="segmented-first"] { border-top-left-radius: $r_md; border-bottom-left-radius: $r_md; }
+QToolButton[class~="segmented-mid"] { border-left: none; }
+QToolButton[class~="segmented-last"] { border-left: none; border-top-right-radius: $r_md; border-bottom-right-radius: $r_md; }
+QToolButton[class~="segmented-btn"]:hover { color: $text; background-color: $surface_2; }
+QToolButton[class~="segmented-btn"]:checked { background-color: $accent_soft; color: $accent_text; border-color: $accent_border; }
+
+/* ===== Game Room: cabeçalho das seções e setas das faixas ===== */
+QLabel[class="section-count"] { color: $text_dim; font-size: $fs_sm; font-weight: 600; padding-left: 6px; }
+QToolButton[class="strip-arrow"] {
+    background-color: $surface_2; border: 1px solid $border; border-radius: $r_sm; padding: 4px;
+}
+QToolButton[class="strip-arrow"]:hover { background-color: $surface_3; border: 1px solid $accent_border; }
+QToolButton[class="strip-arrow"]:disabled { background: transparent; border-color: $border; }
+QPushButton[class="link-btn"] {
+    background: transparent; border: none; color: $accent_text; font-weight: 600; font-size: $fs_sm; padding: 4px 6px;
+}
+QPushButton[class="link-btn"]:hover { color: $text; text-decoration: underline; }
+
+/* ===== Abas (Configurações) ===== */
+QTabWidget[class="settings-tabs"]::pane { border: none; top: 0px; }
+QTabWidget[class="settings-tabs"] QTabBar::tab {
+    background: transparent; color: $text_muted; padding: 9px 18px; margin-right: 4px;
+    border: none; border-bottom: 2px solid transparent; font-weight: 600;
+}
+QTabWidget[class="settings-tabs"] QTabBar::tab:hover { color: $text; }
+QTabWidget[class="settings-tabs"] QTabBar::tab:selected { color: $accent_text; border-bottom: 2px solid $accent; }
+
+/* ===== Busca rápida (Ctrl+F) ===== */
+QListWidget#quickSearchResults { background-color: $surface; border: 1px solid $border; border-radius: $r_md; padding: 4px; }
+QListWidget#quickSearchResults::item { padding: 7px 10px; border-radius: $r_sm; color: $text; }
+QListWidget#quickSearchResults::item:selected { background-color: $accent_soft; color: $accent_text; }
+QListWidget#quickSearchResults::item:hover { background-color: $surface_2; }

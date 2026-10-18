@@ -3,18 +3,18 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.schemas.genre import GenreCreate, GenreUpdate, GenreResponse
-from backend.app.schemas.category_detail import CategoryDetailResponse
+from backend.app.schemas.category_detail import CategoryDetailResponse, CategoryScope
 from backend.app.services.category_service import genre_service
 
 router = APIRouter()
 
 @router.get("/", response_model=List[GenreResponse])
-def list_genres(db: Session = Depends(get_db)):
-    return genre_service.list_with_counts(db, GenreResponse)
+def list_genres(scope: CategoryScope = "completed", db: Session = Depends(get_db)):
+    return genre_service.list_with_counts(db, GenreResponse, scope)
 
 @router.get("/{genre_id}/details", response_model=CategoryDetailResponse)
-def get_genre_details(genre_id: int, db: Session = Depends(get_db)):
-    return genre_service.details(db, genre_id)
+def get_genre_details(genre_id: int, scope: CategoryScope = "completed", db: Session = Depends(get_db)):
+    return genre_service.details(db, genre_id, scope)
 
 @router.post("/", response_model=GenreResponse, status_code=status.HTTP_201_CREATED)
 def create_genre(payload: GenreCreate, db: Session = Depends(get_db)):

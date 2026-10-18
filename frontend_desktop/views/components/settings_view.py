@@ -1,22 +1,34 @@
-import json
+"""Configurações: aparência, repositório de capas e informações do sistema (em abas)."""
 import logging
 import platform
-from app_version import __version__
 import time
-from pathlib import Path
+
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QRadioButton, QButtonGroup,
-    QLineEdit, QPushButton, QFrame, QMessageBox, QGroupBox, QFileDialog, QCheckBox,
-    QApplication, QProgressBar, QScrollArea, QSpinBox
+    QButtonGroup, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QRadioButton,
+    QScrollArea, QTabWidget, QVBoxLayout, QWidget,
 )
-from PySide6.QtCore import Signal, Qt, QSettings, QThread
+
+from app_version import __version__
+from frontend_desktop import preferences
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.styles.tokens import COLORS
 from frontend_desktop.ui_helpers import set_button_icon, set_status
-from frontend_desktop.views.dialogs.inbox_review_dialog import InboxReviewDialog
-from frontend_desktop.workers import run_async
 
 logger = logging.getLogger(__name__)
+
+CARD_SIZE_OPTIONS = (
+    ("small", "Pequeno (130px) — mais cards por linha"),
+    ("medium", "Médio (170px) — padrão"),
+    ("large", "Grande (230px) — capas em destaque"),
+)
+SCOPE_OPTIONS = (
+    (preferences.SCOPE_COMPLETED, "Só jogos concluídos",
+     "Contagens, capas e listas mostram apenas os jogos zerados e platinados."),
+    (preferences.SCOPE_ALL, "Todos os jogos",
+     "Mostra todos os jogos da categoria, com quantos foram zerados; a página da categoria ganha o filtro de status."),
+)
+
 
 class CoverFetcherThread(QThread):
     progress_updated = Signal(int, int, str, bool)  # current, total, game_title, success
@@ -66,97 +78,130 @@ class CoverFetcherThread(QThread):
 class SettingsView(QWidget):
     settings_changed = Signal()
     data_imported = Signal()
-    game_saved = Signal(dict, bool, object)  # jogo, é novo, status anterior (caixa de entrada do portátil)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.settings = QSettings("GameRoom", "GameRoomLog")
+        self.settings = preferences.settings()
         self.cover_thread = None
         self.init_ui()
 
     def init_ui(self):
-        # Conteúdo rolável: em janelas baixas os grupos não são espremidos
-        outer_layout = QVBoxLayout(self)
-        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self.tabs = QTabWidget()
+        self.tabs.setProperty("class", "settings-tabs")
+        self.tabs.setDocumentMode(True)
+        self.tabs.tabBar().setDrawBase(False)
+        self.tabs.addTab(self._scrollable(self._build_appearance_tab()), "Aparência")
+        self.tabs.addTab(self._scrollable(self._build_covers_tab()), "Capas")
+        self.tabs.addTab(self._scrollable(self._build_about_tab()), "Sobre")
+        outer.addWidget(self.tabs)
+
+    @staticmethod
+    def _scrollable(content: QWidget) -> QScrollArea:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        container = QWidget()
-        container.setObjectName("settingsScrollContainer")
-        scroll.setWidget(container)
-        outer_layout.addWidget(scroll)
+        content.setObjectName("settingsScrollContainer")
+        scroll.setWidget(content)
+        return scroll
 
-        main_layout = QVBoxLayout(container)
-        main_layout.setContentsMargins(8, 8, 16, 20)
-        main_layout.setSpacing(20)
-        main_layout.setAlignment(Qt.AlignTop)
+    @staticmethod
+    def _page() -> tuple:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(8, 16, 16, 20)
+        layout.setSpacing(20)
+        layout.setAlignment(Qt.AlignTop)
+        return page, layout
 
-        title = QLabel("Configurações")
-        title.setProperty("class", "view-title-large")
-        main_layout.addWidget(title)
+    @staticmethod
+    def _group(title: str, description: str = "") -> tuple:
+        group = QGroupBox(title)
+        group.setProperty("class", "settings-group")
+        layout = QVBoxLayout(group)
+        layout.setSpacing(10)
+        if description:
+            desc = QLabel(description)
+            desc.setWordWrap(True)
+            desc.setProperty("class", "settings-desc")
+            layout.addWidget(desc)
+        return group, layout
 
-        # --- SEÇÃO 1: IMPORTAÇÃO DO NOTION ---
-        import_group = QGroupBox("Importação de Dados (Notion)")
-        import_group.setProperty("class", "settings-group")
-        import_layout = QVBoxLayout(import_group)
-        import_layout.setSpacing(12)
+    # --- Aparência ---
+    def _build_appearance_tab(self) -> QWidget:
+        page, layout = self._page()
 
-        import_desc = QLabel(
-            "Importe todo o seu catálogo de jogos diretamente da pasta exportada do Notion (CSV).<br>"
-            "O sistema criará automaticamente as plataformas, gêneros, desenvolvedoras, franquias "
-            "e vinculará as datas de zeramento e platina."
+        size_group, size_layout = self._group(
+            "Tamanho dos cards", "Também dá para trocar pelo seletor P / M / G ao lado dos filtros das listas.")
+        self.size_button_group = QButtonGroup(self)
+        self.size_buttons = {}
+        for size, text in CARD_SIZE_OPTIONS:
+            rb = QRadioButton(text)
+            self.size_button_group.addButton(rb)
+            self.size_buttons[size] = rb
+            size_layout.addWidget(rb)
+            rb.clicked.connect(lambda _c=False, s=size: preferences.set_card_size(s))
+        self.rb_small, self.rb_medium, self.rb_large = (self.size_buttons[k] for k in ("small", "medium", "large"))
+        self._sync_card_size(preferences.card_size())
+        preferences.notifier.card_size_changed.connect(self._sync_card_size)
+        layout.addWidget(size_group)
+
+        scope_group, scope_layout = self._group(
+            "Páginas de Gêneros, Plataformas e Séries", "O que entra nas contagens, capas e listas dessas páginas.")
+        self.scope_buttons = {}
+        scope_group_buttons = QButtonGroup(self)
+        current = preferences.category_scope()
+        for scope, text, hint in SCOPE_OPTIONS:
+            rb = QRadioButton(text)
+            rb.setChecked(scope == current)
+            scope_group_buttons.addButton(rb)
+            self.scope_buttons[scope] = rb
+            scope_layout.addWidget(rb)
+            hint_label = QLabel(hint)
+            hint_label.setWordWrap(True)
+            hint_label.setProperty("class", "settings-hint")
+            scope_layout.addWidget(hint_label)
+            rb.clicked.connect(lambda _c=False, sc=scope: self.on_scope_changed(sc))
+        layout.addWidget(scope_group)
+        return page
+
+    def _sync_card_size(self, size: str) -> None:
+        btn = self.size_buttons.get(size)
+        if btn and not btn.isChecked():
+            btn.setChecked(True)
+
+    def on_scope_changed(self, scope: str) -> None:
+        if scope != preferences.category_scope():
+            preferences.set_category_scope(scope)
+            self.settings_changed.emit()
+
+    # --- Capas ---
+    def _build_covers_tab(self) -> QWidget:
+        page, layout = self._page()
+        sgdb_group, sgdb_layout = self._group(
+            "Repositório de capas (Steam / SteamGridDB)",
+            "A API pública da Steam é usada por padrão. Para capas de jogos de console e emuladores "
+            "(Switch, 3DS, PS5...), informe sua API Key gratuita do SteamGridDB.",
         )
-        import_desc.setWordWrap(True)
-        import_desc.setProperty("class", "settings-desc")
-        import_layout.addWidget(import_desc)
-
-        self.chk_auto_covers = QCheckBox("Iniciar busca automática de capas após importar")
-        self.chk_auto_covers.setChecked(True)
-        import_layout.addWidget(self.chk_auto_covers)
-
-        btn_import = QPushButton("Selecionar pasta do Notion e importar")
-        set_button_icon(btn_import, "upload", COLORS["on_accent"])
-        btn_import.setProperty("class", "action-btn")
-        btn_import.setCursor(Qt.PointingHandCursor)
-        btn_import.clicked.connect(self.on_import_notion)
-        import_layout.addWidget(btn_import)
-
-        main_layout.addWidget(import_group)
-
-        main_layout.addWidget(self._build_portable_group())
-
-        # --- SEÇÃO 2: REPOSITÓRIO E BUSCA DE CAPAS EM LOTE ---
-        sgdb_group = QGroupBox("Repositório de Capas (Steam / SteamGridDB)")
-        sgdb_group.setProperty("class", "settings-group")
-        sgdb_layout = QVBoxLayout(sgdb_group)
-        sgdb_layout.setSpacing(12)
-
-        sgdb_desc = QLabel(
-            "A API pública da Steam é usada por padrão. Para capas de jogos de console e emuladores (Switch, 3DS, PS5, etc.), "
-            "insira sua API Key gratuita do SteamGridDB.<br>"
-            "Use o botão abaixo para <b>buscar capas faltantes em lote</b> de forma sequencial sem sobrecarregar."
-        )
-        sgdb_desc.setWordWrap(True)
-        sgdb_desc.setProperty("class", "settings-desc")
-        sgdb_layout.addWidget(sgdb_desc)
-
         key_layout = QHBoxLayout()
         self.input_sgdb_key = QLineEdit()
         self.input_sgdb_key.setPlaceholderText("Cole sua chave da API SteamGridDB aqui...")
         self.input_sgdb_key.setText(self.settings.value("steamgriddb_key", ""))
         self.input_sgdb_key.setEchoMode(QLineEdit.PasswordEchoOnEdit)
-
-        btn_save_key = QPushButton("Salvar Chave")
-        btn_save_key.setProperty("class", "action-btn")
+        btn_save_key = QPushButton("Salvar chave")
+        btn_save_key.setProperty("class", "cancel-btn")
+        btn_save_key.setCursor(Qt.PointingHandCursor)
         btn_save_key.clicked.connect(self.save_steamgriddb_key)
-
         key_layout.addWidget(self.input_sgdb_key)
         key_layout.addWidget(btn_save_key)
         sgdb_layout.addLayout(key_layout)
+        layout.addWidget(sgdb_group)
 
-        # Controles de Busca em Lote
+        batch_group, batch_layout = self._group(
+            "Capas faltantes", "Busca, um jogo por vez, as capas de todos os jogos que ainda não têm uma.")
         batch_btn_layout = QHBoxLayout()
-        self.btn_batch_covers = QPushButton("Buscar capas faltantes em lote")
+        self.btn_batch_covers = QPushButton("Buscar capas faltantes")
         set_button_icon(self.btn_batch_covers, "image", COLORS["on_accent"])
         self.btn_batch_covers.setProperty("class", "action-btn")
         self.btn_batch_covers.setCursor(Qt.PointingHandCursor)
@@ -170,255 +215,35 @@ class SettingsView(QWidget):
         self.btn_stop_covers.setVisible(False)
         self.btn_stop_covers.clicked.connect(self.stop_batch_cover_fetch)
         batch_btn_layout.addWidget(self.btn_stop_covers)
+        batch_btn_layout.addStretch()
+        batch_layout.addLayout(batch_btn_layout)
 
-        sgdb_layout.addLayout(batch_btn_layout)
-
-        # Progresso da busca
         self.cover_progress_bar = QProgressBar()
         self.cover_progress_bar.setVisible(False)
         self.cover_progress_bar.setTextVisible(True)
-        sgdb_layout.addWidget(self.cover_progress_bar)
+        batch_layout.addWidget(self.cover_progress_bar)
 
         self.lbl_cover_status = QLabel("")
         self.lbl_cover_status.setProperty("class", "card-meta")
         self.lbl_cover_status.setVisible(False)
-        sgdb_layout.addWidget(self.lbl_cover_status)
+        batch_layout.addWidget(self.lbl_cover_status)
+        layout.addWidget(batch_group)
+        return page
 
-        main_layout.addWidget(sgdb_group)
-
-        # --- SEÇÃO 3: TAMANHO DOS CARDS ---
-        size_group = QGroupBox("Tamanho de Exibição dos Cards")
-        size_group.setProperty("class", "settings-group")
-        size_layout = QVBoxLayout(size_group)
-        size_layout.setSpacing(10)
-
-        self.size_button_group = QButtonGroup(self)
-        
-        self.rb_small = QRadioButton("Pequeno (130px) — Mais cards visíveis por linha")
-        self.rb_medium = QRadioButton("Médio (170px) — Padrão balanceado")
-        self.rb_large = QRadioButton("Grande (230px) — Capas em destaque")
-
-        self.size_button_group.addButton(self.rb_small, 0)
-        self.size_button_group.addButton(self.rb_medium, 1)
-        self.size_button_group.addButton(self.rb_large, 2)
-
-        size_layout.addWidget(self.rb_small)
-        size_layout.addWidget(self.rb_medium)
-        size_layout.addWidget(self.rb_large)
-
-        current_size = self.settings.value("card_size", "medium")
-        if current_size == "small":
-            self.rb_small.setChecked(True)
-        elif current_size == "large":
-            self.rb_large.setChecked(True)
-        else:
-            self.rb_medium.setChecked(True)
-
-        self.size_button_group.idClicked.connect(self.on_size_changed)
-        main_layout.addWidget(size_group)
-
-        # --- SEÇÃO 4: SOBRE O SISTEMA ---
-        about_group = QGroupBox("Sobre o Sistema")
-        about_group.setProperty("class", "settings-group")
-        about_layout = QVBoxLayout(about_group)
-
+    # --- Sobre ---
+    def _build_about_tab(self) -> QWidget:
+        page, layout = self._page()
+        about_group, about_layout = self._group("GameRoomLog")
         info_label = QLabel(
             f"<b>GameRoomLog</b> v{__version__}<br>"
             f"Ambiente: {platform.system()} {platform.release()}<br>"
-            "Arquitetura: FastAPI Backend (REST) + PySide6 Desktop (Qt6)<br>"
-            "Desenvolvido sob medida para gerenciamento avançado de Backlog, Importação do Notion e Anuário Gamer."
+            "Arquitetura: FastAPI (REST) + PySide6 (Qt6)<br>"
+            "Gerenciamento de backlog, anuário gamer e integração com lojas e com o GameRoom Portátil."
         )
         info_label.setProperty("class", "settings-desc")
         about_layout.addWidget(info_label)
-
-        main_layout.addWidget(about_group)
-        main_layout.addStretch()
-
-    def _build_portable_group(self) -> QGroupBox:
-        group = QGroupBox("App do Portátil")
-        group.setProperty("class", "settings-group")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(12)
-
-        desc = QLabel(
-            "Importe os jogos que você registrou no app Android (arquivo <i>.json</i> exportado por ele). "
-            "Cada evento passa por uma revisão antes de alterar o GameRoom; reimportar o mesmo arquivo não duplica nada.<br>"
-            "O catálogo exportado permite que o app sugira os títulos e plataformas já cadastrados aqui."
-        )
-        desc.setWordWrap(True)
-        desc.setProperty("class", "settings-desc")
-        layout.addWidget(desc)
-
-        threshold_row = QHBoxLayout()
-        threshold_row.addWidget(QLabel("Semelhança mínima para sugerir um jogo:"))
-        self.spin_inbox_threshold = QSpinBox()
-        self.spin_inbox_threshold.setRange(50, 100)
-        self.spin_inbox_threshold.setSuffix("%")
-        self.spin_inbox_threshold.setValue(self.inbox_threshold)
-        self.spin_inbox_threshold.valueChanged.connect(self._save_inbox_threshold)
-        threshold_row.addWidget(self.spin_inbox_threshold)
-        threshold_row.addStretch()
-        layout.addLayout(threshold_row)
-
-        buttons = QHBoxLayout()
-        self.btn_inbox_import = QPushButton("Importar eventos do portátil...")
-        set_button_icon(self.btn_inbox_import, "upload", COLORS["on_accent"])
-        self.btn_inbox_import.setProperty("class", "action-btn")
-        self.btn_inbox_import.setCursor(Qt.PointingHandCursor)
-        self.btn_inbox_import.clicked.connect(self.on_inbox_import)
-        buttons.addWidget(self.btn_inbox_import)
-
-        self.btn_inbox_review = QPushButton("Revisar pendentes")
-        self.btn_inbox_review.setProperty("class", "cancel-btn")
-        self.btn_inbox_review.setEnabled(False)
-        self.btn_inbox_review.clicked.connect(self.open_inbox_review)
-        buttons.addWidget(self.btn_inbox_review)
-
-        self.btn_export_catalog = QPushButton("Exportar catálogo para o portátil...")
-        self.btn_export_catalog.setProperty("class", "cancel-btn")
-        self.btn_export_catalog.clicked.connect(self.on_export_catalog)
-        buttons.addWidget(self.btn_export_catalog)
-        buttons.addStretch()
-        layout.addLayout(buttons)
-
-        self.lbl_inbox_status = QLabel("")
-        self.lbl_inbox_status.setWordWrap(True)
-        layout.addWidget(self.lbl_inbox_status)
-        return group
-
-    def _save_inbox_threshold(self, value: int):
-        self.settings.setValue("inbox_threshold", value)
-
-    @property
-    def inbox_threshold(self) -> int:
-        try:
-            return int(self.settings.value("inbox_threshold", 85))
-        except (TypeError, ValueError):
-            return 85
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        self.refresh_inbox_count()
-
-    def refresh_inbox_count(self):
-        run_async(self, api_client.inbox_pending, self._on_inbox_count, lambda _msg: None, self.inbox_threshold)
-
-    def _on_inbox_count(self, data: dict):
-        total = data.get("total_events", 0)
-        self.btn_inbox_review.setText(f"Revisar pendentes ({total})" if total else "Revisar pendentes")
-        self.btn_inbox_review.setEnabled(total > 0)
-
-    def on_inbox_import(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Selecione o arquivo exportado pelo app do portátil", str(Path.home() / "Downloads"),
-            "Eventos do portátil (*.json);;Todos os arquivos (*)",
-        )
-        if not path:
-            return
-        try:
-            package = json.loads(Path(path).read_text(encoding="utf-8"))
-        except (OSError, ValueError) as e:
-            QMessageBox.critical(self, "Arquivo inválido", f"Não foi possível ler o arquivo:\n\n{e}")
-            return
-        if not isinstance(package, dict) or package.get("format") != "gameroom-inbox":
-            QMessageBox.critical(self, "Arquivo inválido", "Este arquivo não foi exportado pelo app do portátil.")
-            return
-        self.btn_inbox_import.setEnabled(False)
-        run_async(self, api_client.inbox_import, self._on_inbox_imported, self._on_inbox_import_failed, package)
-
-    def _on_inbox_imported(self, res: dict):
-        self.btn_inbox_import.setEnabled(True)
-        imported, duplicates, rejected = res.get("imported", 0), res.get("duplicates", 0), res.get("rejected", [])
-        parts = [f"{imported} evento(s) novo(s)"]
-        if duplicates:
-            parts.append(f"{duplicates} já recebido(s) antes")
-        if rejected:
-            parts.append(f"{len(rejected)} inválido(s)")
-        set_status(self.lbl_inbox_status, "error" if rejected else "ok", "Importação: " + ", ".join(parts) + ".")
-        if rejected:
-            QMessageBox.warning(self, "Eventos ignorados", "Alguns eventos não puderam ser lidos:\n\n" + "\n".join(rejected[:20]))
-        self.refresh_inbox_count()
-        if imported:
-            self.open_inbox_review()
-
-    def _on_inbox_import_failed(self, message: str):
-        self.btn_inbox_import.setEnabled(True)
-        QMessageBox.critical(self, "Erro na importação", f"Falha ao importar os eventos do portátil:\n\n{message}")
-
-    def open_inbox_review(self):
-        dialog = InboxReviewDialog(self.inbox_threshold, self)
-        dialog.game_saved.connect(self.game_saved)
-        dialog.exec()
-        if dialog.applied_count:
-            set_status(self.lbl_inbox_status, "ok", f"{dialog.applied_count} jogo(s) atualizado(s) pela caixa de entrada.")
-        self.refresh_inbox_count()
-
-    def on_export_catalog(self):
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Salvar catálogo para o portátil", str(Path.home() / "gameroom-catalog.json"), "JSON (*.json)",
-        )
-        if not path:
-            return
-        self.btn_export_catalog.setEnabled(False)
-        run_async(self, api_client.inbox_catalog, lambda data: self._on_catalog_loaded(path, data),
-                  self._on_catalog_failed)
-
-    def _on_catalog_loaded(self, path: str, data: dict):
-        self.btn_export_catalog.setEnabled(True)
-        try:
-            Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        except OSError as e:
-            self._on_catalog_failed(str(e))
-            return
-        set_status(self.lbl_inbox_status, "ok", f"Catálogo com {len(data.get('games', []))} jogos salvo em {path}.")
-
-    def _on_catalog_failed(self, message: str):
-        self.btn_export_catalog.setEnabled(True)
-        set_status(self.lbl_inbox_status, "error", f"Falha ao exportar o catálogo: {message}")
-
-    def on_import_notion(self):
-        folder = QFileDialog.getExistingDirectory(
-            self,
-            "Selecione a Pasta Exportada do Notion (Game Room)",
-            str(Path.home() / "Downloads")
-        )
-        if not folder:
-            return
-
-        auto_covers = self.chk_auto_covers.isChecked()
-
-        try:
-            QApplication.setOverrideCursor(Qt.WaitCursor)
-            res = api_client.import_notion(folder, auto_fetch_covers=auto_covers)
-            QApplication.restoreOverrideCursor()
-
-            total = res.get("total_found", 0)
-            imported = res.get("imported", 0)
-            updated = res.get("updated", 0)
-            queue = res.get("covers_queue_count", 0)
-            errors = res.get("errors", [])
-
-            msg = (
-                f"<b>Importação do Notion Concluída!</b><br><br>"
-                f"Total de jogos encontrados no CSV: <b>{total}</b><br>"
-                f"Novos jogos cadastrados: <b>{imported}</b><br>"
-                f"Jogos já existentes atualizados: <b>{updated}</b><br>"
-            )
-            if auto_covers and queue > 0:
-                msg += f"Busca de capas iniciada em lote para <b>{queue} jogos</b>.<br>"
-
-            if errors:
-                msg += f"<br><small>Ocorreram {len(errors)} avisos não impeditivos.</small>"
-
-            QMessageBox.information(self, "Sucesso", msg)
-            self.data_imported.emit()
-
-            if auto_covers:
-                self.start_batch_cover_fetch()
-
-        except Exception as e:
-            QApplication.restoreOverrideCursor()
-            QMessageBox.critical(self, "Erro na Importação", f"Falha ao importar do Notion:\n\n{e}")
+        layout.addWidget(about_group)
+        return page
 
     def start_batch_cover_fetch(self):
         if self.cover_thread and self.cover_thread.isRunning():
@@ -463,12 +288,6 @@ class SettingsView(QWidget):
         
         # Um único refresh ao final do lote (e não um por capa baixada)
         self.data_imported.emit()
-
-    def on_size_changed(self, button_id: int):
-        size_map = {0: "small", 1: "medium", 2: "large"}
-        chosen = size_map.get(button_id, "medium")
-        self.settings.setValue("card_size", chosen)
-        self.settings_changed.emit()
 
     def save_steamgriddb_key(self):
         key = self.input_sgdb_key.text().strip()

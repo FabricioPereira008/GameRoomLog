@@ -10,18 +10,33 @@ from frontend_desktop.workers import run_async
 from frontend_desktop.ui_helpers import add_search_icon, set_button_icon
 from frontend_desktop.views.components.cover_mosaic import CoverMosaic
 from frontend_desktop.styles.tokens import COLORS
+from frontend_desktop.preferences import SCOPE_ALL, SCOPE_COMPLETED, category_scope
 
 logger = logging.getLogger(__name__)
+
+def card_count_text(item: dict, scope: str) -> str:
+    """"3 jogos · 40h" (só concluídos) ou "30 jogos · 4 zerados · 40h" (todos); horas são as dos concluídos."""
+    count = item.get("games_count", 0) or 0
+    hours = item.get("total_hours", 0) or 0
+    text = f"{count} {'jogo' if count == 1 else 'jogos'}"
+    if scope == SCOPE_ALL:
+        done = item.get("completed_count", 0) or 0
+        text += f" · {done} {'zerado' if done == 1 else 'zerados'}"
+    if hours:
+        text += f" · {hours:g}h"
+    return text
+
 
 class ManageItemCard(QFrame):
     clicked = Signal(str, int)  # category_type, item_id
     edited = Signal()
     deleted = Signal()
 
-    def __init__(self, category_type: str, item_data: dict, parent=None):
+    def __init__(self, category_type: str, item_data: dict, parent=None, scope: str = SCOPE_COMPLETED):
         super().__init__(parent)
         self.category_type = category_type
         self.item_data = item_data
+        self.scope = scope
         self.setProperty("class", "manage-card")
         self.setCursor(Qt.PointingHandCursor)
         self.setMinimumWidth(230)
@@ -66,11 +81,7 @@ class ManageItemCard(QFrame):
         name_label.setToolTip(self.item_data.get("name", ""))
         info.addWidget(name_label)
 
-        count = self.item_data.get("games_count", 0)
-        hours = self.item_data.get("total_hours", 0) or 0
-        text = f"{count} {'jogo' if count == 1 else 'jogos'}"
-        if hours:
-            text += f" · {hours:g}h"
+        text = card_count_text(self.item_data, self.scope)
         count_label = QLabel(text)
         count_label.setProperty("class", "manage-card-count")
         info.addWidget(count_label)
@@ -226,10 +237,12 @@ class ManagementView(QWidget):
         fetcher = getattr(api_client, self.FETCHERS[self.category_type])
         self._load_seq = getattr(self, "_load_seq", 0) + 1
         seq = self._load_seq
+        self.scope = category_scope()
         run_async(
             self, fetcher,
             lambda items: self._on_items_loaded(seq, items),
             lambda msg: logger.error("Erro ao carregar %s: %s", self.category_type, msg),
+            self.scope,
         )
 
     def _on_items_loaded(self, seq: int, items: list):
@@ -257,7 +270,7 @@ class ManagementView(QWidget):
         self.current_cols = self.calculate_cols()
         cols = self.current_cols
         for idx, itm in enumerate(filtered):
-            card = ManageItemCard(self.category_type, itm)
+            card = ManageItemCard(self.category_type, itm, scope=getattr(self, "scope", SCOPE_COMPLETED))
             card.clicked.connect(self.category_selected.emit)
             card.edited.connect(self.on_item_changed)
             card.deleted.connect(self.on_item_changed)

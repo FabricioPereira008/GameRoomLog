@@ -1,13 +1,18 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QFrame, QLineEdit
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QFrame, QLineEdit, QPushButton, QToolButton
 )
 from PySide6.QtCore import Signal, Qt, QTimer
-from frontend_desktop.views.components.game_grid import GameGrid, MODE_BUTTON, FILTER_DEBOUNCE_MS, make_predicate
+from frontend_desktop import icons
+from frontend_desktop.styles.tokens import COLORS
+from frontend_desktop.views.components.game_grid import (
+    CardSizeSelector, GameGrid, MODE_FULL, MODE_STRIP, FILTER_DEBOUNCE_MS, make_predicate,
+)
 from frontend_desktop.views.components.filter_panel import FilterPanel
 from frontend_desktop.ui_helpers import add_search_icon
 
 class GameRoomView(QWidget):
     game_selected = Signal(dict)
+    view_all_requested = Signal(str)  # chave da lista (queue/zerados/platinados) para abrir a página completa
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -42,6 +47,7 @@ class GameRoomView(QWidget):
         self.filter_panel = FilterPanel()
         self.filter_panel.filters_changed.connect(self.apply_filter)
         top_bar_layout.addWidget(self.filter_panel.btn_toggle)
+        top_bar_layout.addWidget(CardSizeSelector())
 
         main_layout.addLayout(top_bar_layout)
         main_layout.addWidget(self.filter_panel)
@@ -59,46 +65,73 @@ class GameRoomView(QWidget):
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(12)
 
-        # --- FUNÇÃO HELPER PARA CRIAR SEÇÕES ---
-        def create_section(title, object_name):
+        def create_section(title, object_name, mode, list_key=None, size_mode=None):
+            """Seção com cabeçalho (título, contagem, setas da faixa e "Ver todos") e a grade."""
             section = QFrame()
             section.setObjectName(object_name)
             section.setProperty("class", "game-section-card")
             section.setAttribute(Qt.WA_StyledBackground, True)
             layout = QVBoxLayout(section)
-            layout.setContentsMargins(16, 14, 16, 16)
-            layout.setSpacing(12)
-            
+            layout.setContentsMargins(16, 14, 16, 12)
+            layout.setSpacing(8)
+
+            header_row = QHBoxLayout()
+            header_row.setSpacing(6)
             header = QLabel(title)
             header.setProperty("class", "section-header")
-            layout.addWidget(header)
-            
-            # Altura limitada a algumas linhas, com botão "Mostrar mais"
-            grid = GameGrid(mode=MODE_BUTTON)
+            header_row.addWidget(header)
+            count = QLabel("")
+            count.setProperty("class", "section-count")
+            header_row.addWidget(count)
+            header_row.addStretch()
+
+            grid = GameGrid(mode=mode, size_mode=size_mode)
+            arrows = []
+            if mode == MODE_STRIP:
+                for icon, direction, tip in (("chevron-left", -1, "Anteriores"), ("chevron-right", 1, "Próximos")):
+                    btn = QToolButton()
+                    btn.setIcon(icons.icon(icon, COLORS["text"]))
+                    btn.setToolTip(tip)
+                    btn.setProperty("class", "strip-arrow")
+                    btn.setCursor(Qt.PointingHandCursor)
+                    btn.clicked.connect(lambda _c=False, g=grid, d=direction: g.scroll_strip(d))
+                    header_row.addWidget(btn)
+                    arrows.append(btn)
+                bar = grid.view.horizontalScrollBar()
+                update = lambda *_a, g=grid, arr=arrows: self._update_arrows(g, arr)
+                bar.rangeChanged.connect(update)
+                bar.valueChanged.connect(update)
+            if list_key:
+                btn_all = QPushButton("Ver todos")
+                btn_all.setProperty("class", "link-btn")
+                btn_all.setCursor(Qt.PointingHandCursor)
+                btn_all.clicked.connect(lambda _c=False, k=list_key: self.view_all_requested.emit(k))
+                header_row.addWidget(btn_all)
+            layout.addLayout(header_row)
             layout.addWidget(grid)
-            
             container_layout.addWidget(section)
-            
-            line = QFrame()
-            line.setFrameShape(QFrame.HLine)
-            line.setProperty("class", "divider-line")
-            container_layout.addWidget(line)
-            
+
+            line = QFrame()  # mantido por compatibilidade (as seções já são cards separados)
+            line.setVisible(False)
+            self._counts[grid] = count
+            self._arrows[grid] = arrows
             return grid, section, line
 
-        # Criar as 5 seções
-        self.grid_now, self.sec_now, self.line_now = create_section("Agora (em andamento)", "nowPlayingSection")
-        self.grid_next, self.sec_next, self.line_next = create_section("Próximos", "nextSection")
-        self.grid_queue, self.sec_queue, self.line_queue = create_section("Fila de espera", "queueSection")
-        self.grid_finished, self.sec_finished, self.line_finished = create_section("Zerados", "finishedSection")
-        self.grid_platinum, self.sec_platinum, self.line_platinum = create_section("Platinados", "platinumSection")
+        self._counts, self._arrows = {}, {}
+        # Destaque: o que está sendo jogado, sempre com cards grandes
+        self.grid_now, self.sec_now, self.line_now = create_section(
+            "Jogando agora", "nowPlayingSection", MODE_FULL, size_mode="large")
+        # Demais seções: faixas horizontais de uma linha
+        self.grid_next, self.sec_next, self.line_next = create_section("Próximos", "nextSection", MODE_STRIP)
+        self.grid_queue, self.sec_queue, self.line_queue = create_section("Fila de espera", "queueSection", MODE_STRIP, "queue")
+        self.grid_finished, self.sec_finished, self.line_finished = create_section(
+            "Zerados", "finishedSection", MODE_STRIP, "zerados")
+        self.grid_platinum, self.sec_platinum, self.line_platinum = create_section(
+            "Platinados", "platinumSection", MODE_STRIP, "platinados")
+        container_layout.addStretch()
 
-        # Conectar eventos
-        self.grid_now.game_selected.connect(self.game_selected.emit)
-        self.grid_next.game_selected.connect(self.game_selected.emit)
-        self.grid_queue.game_selected.connect(self.game_selected.emit)
-        self.grid_finished.game_selected.connect(self.game_selected.emit)
-        self.grid_platinum.game_selected.connect(self.game_selected.emit)
+        for grid, _sec, _line in self._sections():
+            grid.game_selected.connect(self.game_selected.emit)
 
         self.scroll.setWidget(container)
         main_layout.addWidget(self.scroll)
@@ -112,12 +145,23 @@ class GameRoomView(QWidget):
             (self.grid_platinum, self.sec_platinum, self.line_platinum),
         ]
 
+    @staticmethod
+    def _update_arrows(grid, arrows):
+        bar = grid.view.horizontalScrollBar()
+        overflow = bar.maximum() > 0
+        for btn in arrows:
+            btn.setVisible(overflow)
+        if arrows:
+            arrows[0].setEnabled(bar.value() > bar.minimum())
+            arrows[1].setEnabled(bar.value() < bar.maximum())
+
     def _sync_visibility(self):
-        """Mostra apenas as seções que têm jogos após a busca/filtros."""
-        for grid, sec, line in self._sections():
-            has_games = grid.proxy.rowCount() > 0
-            sec.setVisible(has_games)
-            line.setVisible(has_games)
+        """Mostra apenas as seções que têm jogos após a busca/filtros, com a contagem no cabeçalho."""
+        for grid, sec, _line in self._sections():
+            total = grid.proxy.rowCount()
+            sec.setVisible(total > 0)
+            self._counts[grid].setText(str(total) if total else "")
+            self._update_arrows(grid, self._arrows[grid])
 
     def set_games(self, now_games: list, next_games: list, queue_games: list, finished_games: list, platinum_games: list):
         for (grid, _, _), games in zip(

@@ -60,6 +60,7 @@ class Sidebar(QWidget):
         self.btn_add.setCursor(Qt.PointingHandCursor)
         set_button_icon(self.btn_add, "plus", COLORS["on_accent"], size=18)
         self.btn_add.clicked.connect(self.add_game_requested.emit)
+        self.btn_add.setToolTip("Adicionar jogo (Ctrl+N) · Buscar jogo: Ctrl+F")
         main_layout.addWidget(self.btn_add)
         main_layout.addSpacing(8)
 

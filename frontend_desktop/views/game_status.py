@@ -27,3 +27,13 @@ def filter_games(list_key: str, games: list) -> list:
 
 # Ordem usada nos filtros de status (ex.: tabela da biblioteca)
 ALL_STATUSES = [JOGANDO, FILA, PROXIMO, PAUSADO, ZERADO, PLATINADO, DISPONIVEL, LISTA_DE_DESEJOS, "Desisti"]
+
+
+def is_completed(status) -> bool:
+    return status in (ZERADO, PLATINADO)
+
+
+def display_hours(game: dict) -> float:
+    """Horas mostradas nos cards: jogadas para zerados/platinados; estimativa do HLTB para os demais."""
+    key = "played_hours" if is_completed(game.get("status")) else "hltb_hours"
+    return float(game.get(key) or 0.0)

@@ -4,6 +4,8 @@ from typing import Callable, List, Optional
 from PySide6.QtCore import QAbstractListModel, QModelIndex, QSortFilterProxyModel, Qt
 
 from frontend_desktop.cover_loader import cover_loader
+from frontend_desktop.data_quality import missing_fields
+from frontend_desktop.views.game_status import display_hours, is_completed
 
 GameRole = Qt.UserRole + 1
 
@@ -27,7 +29,14 @@ class GameListModel(QAbstractListModel):
             return game.get("title") or ""
         if role == Qt.ToolTipRole:  # nome completo dos gêneros, que podem estar elididos no card
             genres = " · ".join(g["name"] for g in game.get("genres") or [] if g.get("name"))
-            return (game.get("title") or "") + (f"\n{genres}" if genres else "")
+            lines = [game.get("title") or ""] + ([genres] if genres else [])
+            hours = display_hours(game)
+            if hours:
+                lines.append(f"{hours:g}h jogadas" if is_completed(game.get("status")) else f"{hours:g}h estimadas (HLTB)")
+            missing = missing_fields(game)
+            if missing:
+                lines.append("Faltando: " + ", ".join(missing))
+            return "\n".join(lines)
         return None
 
     @property

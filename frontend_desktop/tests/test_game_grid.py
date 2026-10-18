@@ -37,13 +37,16 @@ def test_model_set_insert_update_remove(qapp):
     assert [g["id"] for g in model.games] == [1, 2, 3]
 
 
-def test_model_tooltip_lists_genres(qapp):
+def test_model_tooltip_lists_genres_hours_and_missing_fields(qapp):
     from PySide6.QtCore import Qt
     model = GameListModel()
-    model.set_games([{"id": 1, "title": "Dead Cells", "genres": [{"name": "Roguelike"}, {"name": "Metroidvania"}]},
-                     {"id": 2, "title": "Sem gênero"}])
-    assert model.index(0, 0).data(Qt.ToolTipRole) == "Dead Cells\nRoguelike · Metroidvania"
-    assert model.index(1, 0).data(Qt.ToolTipRole) == "Sem gênero"
+    full = {"id": 1, "title": "Dead Cells", "status": "Zerado", "developer": "Motion Twin", "platform": {"name": "PC"},
+            "cover_image": "c.jpg", "hltb_hours": 20, "played_hours": 35, "score": 9, "finish_date": "2026-01-01",
+            "genres": [{"name": "Roguelike"}, {"name": "Metroidvania"}]}
+    model.set_games([full, {"id": 2, "title": "Sem nada", "status": "Fila", "hltb_hours": 12}])
+    assert model.index(0, 0).data(Qt.ToolTipRole) == "Dead Cells\nRoguelike · Metroidvania\n35h jogadas"
+    tip = model.index(1, 0).data(Qt.ToolTipRole)
+    assert tip.startswith("Sem nada\n12h estimadas (HLTB)\nFaltando: desenvolvedora, gênero, plataforma, capa")
     assert model.index(0, 0).data(Qt.DisplayRole) == "Dead Cells"
 
 

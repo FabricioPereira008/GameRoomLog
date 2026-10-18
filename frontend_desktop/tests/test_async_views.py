@@ -38,7 +38,7 @@ def test_run_async_keeps_reference_until_finished(qapp):
 
 def test_management_view_loads_and_filters(qapp, monkeypatch):
     from frontend_desktop.views.components import management_view as mv
-    monkeypatch.setattr(mv.api_client, "get_platforms", lambda: [{"id": 1, "name": "PC", "games_count": 2}, {"id": 2, "name": "Switch", "games_count": 0}])
+    monkeypatch.setattr(mv.api_client, "get_platforms", lambda scope=None: [{"id": 1, "name": "PC", "games_count": 2}, {"id": 2, "name": "Switch", "games_count": 0}])
     view = ManagementView("platform", "Plataforma")
     view.load_data()
     wait(view, qapp)
@@ -77,7 +77,7 @@ def test_yearbook_stale_year_is_ignored(qapp):
 
 def test_category_detail_loads_and_ignores_navigation_race(qapp, monkeypatch):
     from frontend_desktop.views.components import category_detail_view as cv
-    monkeypatch.setattr(cv.api_client, "get_genre_details", lambda gid: {"id": gid, "name": "RPG", "color": "#fff", "total_games": 2, "total_hours_played": 10, "games": []})
+    monkeypatch.setattr(cv.api_client, "get_genre_details", lambda gid, scope=None: {"id": gid, "name": "RPG", "color": "#fff", "total_games": 2, "total_hours_played": 10, "games": []})
     view = CategoryDetailView()
     view.load_category("genre", 1)
     wait(view, qapp)

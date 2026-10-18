@@ -25,4 +25,4 @@ O GameRoom e o app Android (`GameRoomApp`, repositório separado) só se conhece
 
 ## Entrega
 
-Hoje o app exporta um arquivo `.json` e o GameRoom importa em **Configurações → App do Portátil**. O mesmo pacote pode ser enviado direto para `POST /api/v1/inbox/import` (caminho previsto para a sincronização pela rede local).
+Hoje o app exporta um arquivo `.json` e o GameRoom importa em **Importar → App do portátil** (barra lateral). O mesmo pacote pode ser enviado direto para `POST /api/v1/inbox/import` (caminho previsto para a sincronização pela rede local).

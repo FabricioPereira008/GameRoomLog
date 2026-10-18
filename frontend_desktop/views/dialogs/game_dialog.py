@@ -23,6 +23,9 @@ STATUSES = ["Disponível", "Fila", "Próximo", "Jogando", "Pausado", "Zerado", "
 FORMATS = ["Digital", "Físico", "Emulado"]
 
 
+NO_COVER_TEXT = "Nenhuma imagem selecionada"
+
+
 class OptionalDateEdit(QDateEdit):
     """Campo de data que começa vazio ("Selecione a data") e só assume um valor quando o usuário interage."""
     BLANK = QDate(1970, 1, 1)
@@ -319,7 +322,7 @@ class GameDialog(QDialog):
         self.lbl_cover_preview.setAlignment(Qt.AlignCenter)
         grid.addWidget(self.lbl_cover_preview, 0, 0, 1, 2, Qt.AlignHCenter)
 
-        self.lbl_cover_status = QLabel("Nenhuma imagem selecionada")
+        self.lbl_cover_status = QLabel("" if self.cover_filename else NO_COVER_TEXT)
         self.lbl_cover_status.setProperty("class", "status-muted")
         self.lbl_cover_status.setWordWrap(True)
         grid.addWidget(self.lbl_cover_status, 1, 0, 1, 2)
@@ -576,6 +579,8 @@ class GameDialog(QDialog):
         """Mostra a capa atual; o download/escala acontece em background (cover_loader)."""
         if not self.cover_filename:
             return
+        if self.lbl_cover_status.text() == NO_COVER_TEXT:
+            self.lbl_cover_status.setText("")
         pixmap = cover_loader.request(self.cover_filename, *COVER_PREVIEW_SIZE)
         if pixmap is not None:
             self.lbl_cover_preview.setPixmap(pixmap)

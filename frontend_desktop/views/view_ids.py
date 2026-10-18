@@ -18,6 +18,7 @@ class ViewId(IntEnum):
     SETTINGS = 11
     CATEGORY_DETAIL = 12
     SYNC = 13
+    PORTABLE = 14
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ VIEW_META = {
     ViewId.FRANCHISES: ViewMeta("Séries / franquias", "Séries / franquias", "layers"),
     ViewId.SETTINGS: ViewMeta("Configurações", "Configurações", "settings"),
     ViewId.SYNC: ViewMeta("Sincronizar bibliotecas", "Sincronizar lojas", "refresh-cw"),
+    ViewId.PORTABLE: ViewMeta("App do portátil", "App do portátil", "smartphone"),
     ViewId.CATEGORY_DETAIL: ViewMeta("Detalhes da categoria", "Detalhes", "tags"),
 }
 
@@ -49,5 +51,5 @@ NAV_SECTIONS = [
     ("Biblioteca", [ViewId.GAME_ROOM, ViewId.QUEUE, ViewId.AVAILABLE, ViewId.FINISHED,
                     ViewId.PLATINUM, ViewId.WISHLIST, ViewId.LIBRARY]),
     ("Explorar", [ViewId.YEARBOOK, ViewId.GENRES, ViewId.PLATFORMS, ViewId.FRANCHISES]),
-    ("Importar", [ViewId.SYNC]),
+    ("Importar", [ViewId.SYNC, ViewId.PORTABLE]),
 ]

@@ -11,8 +11,9 @@ SortRole = Qt.UserRole + 2
 
 COLUMNS = [
     "Jogo", "Status", "Gênero", "Plataforma", "Desenvolvedora",
-    "Ano", "Nota", "Dificuldade", "Horas HLTB", "Horas Jogadas", "Tipo",
+    "Ano", "Nota", "Dific.", "HLTB", "Jogadas", "Tipo",
 ]
+COLUMN_TOOLTIPS = {7: "Dificuldade", 8: "Duração estimada (HowLongToBeat)", 9: "Horas jogadas", 10: "Tipo de jogada"}
 NUMERIC_COLUMNS = {5, 6, 7, 8, 9}
 
 STATUS_COLORS = {
@@ -77,6 +78,8 @@ class GameTableModel(QAbstractTableModel):
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
             return COLUMNS[section]
+        if orientation == Qt.Horizontal and role == Qt.ToolTipRole:
+            return COLUMN_TOOLTIPS.get(section, COLUMNS[section])
         return None
 
     def data(self, index, role=Qt.DisplayRole):

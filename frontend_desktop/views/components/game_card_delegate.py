@@ -2,14 +2,16 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QModelIndex, QPoint, QRect, QRectF, QSettings, QSize, Qt
+from PySide6.QtCore import QModelIndex, QPoint, QRect, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 
-from frontend_desktop import icons
+from frontend_desktop import icons, preferences
 from frontend_desktop.cover_loader import COVER_RADIUS, cover_loader
 from frontend_desktop.models.game_list_model import GameRole
+from frontend_desktop.data_quality import is_incomplete
 from frontend_desktop.styles.tokens import COLORS
+from frontend_desktop.views import game_status as gs
 
 PADDING = 10
 ROW_GAP = 6
@@ -44,7 +46,7 @@ class CardMetrics:
 
 
 def current_size_mode() -> str:
-    return str(QSettings("GameRoom", "GameRoomLog").value("card_size", "medium"))
+    return preferences.card_size()
 
 
 def text_color_for(background_hex: str) -> QColor:
@@ -133,6 +135,8 @@ class GameCardDelegate(QStyledItemDelegate):
         if filename:
             pixmap = cover_loader.request(filename, m.cover_width, m.cover_height)
         painter.drawPixmap(cover_rect, pixmap or placeholder_pixmap(m.cover_width, m.cover_height))
+        if is_incomplete(game):  # aviso discreto: o tooltip do card lista o que falta
+            self._incomplete_mark(painter, cover_rect)
 
         # título
         y = cover_rect.bottom() + 1 + 8
@@ -171,8 +175,9 @@ class GameCardDelegate(QStyledItemDelegate):
 
         # linha de meta: horas, plataforma e nota
         y += BADGE_H + ROW_GAP
-        hours = game.get("played_hours") or game.get("hltb_hours") or 0.0
-        painter.drawPixmap(QRect(rect.x() + PADDING, y + (BADGE_H - 12) // 2, 12, 12), icons.pixmap("clock", COLORS["text_muted"], 12))
+        hours = gs.display_hours(game)
+        hours_icon = "clock" if gs.is_completed(game.get("status")) else "hourglass"  # jogadas x estimativa HLTB
+        painter.drawPixmap(QRect(rect.x() + PADDING, y + (BADGE_H - 12) // 2, 12, 12), icons.pixmap(hours_icon, COLORS["text_muted"], 12))
         painter.setFont(small)
         painter.setPen(QColor(COLORS["text_muted"]))
         hours_text = f"{int(hours)}h"
@@ -198,6 +203,17 @@ class GameCardDelegate(QStyledItemDelegate):
                 self._badge(painter, small, small_fm, px, y, text, QColor(COLORS["surface_3"]), QColor(COLORS["text_muted"]), meta_right)
 
         painter.restore()
+
+    @staticmethod
+    def _incomplete_mark(painter, cover_rect: QRect) -> None:
+        size = 22
+        r = QRectF(cover_rect.right() - size - 5, cover_rect.top() + 5, size, size)
+        path = QPainterPath()
+        path.addEllipse(r)
+        painter.fillPath(path, QColor(0, 0, 0, 170))
+        icon = 14
+        painter.drawPixmap(QRect(int(r.x() + (size - icon) / 2), int(r.y() + (size - icon) / 2), icon, icon),
+                           icons.pixmap("circle-alert", COLORS["warning"], icon))
 
     @staticmethod
     def _badge(painter, font, fm, x, y, text, bg: QColor, fg: QColor, right_limit: int,

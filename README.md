@@ -28,7 +28,6 @@ O **GameRoomLog** é um aplicativo desktop nativo e moderno desenvolvido para ge
 - 📅 **Anuário Gamer (Yearbook):** Estatísticas detalhadas por ano (horas jogadas, jogos finalizados, platinas conquistadas e médias de avaliação).
 - ⚡ **Performance Zero-Stutter:** Cache inteligente em memória para capas (`QPixmap`), rolagem antecipada suave e carregamento sob demanda em lotes dinâmicos.
 - 🏷️ **Gestão Completa de Categorias:** Organização por Plataformas, Gêneros, Desenvolvedoras e Franquias com autocompletar inteligente e auto-criação.
-- 📦 **Importador do Notion:** Migre facilmente seu banco de dados anterior do Notion (CSV/Markdown) com detecção automática de capas e metadados.
 - 🧪 **Bem testado:** 150 testes automatizados (API, services, migrações, segurança de uploads, ApiClient, models/grades virtualizadas, tema e performance), com ~84% de cobertura e mínimo de 70% exigido no CI.
 
 ---

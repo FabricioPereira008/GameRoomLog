@@ -1,5 +1,4 @@
 """Processamento, armazenamento e busca automática de capas de jogos."""
-import asyncio
 import io
 import logging
 import urllib.parse
@@ -130,8 +129,3 @@ async def find_cover(title: str, api_key: Optional[str] = None) -> Optional[Tupl
                 return save_cover_bytes(content), source
     return None
 
-
-def find_cover_sync(title: str) -> Optional[str]:
-    """Versão síncrona para threads em background (ex.: importação do Notion)."""
-    found = asyncio.run(find_cover(title))
-    return found[0] if found else None

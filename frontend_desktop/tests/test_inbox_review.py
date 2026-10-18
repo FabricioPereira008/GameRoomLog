@@ -3,7 +3,7 @@ import json
 import pytest
 from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
 
-from frontend_desktop.views.components import settings_view as sv
+from frontend_desktop.views.components import portable_app_view as sv
 from frontend_desktop.views.dialogs import inbox_review_dialog as ird
 from frontend_desktop.views.dialogs.inbox_review_dialog import (
     NEW_GAME, InboxReviewDialog, GamePickerDialog, describe_event, format_value,
@@ -257,12 +257,12 @@ def test_game_picker_filters(qapp):
     assert picker.selected_id == 2
 
 
-# --- Configurações → App do Portátil ---
+# --- Importar → App do portátil ---
 
 @pytest.fixture
 def settings_view(qapp, monkeypatch, tmp_path):
     monkeypatch.setattr(sv.api_client, "inbox_pending", lambda threshold=None: {"total_events": 2, "groups": []})
-    view = sv.SettingsView()
+    view = sv.PortableAppView()
     view.settings.setValue("inbox_threshold", 85)
     return view
 

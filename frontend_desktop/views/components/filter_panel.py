@@ -1,11 +1,14 @@
 from PySide6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
-    QComboBox, QSpinBox, QPushButton, QCompleter, QLineEdit
+    QComboBox, QSpinBox, QPushButton, QCompleter, QLineEdit, QCheckBox
 )
 from PySide6.QtCore import Signal, Qt, QStringListModel, QTimer
+from frontend_desktop.data_quality import is_incomplete
 from frontend_desktop.ui_helpers import set_button_icon
+from frontend_desktop.views import game_status as gs
 
 FIELD_DEBOUNCE_MS = 150
+STATUS_COMPLETED = "__concluidos__"  # opção "Zerados e platinados" do filtro de status
 
 
 class SuggestField(QLineEdit):
@@ -73,7 +76,8 @@ class SuggestField(QLineEdit):
 
 class FilterPanel(QWidget):
     """
-    Componente retrátil de filtros avançados em tempo real (Gênero, Desenvolvedora, Plataforma, Franquia e HLTB).
+    Componente retrátil de filtros avançados em tempo real (Gênero, Desenvolvedora, Plataforma, Franquia, HLTB,
+    status — opcional — e só incompletos).
     """
     filters_changed = Signal()
 
@@ -160,28 +164,54 @@ class FilterPanel(QWidget):
         hltb_layout.addWidget(self.spin_hltb)
         grid.addLayout(hltb_layout, 2, 1)
 
-        # Botão Limpar
+        # Status (só nas páginas de categoria no modo "todos os jogos")
+        self.status_label = make_label("Status:")
+        self.combo_status = QComboBox()
+        self.combo_status.setProperty("class", "filter-combo")
+        self.combo_status.addItem("Todos os status", "")
+        self.combo_status.addItem("Zerados e platinados", STATUS_COMPLETED)
+        for status in gs.ALL_STATUSES:
+            self.combo_status.addItem(status, status)
+        grid.addWidget(self.status_label, 2, 2)
+        grid.addWidget(self.combo_status, 2, 3)
+        self.set_status_filter_visible(False)
+
+        # Linha 3: só incompletos e Limpar
+        self.chk_incomplete = QCheckBox("Só jogos com dados faltando")
+        self.chk_incomplete.setToolTip("Sem desenvolvedora, gênero, plataforma, capa ou HLTB; zerados também sem horas, nota ou data.")
+        self.chk_incomplete.setCursor(Qt.PointingHandCursor)
+        grid.addWidget(self.chk_incomplete, 3, 0, 1, 2)
+
         actions_layout = QHBoxLayout()
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.addStretch()
-        
+
         self.btn_clear = QPushButton("Limpar filtros")
-        
+
         set_button_icon(self.btn_clear, "x")
         self.btn_clear.setCursor(Qt.PointingHandCursor)
         self.btn_clear.setProperty("class", "small-btn")
         self.btn_clear.clicked.connect(self.clear_filters)
         actions_layout.addWidget(self.btn_clear)
 
-        grid.addLayout(actions_layout, 2, 2, 1, 2)
+        grid.addLayout(actions_layout, 3, 2, 1, 2)
 
         # Conectar eventos de mudança para disparo em tempo real
         for _label, field in self._fields.values():
             field.changed.connect(self._on_any_change)
         self.combo_hltb_op.currentIndexChanged.connect(self._on_any_change)
         self.spin_hltb.valueChanged.connect(self._on_any_change)
+        self.combo_status.currentIndexChanged.connect(self._on_any_change)
+        self.chk_incomplete.toggled.connect(self._on_any_change)
 
         main_layout.addWidget(self.panel_frame)
+
+    def set_status_filter_visible(self, visible: bool) -> None:
+        """Mostra o filtro de status; escondido, ele é zerado e não filtra."""
+        self.status_label.setVisible(visible)
+        self.combo_status.setVisible(visible)
+        if not visible and self.combo_status.currentIndex() != 0:
+            self.combo_status.setCurrentIndex(0)
 
     def on_toggle_panel(self, checked: bool):
         self.panel_frame.setVisible(checked)
@@ -224,6 +254,10 @@ class FilterPanel(QWidget):
         count = sum(1 for _label, field in self._fields.values() if field.value()[0])
         if self.spin_hltb.value() > 0:
             count += 1
+        if self.combo_status.currentData():
+            count += 1
+        if self.chk_incomplete.isChecked():
+            count += 1
         return count
 
     def update_button_badge(self):
@@ -245,9 +279,12 @@ class FilterPanel(QWidget):
             field.clear()
             field._exact = False
             field.blockSignals(False)
-        self.spin_hltb.blockSignals(True)
-        self.spin_hltb.setValue(0)
-        self.spin_hltb.blockSignals(False)
+        for widget, reset in ((self.spin_hltb, lambda: self.spin_hltb.setValue(0)),
+                              (self.combo_status, lambda: self.combo_status.setCurrentIndex(0)),
+                              (self.chk_incomplete, lambda: self.chk_incomplete.setChecked(False))):
+            widget.blockSignals(True)
+            reset()
+            widget.blockSignals(False)
 
         self._on_any_change()
 
@@ -258,6 +295,8 @@ class FilterPanel(QWidget):
         target_hltb = self.spin_hltb.value()
         op = self.combo_hltb_op.currentText()
         at_least, at_most = "≥" in op, "≤" in op
+        status = self.combo_status.currentData() or ""  # escondido = sempre "Todos os status"
+        only_incomplete = self.chk_incomplete.isChecked()
 
         def name_of(value) -> str:
             return (value.get("name") if isinstance(value, dict) else str(value or "")).strip().lower()
@@ -274,6 +313,12 @@ class FilterPanel(QWidget):
             if plat[0] and not hit(plat, name_of(game.get("platform"))):
                 return False
             if fran[0] and not hit(fran, name_of(game.get("franchise"))):
+                return False
+            if status == STATUS_COMPLETED and game.get("status") not in (gs.ZERADO, gs.PLATINADO):
+                return False
+            if status and status != STATUS_COMPLETED and game.get("status") != status:
+                return False
+            if only_incomplete and not is_incomplete(game):
                 return False
             if target_hltb > 0:
                 hltb = float(game.get("hltb_hours") or 0.0)

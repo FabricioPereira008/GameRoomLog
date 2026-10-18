@@ -1,10 +1,11 @@
 import logging
 from app_version import __version__
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget,
+    QApplication, QMainWindow, QMessageBox, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget,
     QPushButton, QLabel, QStatusBar
 )
 from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from frontend_desktop.views.components.sidebar import Sidebar
 from frontend_desktop.views.components.game_room_view import GameRoomView
 from frontend_desktop.views.components.game_grid import GameGrid, ScrollableGameGrid
@@ -14,7 +15,12 @@ from frontend_desktop.views.components.management_view import ManagementView
 from frontend_desktop.views.components.category_detail_view import CategoryDetailView
 from frontend_desktop.views.components.settings_view import SettingsView
 from frontend_desktop.views.components.library_sync_view import LibrarySyncView
+from frontend_desktop.views.components.portable_app_view import PortableAppView
+from frontend_desktop.views.components.game_grid import GameListView
+from frontend_desktop.models.game_list_model import GameRole
 from frontend_desktop.views.dialogs.game_dialog import GameDialog
+from frontend_desktop.views.dialogs.quick_search_dialog import QuickSearchDialog
+from frontend_desktop.workers import run_async
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.views import game_status as gs
 from frontend_desktop.views.view_ids import ViewId, VIEW_META
@@ -114,6 +120,7 @@ class MainWindow(QMainWindow):
 
         self.view_game_room = self._register(ViewId.GAME_ROOM, GameRoomView())
         self.view_game_room.game_selected.connect(self.open_edit_game_dialog)
+        self.view_game_room.view_all_requested.connect(self.open_list_view)
 
         self.view_queue_grid = self._new_game_grid(ViewId.QUEUE)
         self.view_disponiveis_grid = self._new_game_grid(ViewId.AVAILABLE)
@@ -132,6 +139,7 @@ class MainWindow(QMainWindow):
             ViewId.FRANCHISES: lambda: self._create_management("franchise", "Série / Franquia"),
             ViewId.SETTINGS: self._create_settings,
             ViewId.SYNC: self._create_sync,
+            ViewId.PORTABLE: self._create_portable,
             ViewId.CATEGORY_DETAIL: self._create_category_detail,
         }
 
@@ -141,6 +149,57 @@ class MainWindow(QMainWindow):
         # Barra de status
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage(f"Pronto • GameRoomLog v{__version__} Online")
+        self._setup_shortcuts()
+
+    # --- atalhos de teclado ---
+    def _setup_shortcuts(self):
+        """Ctrl+N novo jogo · Ctrl+F busca rápida · Del exclui o jogo selecionado (Enter abre, nativo das listas)."""
+        self._shortcuts = []
+        for keys, handler in ((QKeySequence.New, self.open_add_game_dialog),
+                              ("Ctrl+F", self.open_quick_search),
+                              (QKeySequence.Delete, self.delete_selected_game)):
+            shortcut = QShortcut(QKeySequence(keys), self)
+            shortcut.setContext(Qt.WindowShortcut)
+            shortcut.activated.connect(handler)
+            self._shortcuts.append(shortcut)
+
+    def open_quick_search(self):
+        dialog = QuickSearchDialog(self.all_games, self)
+        if dialog.exec() and dialog.selected_game:
+            self.open_edit_game_dialog(dialog.selected_game)
+
+    @staticmethod
+    def selected_game_in(widget):
+        """Jogo selecionado na lista/tabela que tem o foco (ou None)."""
+        while widget is not None and not isinstance(widget, (GameListView, GameTable)):
+            widget = widget.parentWidget()
+        if isinstance(widget, GameListView):
+            index = widget.currentIndex()
+            return index.data(GameRole) if index.isValid() and widget.selectionModel().isSelected(index) else None
+        if isinstance(widget, GameTable):
+            index = widget.table.currentIndex()
+            return index.sibling(index.row(), 0).data(GameRole) if index.isValid() else None
+        return None
+
+    def delete_selected_game(self):
+        game = self.selected_game_in(QApplication.focusWidget())
+        if not game:
+            return
+        confirm = QMessageBox.question(self, "Confirmar exclusão", f"Tem certeza que deseja excluir '{game.get('title')}'?",
+                                       QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if confirm != QMessageBox.Yes:
+            return
+        run_async(self, api_client.delete_game,
+                  lambda ok, gid=game["id"]: self.apply_game_deletion(gid) if ok else None,
+                  lambda msg: QMessageBox.critical(self, "Erro", f"Erro ao excluir jogo: {msg}"),
+                  game["id"])
+
+    LIST_VIEWS = {"queue": ViewId.QUEUE, "zerados": ViewId.FINISHED, "platinados": ViewId.PLATINUM}
+
+    def open_list_view(self, list_key: str):
+        """"Ver todos" das faixas do Game Room: abre a página completa da lista."""
+        if list_key in self.LIST_VIEWS:
+            self.switch_view(int(self.LIST_VIEWS[list_key]))
 
     # --- registro de views ---
     def _register(self, view_id: ViewId, widget: QWidget) -> QWidget:
@@ -173,6 +232,10 @@ class MainWindow(QMainWindow):
         view = SettingsView()
         view.settings_changed.connect(self.refresh_all_data)
         view.data_imported.connect(self.refresh_all_data)
+        return view
+
+    def _create_portable(self):
+        view = PortableAppView()
         view.game_saved.connect(self.apply_game_mutation)
         return view
 

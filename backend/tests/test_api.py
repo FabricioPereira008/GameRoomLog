@@ -328,3 +328,33 @@ def test_game_rejects_more_than_two_genres():
     assert client.post("/api/v1/games/", json={"title": "X", "genre_ids": ids}).status_code == 422
     game = client.post("/api/v1/games/", json={"title": "X"}).json()
     assert client.put(f"/api/v1/games/{game['id']}", json={"genre_ids": ids}).status_code == 422
+
+
+def test_category_scope_all_counts_every_game_and_keeps_completed_first():
+    gen = client.post("/api/v1/genres/", json={"name": "FPS"}).json()["id"]
+    plat = client.post("/api/v1/platforms/", json={"name": "PC"}).json()["id"]
+    dev = client.post("/api/v1/developers/", json={"name": "id Software"}).json()["id"]
+    base = {"genre_ids": [gen], "platform_id": plat, "developer_id": dev}
+    client.post("/api/v1/games/", json={**base, "title": "Fila", "status": "Fila", "hltb_hours": 50, "cover_image": "fila.jpg"})
+    client.post("/api/v1/games/", json={**base, "title": "Zerado", "status": "Zerado", "played_hours": 12,
+                                        "finish_date": "2026-01-01", "cover_image": "zerado.jpg"})
+
+    for ep, cid in (("genres", gen), ("platforms", plat), ("developers", dev)):
+        current = next(c for c in client.get(f"/api/v1/{ep}/").json() if c["id"] == cid)
+        assert current["games_count"] == 1 and current["completed_count"] == 1
+        assert current["cover_samples"] == ["zerado.jpg"] and current["total_hours"] == 12
+
+        full = next(c for c in client.get(f"/api/v1/{ep}/?scope=all").json() if c["id"] == cid)
+        assert full["games_count"] == 2 and full["completed_count"] == 1
+        assert full["cover_samples"] == ["zerado.jpg", "fila.jpg"]  # concluídos primeiro
+        assert full["total_hours"] == 12  # horas só dos concluídos (o HLTB da fila não entra)
+
+    for ep, cid in (("genres", gen), ("platforms", plat)):
+        det = client.get(f"/api/v1/{ep}/{cid}/details").json()
+        assert det["total_games"] == 1 and det["completed_games"] == 1
+        det = client.get(f"/api/v1/{ep}/{cid}/details?scope=all").json()
+        assert det["total_games"] == 2 and det["completed_games"] == 1 and det["total_hours_played"] == 12
+        assert {g["title"] for g in det["games"]} == {"Fila", "Zerado"}
+
+    assert client.get("/api/v1/genres/?scope=tudo").status_code == 422
+    assert client.get(f"/api/v1/genres/{gen}/details?scope=tudo").status_code == 422

@@ -2,14 +2,17 @@
 import math
 from typing import Callable, List, Optional
 
-from PySide6.QtCore import QModelIndex, Qt, QTimer, Signal
+from PySide6.QtCore import QModelIndex, QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QHBoxLayout, QLabel, QLineEdit, QListView, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+    QAbstractItemView, QButtonGroup, QComboBox, QHBoxLayout, QLabel, QLineEdit, QListView, QPushButton, QSizePolicy,
+    QToolButton, QVBoxLayout, QWidget
 )
 
+from frontend_desktop import preferences
 from frontend_desktop.cover_loader import cover_loader
 from frontend_desktop.models.game_list_model import GameFilterProxy, GameListModel, GameRole
 from frontend_desktop.ui_helpers import add_search_icon
+from frontend_desktop.views.game_status import display_hours
 from frontend_desktop.views.components.filter_panel import FilterPanel
 from frontend_desktop.views.components.game_card_delegate import GameCardDelegate, current_size_mode
 
@@ -18,19 +21,21 @@ FILTER_DEBOUNCE_MS = 150
 MODE_INFINITE = "infinite"  # preenche a área e rola sozinho (listas de status)
 MODE_BUTTON = "button"      # altura limitada em linhas + botão "Mostrar mais" (seções do Game Room)
 MODE_FULL = "full"          # mostra todas as linhas, sem rolagem própria (ex.: Anuário)
+MODE_STRIP = "strip"        # uma linha só, rolando na horizontal (faixas do Game Room)
 
 
 class GameListView(QListView):
     """QListView em modo ícones, com tamanhos uniformes e hover; pode ceder a rolagem ao pai."""
     game_clicked = Signal(dict)
 
-    def __init__(self, scrolls: bool = True, parent=None):
+    def __init__(self, scrolls: bool = True, strip: bool = False, parent=None):
         super().__init__(parent)
         self._scrolls = scrolls
+        self._strip = strip
         self.setViewMode(QListView.IconMode)
         self.setResizeMode(QListView.Adjust)
         self.setMovement(QListView.Static)
-        self.setWrapping(True)
+        self.setWrapping(not strip)
         self.setFlow(QListView.LeftToRight)
         self.setUniformItemSizes(True)
         self.setSpacing(GRID_SPACING)
@@ -53,7 +58,17 @@ class GameListView(QListView):
             self.game_clicked.emit(game)
 
     def wheelEvent(self, event):
-        if self._scrolls:
+        if self._strip:
+            # Faixa: rolagem horizontal (trackpad ou Shift+roda); a roda comum continua rolando a página
+            delta = event.angleDelta()
+            step = delta.x() or (delta.y() if event.modifiers() & Qt.ShiftModifier else 0)
+            if step:
+                bar = self.horizontalScrollBar()
+                bar.setValue(bar.value() - step)
+                event.accept()
+                return
+            event.ignore()
+        elif self._scrolls:
             super().wheelEvent(event)
         else:
             event.ignore()  # o QScrollArea pai rola
@@ -63,9 +78,10 @@ class GameGrid(QWidget):
     """Lista de cards. A fonte de dados completa fica em `model`; `proxy` aplica o filtro."""
     game_selected = Signal(dict)
 
-    def __init__(self, mode: str = MODE_INFINITE, initial_rows: int = 2, parent=None):
+    def __init__(self, mode: str = MODE_INFINITE, initial_rows: int = 2, parent=None, size_mode: Optional[str] = None):
         super().__init__(parent)
         self.mode = mode
+        self._fixed_size = size_mode  # ex.: "large" nos destaques; None segue a preferência do usuário
         self._rows_step = max(1, initial_rows)
         self._visible_rows = self._rows_step
 
@@ -73,8 +89,8 @@ class GameGrid(QWidget):
         self.proxy = GameFilterProxy(self)
         self.proxy.setSourceModel(self.model)
 
-        self.delegate = GameCardDelegate(parent=self)
-        self.view = GameListView(scrolls=(mode == MODE_INFINITE), parent=self)
+        self.delegate = GameCardDelegate(size_mode, parent=self)
+        self.view = GameListView(scrolls=(mode == MODE_INFINITE), strip=(mode == MODE_STRIP), parent=self)
         self.view.setModel(self.proxy)
         self.view.setItemDelegate(self.delegate)
         self.view.game_clicked.connect(self.game_selected.emit)
@@ -107,6 +123,25 @@ class GameGrid(QWidget):
         for signal in (self.proxy.rowsInserted, self.proxy.rowsRemoved, self.proxy.modelReset, self.proxy.layoutChanged):
             signal.connect(self._update_empty_state)
         cover_loader.loaded.connect(self._on_cover_loaded)
+        preferences.notifier.card_size_changed.connect(self._on_card_size_changed)
+
+    def _on_card_size_changed(self, size: str) -> None:
+        if self._fixed_size is None and self.delegate.set_size_mode(size):
+            self._apply_grid_size()
+            self.view.scheduleDelayedItemsLayout()
+            self._update_height()
+
+    def _apply_grid_size(self) -> None:
+        """Distribui a sobra de largura entre as colunas (sem faixa vazia à direita)."""
+        if self.mode == MODE_STRIP:
+            return
+        m = self.delegate.metrics
+        width = self.view.viewport().width() or self.width()
+        cols = self._columns()
+        cell_w = max(m.card_width + GRID_SPACING, (width - GRID_SPACING) // cols)
+        size = QSize(cell_w, m.card_height + GRID_SPACING)
+        if self.view.gridSize() != size:
+            self.view.setGridSize(size)
 
     def _update_empty_state(self, *args) -> None:
         """Mensagem amigável quando a lista (ou o resultado da busca) está vazia; seções do Game Room somem sozinhas."""
@@ -131,7 +166,8 @@ class GameGrid(QWidget):
         self._update_height()
 
     def set_games(self, games: list) -> None:
-        if self.delegate.set_size_mode(current_size_mode()):
+        if self.delegate.set_size_mode(self._fixed_size or current_size_mode()):
+            self._apply_grid_size()
             self.view.scheduleDelayedItemsLayout()
         self._visible_rows = self._rows_step
         self.model.set_games(games)
@@ -162,6 +198,10 @@ class GameGrid(QWidget):
         """Em modos sem rolagem própria, ajusta a altura da lista ao número de linhas exibidas."""
         if self.mode == MODE_INFINITE:
             return
+        if self.mode == MODE_STRIP:
+            has = self.proxy.rowCount() > 0
+            self.view.setFixedHeight(self.delegate.metrics.card_height + 2 * GRID_SPACING if has else 0)
+            return
         total_rows = self._total_rows()
         rows = min(total_rows, self._visible_rows) if self.mode == MODE_BUTTON else total_rows
         height = rows * (self.delegate.metrics.card_height + GRID_SPACING) + GRID_SPACING if rows else 0
@@ -183,19 +223,61 @@ class GameGrid(QWidget):
     def _on_cover_loaded(self, filename: str) -> None:
         self.view.viewport().update()
 
+    def scroll_strip(self, direction: int) -> None:
+        """Faixa: avança/volta quase uma tela de cards."""
+        bar = self.view.horizontalScrollBar()
+        bar.setValue(bar.value() + direction * int(self.view.viewport().width() * 0.8))
+
+    def strip_overflows(self) -> bool:
+        return self.mode == MODE_STRIP and self.view.horizontalScrollBar().maximum() > 0
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._apply_grid_size()
         self._update_height()
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._apply_grid_size()
         self._update_height()
+
+
+class CardSizeSelector(QWidget):
+    """Seletor rápido P/M/G do tamanho dos cards; fica em sincronia com as demais telas."""
+    LABELS = (("small", "P", "Cards pequenos"), ("medium", "M", "Cards médios"), ("large", "G", "Cards grandes"))
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.group = QButtonGroup(self)
+        self.group.setExclusive(True)
+        self.buttons = {}
+        for i, (size, text, tip) in enumerate(self.LABELS):
+            btn = QToolButton()
+            btn.setText(text)
+            btn.setToolTip(tip)
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setProperty("class", "segmented-btn segmented-" + ("first" if i == 0 else "last" if i == 2 else "mid"))
+            self.group.addButton(btn)
+            self.buttons[size] = btn
+            layout.addWidget(btn)
+            btn.clicked.connect(lambda _checked=False, s=size: preferences.set_card_size(s))
+        self._sync(preferences.card_size())
+        preferences.notifier.card_size_changed.connect(self._sync)
+
+    def _sync(self, size: str) -> None:
+        btn = self.buttons.get(size)
+        if btn and not btn.isChecked():
+            btn.setChecked(True)
 
 
 SORT_OPTIONS = {
     "name": ("Nome", lambda g: (g.get("title") or "").casefold()),
     "score": ("Nota", lambda g: float(g.get("score") if g.get("score") is not None else -1)),
-    "hours": ("Horas", lambda g: float(g.get("played_hours") or g.get("hltb_hours") or 0)),
+    "hours": ("Horas", display_hours),  # mesma regra do card: jogadas (concluídos) ou HLTB
 }
 
 
@@ -246,6 +328,9 @@ class ScrollableGameGrid(QWidget):
         self.sort_dir_btn.toggled.connect(self._apply_sort)
         self.sort_dir_btn.setVisible(False)
         top_bar_layout.addWidget(self.sort_dir_btn)
+
+        self.size_selector = CardSizeSelector()
+        top_bar_layout.addWidget(self.size_selector)
 
         main_layout.addLayout(top_bar_layout)
         main_layout.addWidget(self.filter_panel)

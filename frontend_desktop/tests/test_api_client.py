@@ -195,3 +195,24 @@ def test_inbox_import_raises_on_unsupported_version(client):
     responses.add(responses.POST, "http://test-server:8000/api/v1/inbox/import", json={"detail": "Versão 2"}, status=422)
     with pytest.raises(Exception):
         client.inbox_import({"format": "gameroom-inbox", "version": 2, "events": []})
+
+
+@responses.activate
+def test_category_scope_is_sent_only_when_given(client):
+    base = "http://test-server:8000/api/v1"
+    for path in ("genres/", "platforms/", "franchises/", "developers/", "genres/1/details",
+                 "platforms/2/details", "franchises/3/details"):
+        responses.add(responses.GET, f"{base}/{path}", json=[] if path.endswith("/") else {"id": 1})
+    client.get_genres()
+    client.get_genres(scope="all")
+    client.get_platforms(scope="all")
+    client.get_franchises(scope="all")
+    client.get_developers(scope="all")
+    client.get_genre_details(1, scope="all")
+    client.get_platform_details(2)
+    client.get_franchise_details(3, scope="completed")
+    urls = [c.request.url for c in responses.calls]
+    assert urls[0] == f"{base}/genres/"
+    assert all(u.endswith("?scope=all") for u in urls[1:6])
+    assert urls[6] == f"{base}/platforms/2/details"
+    assert urls[7].endswith("franchises/3/details?scope=completed")

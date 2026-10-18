@@ -9,6 +9,7 @@ from frontend_desktop.views.components.yearbook_view import StatCard
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.workers import run_async
 from frontend_desktop.ui_helpers import set_button_icon, style_color_dot
+from frontend_desktop.preferences import SCOPE_ALL, SCOPE_COMPLETED, category_scope
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +72,12 @@ class CategoryDetailView(QWidget):
         stats_layout = QHBoxLayout()
         stats_layout.setSpacing(12)
 
+        self.card_all_games = StatCard("Jogos", "0", "gamepad-2")  # só no modo "todos os jogos"
+        self.card_all_games.setVisible(False)
         self.card_total_games = StatCard("Jogos Zerados", "0", "trophy")
         self.card_total_hours = StatCard("Horas Totais Jogadas", "0h", "clock")
 
+        stats_layout.addWidget(self.card_all_games)
         stats_layout.addWidget(self.card_total_games)
         stats_layout.addWidget(self.card_total_hours)
         stats_layout.addStretch()
@@ -112,11 +116,13 @@ class CategoryDetailView(QWidget):
             self._on_category_loaded(category_type, category_id, {})
             return
         fetcher = getattr(api_client, self.DETAIL_FETCHERS[category_type][0])
+        self.scope = category_scope()
+        self.game_grid.filter_panel.set_status_filter_visible(self.scope == SCOPE_ALL)
         run_async(
             self, fetcher,
             lambda data: self._on_category_loaded(category_type, category_id, data),
             lambda msg: logger.error("Erro ao carregar detalhes da categoria: %s", msg),
-            category_id,
+            category_id, self.scope,
         )
 
     def _on_category_loaded(self, category_type: str, category_id: int, data: dict):
@@ -133,7 +139,12 @@ class CategoryDetailView(QWidget):
             style_color_dot(self.color_dot, color, 16)
 
         self.category_data = data
-        self.card_total_games.set_value(str(data.get("total_games", 0)))
+        show_all = getattr(self, "scope", SCOPE_COMPLETED) == SCOPE_ALL
+        self.card_all_games.setVisible(show_all)
+        self.card_all_games.set_value(str(data.get("total_games", 0)))
+        completed = data.get("completed_games", data.get("total_games", 0)) if show_all else data.get("total_games", 0)
+        self.card_total_games.set_value(str(completed))
+        self.section_label.setText("Todos os jogos" if show_all else "Jogos Zerados / Platinados")
         self.card_total_hours.set_value(f"{data.get('total_hours_played', 0)}h")
         self.game_grid.set_games(data.get("games", []))
 
