@@ -5,6 +5,30 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [1.3.0] - 2026-10-18
+### Adicionado
+- **Anuário mais completo:** pódio do ano (top 3) escolhido por você entre os jogos zerados ou platinados no ano, com sugestão pelas notas enquanto nada for escolhido; gráfico de zerados por mês; gêneros do ano e horas por plataforma; comparação com o ano anterior; estúdio e série do ano, jogo mais longo, melhor nota, mais difícil e médias por jogo.
+- **Backup automático do banco:** uma cópia por dia ao iniciar (e antes de qualquer migração), mantendo as 10 mais recentes; aba **Backup** em Configurações para criar e restaurar cópias.
+- O app lembra o tamanho e a posição da janela e a última tela aberta.
+- A sincronização de lojas preenche a **desenvolvedora** (Steam, GOG, Epic e Amazon), limpando sufixos como "Inc." e reaproveitando a grafia já cadastrada.
+- Páginas de categoria podem mostrar só os jogos finalizados (padrão) ou todos, com filtro por status; opção em Configurações.
+- Filtro e aviso de **dados incompletos** nos cards; atalhos Ctrl+N, Ctrl+F e Del.
+- Game Room com destaque "Jogando agora" e faixas horizontais com "Ver todos"; seletor de tamanho dos cards (P/M/G).
+- Tabela com menu no cabeçalho para mostrar/ocultar colunas.
+
+### Modificado
+- **Nova tela de sincronização de lojas:** filtro por loja com contagem, selos coloridos, coluna de desenvolvedora, estado vazio e configurações agrupadas por loja.
+- Cards mostram as horas jogadas nos jogos finalizados e as do HLTB nos demais.
+- Configurações organizadas em abas; a caixa de entrada do app do portátil ganhou página própria em Importar.
+- Criar, editar e excluir categorias e mudar a cor de um gênero não travam mais a interface.
+
+### Removido
+- Status "Pausado" e "Desisti" (migração `0005`: Pausado → Fila, Desisti → Disponível).
+- Importador do Notion, usado só uma vez.
+
+### Corrigido
+- Campos de filtro bloqueados não mostram mais o botão de limpar.
+
 ## [1.2.0] - 2026-10-17
 ### Adicionado
 - Jogos podem ter **dois gêneros**: principal e secundário (opcional), com um novo campo "Gênero secundário" na janela de jogo.
