@@ -28,9 +28,11 @@ def card_count_text(item: dict, scope: str) -> str:
 
 
 class ManageItemCard(QFrame):
+    """Card de uma categoria. Coleta nome/cor/confirmação; a chamada à API fica com a ManagementView
+    (o card é recriado após cada mudança, então não pode ser dono de threads)."""
     clicked = Signal(str, int)  # category_type, item_id
-    edited = Signal()
-    deleted = Signal()
+    edit_requested = Signal(dict, dict)  # item, campos novos ({"name", "color"?})
+    delete_requested = Signal(dict)
 
     def __init__(self, category_type: str, item_data: dict, parent=None, scope: str = SCOPE_COMPLETED):
         super().__init__(parent)
@@ -105,57 +107,45 @@ class ManageItemCard(QFrame):
         super().mousePressEvent(event)
 
     def on_edit(self):
-        item_id = self.item_data["id"]
-        current_name = self.item_data["name"]
-
-        name, ok = QInputDialog.getText(self, "Editar", "Novo nome:", text=current_name)
+        name, ok = QInputDialog.getText(self, "Editar", "Novo nome:", text=self.item_data["name"])
         if not ok or not name.strip():
             return
-
-        try:
-            if self.category_type == "genre":
-                color = self.item_data.get("color", "#4f46e5")
-                qcolor = QColorDialog.getColor(QColor(color), self, "Escolha a cor da tag")
-                if qcolor.isValid():
-                    color = qcolor.name()
-                api_client.update_genre(item_id, name.strip(), color)
-            elif self.category_type == "platform":
-                api_client.update_platform(item_id, name.strip(), self.item_data.get("icon_name"))
-            elif self.category_type == "franchise":
-                api_client.update_franchise(item_id, name.strip())
-            elif self.category_type == "developer":
-                api_client.update_developer(item_id, name.strip())
-
-            self.edited.emit()
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Falha ao editar: {e}")
+        fields = {"name": name.strip()}
+        if self.category_type == "genre":
+            color = self.item_data.get("color", "#4f46e5")
+            qcolor = QColorDialog.getColor(QColor(color), self, "Escolha a cor da tag")
+            fields["color"] = qcolor.name() if qcolor.isValid() else color
+        self.edit_requested.emit(self.item_data, fields)
 
     def on_delete(self):
-        item_id = self.item_data["id"]
         name = self.item_data["name"]
         count = self.item_data.get("games_count", 0)
-
         warn_text = f"Tem certeza que deseja excluir '{name}'?"
         if count > 0:
             warn_text += f"\n\nAtenção: Existem {count} jogos vinculados a este item."
-
-        confirm = QMessageBox.question(
-            self, "Confirmar Exclusão", warn_text, QMessageBox.Yes | QMessageBox.No
-        )
+        confirm = QMessageBox.question(self, "Confirmar Exclusão", warn_text, QMessageBox.Yes | QMessageBox.No)
         if confirm == QMessageBox.Yes:
-            try:
-                if self.category_type == "genre":
-                    api_client.delete_genre(item_id)
-                elif self.category_type == "platform":
-                    api_client.delete_platform(item_id)
-                elif self.category_type == "franchise":
-                    api_client.delete_franchise(item_id)
-                elif self.category_type == "developer":
-                    api_client.delete_developer(item_id)
+            self.delete_requested.emit(self.item_data)
 
-                self.deleted.emit()
-            except Exception as e:
-                QMessageBox.critical(self, "Erro", f"Falha ao excluir: {e}")
+
+def update_category(category_type: str, item: dict, fields: dict):
+    """Grava a edição de uma categoria (roda fora da thread da UI)."""
+    item_id, name = item["id"], fields["name"]
+    if category_type == "genre":
+        return api_client.update_genre(item_id, name, fields.get("color") or item.get("color", "#4f46e5"))
+    if category_type == "platform":
+        return api_client.update_platform(item_id, name, item.get("icon_name"))
+    return getattr(api_client, f"update_{category_type}")(item_id, name)
+
+
+def delete_category(category_type: str, item_id: int):
+    return getattr(api_client, f"delete_{category_type}")(item_id)
+
+
+def create_category(category_type: str, name: str, color: str = ""):
+    if category_type == "genre":
+        return api_client.create_genre(name, color or "#4f46e5")
+    return getattr(api_client, f"create_{category_type}")(name)
 
 
 class ManagementView(QWidget):
@@ -272,8 +262,8 @@ class ManagementView(QWidget):
         for idx, itm in enumerate(filtered):
             card = ManageItemCard(self.category_type, itm, scope=getattr(self, "scope", SCOPE_COMPLETED))
             card.clicked.connect(self.category_selected.emit)
-            card.edited.connect(self.on_item_changed)
-            card.deleted.connect(self.on_item_changed)
+            card.edit_requested.connect(self.on_edit_requested)
+            card.delete_requested.connect(self.on_delete_requested)
             row = idx // cols
             col = idx % cols
             self.grid_layout.addWidget(card, row, col)
@@ -284,30 +274,28 @@ class ManagementView(QWidget):
         if new_cols != self.current_cols:
             self.render_items()
 
-    def on_item_changed(self):
+    def on_item_changed(self, *_):
         self.load_data()
         self.data_changed.emit()
 
+    def _on_failed(self, action: str, message: str):
+        QMessageBox.critical(self, "Erro", f"Falha ao {action}: {message}")
+
+    def on_edit_requested(self, item: dict, fields: dict):
+        run_async(self, update_category, self.on_item_changed, lambda m: self._on_failed("editar", m),
+                  self.category_type, item, fields)
+
+    def on_delete_requested(self, item: dict):
+        run_async(self, delete_category, self.on_item_changed, lambda m: self._on_failed("excluir", m),
+                  self.category_type, item["id"])
+
     def on_create_new(self):
-        name, ok = QInputDialog.getText(self, f"Novo(a) {self.title}", f"Nome:")
+        name, ok = QInputDialog.getText(self, f"Novo(a) {self.title}", "Nome:")
         if not ok or not name.strip():
             return
-
-        try:
-            if self.category_type == "genre":
-                color = "#4f46e5"
-                qcolor = QColorDialog.getColor(QColor(color), self, "Escolha a cor da tag")
-                if qcolor.isValid():
-                    color = qcolor.name()
-                api_client.create_genre(name.strip(), color)
-            elif self.category_type == "platform":
-                api_client.create_platform(name.strip())
-            elif self.category_type == "franchise":
-                api_client.create_franchise(name.strip())
-            elif self.category_type == "developer":
-                api_client.create_developer(name.strip())
-
-            self.load_data()
-            self.data_changed.emit()
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Falha ao criar: {e}")
+        color = ""
+        if self.category_type == "genre":
+            qcolor = QColorDialog.getColor(QColor("#4f46e5"), self, "Escolha a cor da tag")
+            color = qcolor.name() if qcolor.isValid() else "#4f46e5"
+        run_async(self, create_category, self.on_item_changed, lambda m: self._on_failed("criar", m),
+                  self.category_type, name.strip(), color)

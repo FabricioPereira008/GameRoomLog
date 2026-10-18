@@ -19,7 +19,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 COVER_PREVIEW_SIZE = (160, 240)
-STATUSES = ["Disponível", "Fila", "Próximo", "Jogando", "Pausado", "Zerado", "Platinado", "Lista de Desejos", "Desisti"]
+STATUSES = ["Disponível", "Fila", "Próximo", "Jogando", "Zerado", "Platinado", "Lista de Desejos"]
 FORMATS = ["Digital", "Físico", "Emulado"]
 
 

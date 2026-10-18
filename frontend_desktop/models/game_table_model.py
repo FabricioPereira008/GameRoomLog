@@ -18,7 +18,6 @@ NUMERIC_COLUMNS = {5, 6, 7, 8, 9}
 
 STATUS_COLORS = {
     "Jogando": COLORS["accent_text"], "Zerado": COLORS["success"], "Platinado": COLORS["warning"],
-    "Desisti": COLORS["danger"],
 }
 
 

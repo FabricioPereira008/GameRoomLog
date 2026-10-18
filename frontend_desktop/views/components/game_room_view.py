@@ -222,7 +222,7 @@ class GameRoomView(QWidget):
             targets.append(self.grid_now)
         elif status == "Próximo":
             targets.append(self.grid_next)
-        elif status in ["Fila", "Pausado"]:
+        elif status == "Fila":
             targets.append(self.grid_queue)
         elif status in ["Zerado", "Platinado"]:
             targets.append(self.grid_finished)

@@ -239,12 +239,14 @@ class FilterPanel(QWidget):
         for kind, (_label, field) in self._fields.items():
             if kind in locked:
                 field.setEnabled(False)
+                field.setClearButtonEnabled(False)  # sem o "x": não parece editável
                 field.setText(locked[kind])
                 field.setPlaceholderText(field.default_placeholder)
             else:
                 if not field.isEnabled():
                     field.clear()
                 field.setEnabled(True)
+                field.setClearButtonEnabled(True)
 
     def _on_any_change(self):
         self.update_button_badge()

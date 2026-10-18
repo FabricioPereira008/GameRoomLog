@@ -332,3 +332,68 @@ def test_quick_search_dialog_keyboard_and_accept(qapp):
     assert empty.hint.text() == "Nenhum jogo encontrado."
     empty.accept_current()
     assert empty.selected_game is None
+
+
+# --- categorias: ações em segundo plano e filtro bloqueado ---
+def test_category_actions_run_through_the_view(qapp, monkeypatch):
+    from frontend_desktop.views.components import management_view as mv
+    calls = []
+    monkeypatch.setattr(mv, "run_async", lambda owner, fn, ok, err, *args: ok(fn(*args)))
+    monkeypatch.setattr(mv.api_client, "get_genres", lambda scope=None: [])
+    monkeypatch.setattr(mv.api_client, "update_genre", lambda *a: calls.append(("upd", a)) or {})
+    monkeypatch.setattr(mv.api_client, "delete_genre", lambda gid: calls.append(("del", gid)) or True)
+    monkeypatch.setattr(mv.api_client, "create_genre", lambda name, color: calls.append(("new", name, color)) or {})
+    monkeypatch.setattr(mv.api_client, "update_platform", lambda *a: calls.append(("plat", a)) or {})
+    monkeypatch.setattr(mv.api_client, "create_franchise", lambda name: calls.append(("fran", name)) or {})
+    view = mv.ManagementView("genre", "Gênero")
+    changed = []
+    view.data_changed.connect(lambda: changed.append(True))
+
+    card = mv.ManageItemCard("genre", {"id": 3, "name": "FPS", "color": "#111111", "games_count": 2})
+    card.edit_requested.connect(view.on_edit_requested)
+    card.delete_requested.connect(view.on_delete_requested)
+    monkeypatch.setattr(mv.QInputDialog, "getText", lambda *a, **k: ("Tiro", True))
+    monkeypatch.setattr(mv.QColorDialog, "getColor", lambda *a, **k: mv.QColor("#ff0000"))
+    card.on_edit()
+    monkeypatch.setattr(mv.QMessageBox, "question", lambda *a, **k: mv.QMessageBox.Yes)
+    card.on_delete()
+    view.on_create_new()
+    assert calls == [("upd", (3, "Tiro", "#ff0000")), ("del", 3), ("new", "Tiro", "#ff0000")]
+    assert len(changed) == 3
+
+    mv.update_category("platform", {"id": 1, "icon_name": "pc"}, {"name": "PC"})
+    mv.create_category("franchise", "Saga")
+    assert calls[-2:] == [("plat", (1, "PC", "pc")), ("fran", "Saga")]
+
+    errors = []
+    monkeypatch.setattr(mv.QMessageBox, "critical", lambda *a, **k: errors.append(a[2]))
+    view._on_failed("excluir", "409")
+    assert errors == ["Falha ao excluir: 409"]
+    monkeypatch.setattr(mv.QInputDialog, "getText", lambda *a, **k: ("", False))
+    card.on_edit()  # cancelado: nada é enviado
+    assert len(calls) == 5
+
+
+def test_category_color_change_is_async(qapp, monkeypatch):
+    from frontend_desktop.views.components import category_detail_view as cv
+    sent, reloaded = [], []
+    monkeypatch.setattr(cv, "run_async", lambda owner, fn, ok, err, *args: ok(fn(*args)))
+    monkeypatch.setattr(cv.api_client, "update_genre", lambda *a: sent.append(a) or {})
+    monkeypatch.setattr(cv.QColorDialog, "getColor", lambda *a, **k: cv.QColor("#00ff00"))
+    view = cv.CategoryDetailView()
+    monkeypatch.setattr(view, "load_category", lambda t, i: reloaded.append((t, i)))
+    view.category_type, view.category_id, view.category_data = "genre", 7, {"name": "RPG", "color": "#fff"}
+    view.on_change_color()
+    assert sent == [(7, "RPG", "#00ff00")] and reloaded == [("genre", 7)]
+    view.category_type = "platform"
+    view.on_change_color()  # só gêneros têm cor
+    assert len(sent) == 1
+
+
+def test_locked_filter_hides_clear_button(qapp):
+    from frontend_desktop.views.components.filter_panel import FilterPanel
+    panel = FilterPanel()
+    panel.set_locked_filters({"genre": "FPS"})
+    assert not panel.combo_genre.isClearButtonEnabled() and not panel.combo_genre.isEnabled()
+    panel.set_locked_filters({})
+    assert panel.combo_genre.isClearButtonEnabled() and panel.combo_genre.text() == ""

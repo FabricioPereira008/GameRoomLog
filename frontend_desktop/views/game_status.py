@@ -2,7 +2,6 @@
 JOGANDO = "Jogando"
 PROXIMO = "Próximo"
 FILA = "Fila"
-PAUSADO = "Pausado"
 DISPONIVEL = "Disponível"
 ZERADO = "Zerado"
 PLATINADO = "Platinado"
@@ -10,7 +9,7 @@ LISTA_DE_DESEJOS = "Lista de Desejos"
 
 # Chave da lista -> status que pertencem a ela (um jogo pode estar em mais de uma, ex.: Platinado)
 LIST_STATUSES = {
-    "queue": frozenset({FILA, PAUSADO}),
+    "queue": frozenset({FILA}),
     "disponiveis": frozenset({DISPONIVEL}),
     "zerados": frozenset({ZERADO, PLATINADO}),
     "platinados": frozenset({PLATINADO}),
@@ -26,7 +25,7 @@ def filter_games(list_key: str, games: list) -> list:
     return [g for g in games if in_list(list_key, g.get("status"))]
 
 # Ordem usada nos filtros de status (ex.: tabela da biblioteca)
-ALL_STATUSES = [JOGANDO, FILA, PROXIMO, PAUSADO, ZERADO, PLATINADO, DISPONIVEL, LISTA_DE_DESEJOS, "Desisti"]
+ALL_STATUSES = [JOGANDO, FILA, PROXIMO, ZERADO, PLATINADO, DISPONIVEL, LISTA_DE_DESEJOS]
 
 
 def is_completed(status) -> bool:

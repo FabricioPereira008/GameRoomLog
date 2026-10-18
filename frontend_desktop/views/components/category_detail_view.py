@@ -154,11 +154,17 @@ class CategoryDetailView(QWidget):
 
         current_color = self.category_data.get("color", "#4f46e5")
         qcolor = QColorDialog.getColor(QColor(current_color), self, "Escolher Nova Cor do Gênero")
-        if qcolor.isValid():
-            new_hex = qcolor.name()
-            try:
-                api_client.update_genre(self.category_id, self.category_data.get("name"), new_hex)
-                self.load_category(self.category_type, self.category_id)
-                self.data_changed.emit()
-            except Exception as e:
-                QMessageBox.critical(self, "Erro", f"Não foi possível atualizar a cor: {e}")
+        if not qcolor.isValid():
+            return
+        category_id = self.category_id
+        run_async(
+            self, api_client.update_genre,
+            lambda _res: self._on_color_saved(category_id),
+            lambda msg: QMessageBox.critical(self, "Erro", f"Não foi possível atualizar a cor: {msg}"),
+            category_id, self.category_data.get("name"), qcolor.name(),
+        )
+
+    def _on_color_saved(self, category_id: int):
+        if self.category_type == "genre" and self.category_id == category_id:
+            self.load_category(self.category_type, self.category_id)
+        self.data_changed.emit()

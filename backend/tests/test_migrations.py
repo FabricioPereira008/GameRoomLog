@@ -4,7 +4,7 @@ from sqlalchemy import inspect
 from backend.app.core.database import Base
 from backend.app.core.migrations import BASELINE_REVISION, run_migrations
 
-HEAD_REVISION = "0004_genre_position"
+HEAD_REVISION = "0005_remove_paused_dropped"
 import backend.app.models  # noqa: F401
 
 
@@ -61,3 +61,19 @@ def test_app_lifespan_runs_migrations(tmp_path, monkeypatch):
     with TestClient(main.app) as client:
         assert client.get("/").status_code == 200
     assert "games" in inspect(engine).get_table_names()
+
+
+def test_paused_and_dropped_statuses_are_converted(tmp_path):
+    from alembic import command
+    from backend.app.core.migrations import make_config
+    engine = _engine(tmp_path)
+    with engine.begin() as connection:
+        command.upgrade(make_config(connection), "0004_genre_position")
+        insert = ("insert into games (title, status, play_type, play_count, format, is_favorite, created_at, updated_at) "
+                  "values (:t, :s, 'PRIMEIRA_JOGADA', 1, 'DIGITAL', 0, '2026-01-01', '2026-01-01')")
+        for title, status in (("Pausado", "PAUSADO"), ("Largado", "DESISTI"), ("Normal", "ZERADO")):
+            connection.execute(sa.text(insert), {"t": title, "s": status})
+    run_migrations(engine)
+    with engine.connect() as c:
+        rows = dict(c.execute(sa.text("select title, status from games")).all())
+    assert rows == {"Pausado": "FILA", "Largado": "DISPONIVEL", "Normal": "ZERADO"}

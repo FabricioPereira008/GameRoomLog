@@ -48,11 +48,9 @@ class StatsService:
             jogando=counts_dict.get(GameStatus.JOGANDO, 0),
             proximos=counts_dict.get(GameStatus.PROXIMO, 0),
             fila=counts_dict.get(GameStatus.FILA, 0),
-            pausados=counts_dict.get(GameStatus.PAUSADO, 0),
             zerados=counts_dict.get(GameStatus.ZERADO, 0),
             platinados=counts_dict.get(GameStatus.PLATINADO, 0),
             disponivel=counts_dict.get(GameStatus.DISPONIVEL, 0),
-            desisti=counts_dict.get(GameStatus.DESISTI, 0),
             wishlist=counts_dict.get(GameStatus.WISHLIST, 0),
             total=sum(counts_dict.values())
         )

@@ -24,10 +24,8 @@ class GameStatus(str, enum.Enum):
     FILA = "Fila"
     PROXIMO = "Próximo"
     JOGANDO = "Jogando"
-    PAUSADO = "Pausado"
     ZERADO = "Zerado"
     PLATINADO = "Platinado"
-    DESISTI = "Desisti"
     WISHLIST = "Lista de Desejos"
 
 class PlayType(str, enum.Enum):

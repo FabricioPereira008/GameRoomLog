@@ -34,7 +34,7 @@ def _ids(grid):
 def test_status_lists_membership():
     assert gs.in_list("zerados", "Platinado") and gs.in_list("platinados", "Platinado")
     assert not gs.in_list("platinados", "Zerado")
-    assert [g["id"] for g in gs.filter_games("queue", [_game(1, "Fila"), _game(2, "Pausado"), _game(3, "Zerado")])] == [1, 2]
+    assert [g["id"] for g in gs.filter_games("queue", [_game(1, "Fila"), _game(2, "Próximo"), _game(3, "Zerado")])] == [1]
 
 
 def test_refresh_distributes_games_by_status(window):
