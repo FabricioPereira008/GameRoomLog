@@ -356,3 +356,9 @@ QListWidget#quickSearchResults { background-color: $surface; border: 1px solid $
 QListWidget#quickSearchResults::item { padding: 7px 10px; border-radius: $r_sm; color: $text; }
 QListWidget#quickSearchResults::item:selected { background-color: $accent_soft; color: $accent_text; }
 QListWidget#quickSearchResults::item:hover { background-color: $surface_2; }
+
+/* ===== Lista de backups ===== */
+QListWidget#backupList { background-color: $surface; border: 1px solid $border; border-radius: $r_md; padding: 4px; }
+QListWidget#backupList::item { padding: 8px 10px; border-radius: $r_sm; color: $text; }
+QListWidget#backupList::item:selected { background-color: $accent_soft; color: $accent_text; }
+QListWidget#backupList::item:hover { background-color: $surface_2; }

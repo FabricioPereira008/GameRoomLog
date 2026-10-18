@@ -5,8 +5,8 @@ import time
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
-    QButtonGroup, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QRadioButton,
-    QScrollArea, QTabWidget, QVBoxLayout, QWidget,
+    QButtonGroup, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QProgressBar,
+    QPushButton, QRadioButton, QScrollArea, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from app_version import __version__
@@ -14,6 +14,7 @@ from frontend_desktop import preferences
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.styles.tokens import COLORS
 from frontend_desktop.ui_helpers import set_button_icon, set_status
+from frontend_desktop.workers import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,7 @@ class SettingsView(QWidget):
         self.tabs.tabBar().setDrawBase(False)
         self.tabs.addTab(self._scrollable(self._build_appearance_tab()), "Aparência")
         self.tabs.addTab(self._scrollable(self._build_covers_tab()), "Capas")
+        self.tabs.addTab(self._scrollable(self._build_backup_tab()), "Backup")
         self.tabs.addTab(self._scrollable(self._build_about_tab()), "Sobre")
         outer.addWidget(self.tabs)
 
@@ -229,6 +231,116 @@ class SettingsView(QWidget):
         batch_layout.addWidget(self.lbl_cover_status)
         layout.addWidget(batch_group)
         return page
+
+    # --- Backup ---
+    def _build_backup_tab(self) -> QWidget:
+        page, layout = self._page()
+        group, group_layout = self._group(
+            "Cópias de segurança do banco",
+            "Uma cópia é feita automaticamente ao abrir o app (no máximo uma por dia) e as 10 mais recentes "
+            "são mantidas. Ao restaurar, o estado atual também é guardado antes, então dá para desfazer.",
+        )
+        self.backup_list = QListWidget()
+        self.backup_list.setObjectName("backupList")
+        self.backup_list.setMinimumHeight(260)
+        self.backup_list.currentItemChanged.connect(lambda *_: self._update_backup_buttons())
+        group_layout.addWidget(self.backup_list)
+
+        row = QHBoxLayout()
+        self.btn_backup_now = QPushButton("Fazer backup agora")
+        self.btn_backup_now.setProperty("class", "cancel-btn")
+        self.btn_backup_now.setCursor(Qt.PointingHandCursor)
+        self.btn_backup_now.clicked.connect(self.on_backup_now)
+        row.addWidget(self.btn_backup_now)
+        self.btn_restore = QPushButton("Restaurar selecionado")
+        self.btn_restore.setProperty("class", "action-btn")
+        self.btn_restore.setCursor(Qt.PointingHandCursor)
+        self.btn_restore.clicked.connect(self.on_restore)
+        row.addWidget(self.btn_restore)
+        row.addStretch()
+        group_layout.addLayout(row)
+
+        self.lbl_backup_status = QLabel("")
+        self.lbl_backup_status.setWordWrap(True)
+        self.lbl_backup_status.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        group_layout.addWidget(self.lbl_backup_status)
+        layout.addWidget(group)
+        self._update_backup_buttons()
+        return page
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.load_backups()
+
+    def load_backups(self):
+        run_async(self, api_client.list_backups, self._on_backups_loaded,
+                  lambda msg: set_status(self.lbl_backup_status, "error", f"Não foi possível listar os backups: {msg}"))
+
+    @staticmethod
+    def describe_backup(info: dict) -> str:
+        created = str(info.get("created_at", "")).replace("T", " ")[:16]
+        try:
+            date_part, time_part = created.split(" ")
+            y, m, d = date_part.split("-")
+            created = f"{d}/{m}/{y} {time_part}"
+        except ValueError:
+            pass
+        games = info.get("games_count")
+        size_kb = (info.get("size_bytes") or 0) / 1024
+        parts = [created, info.get("reason_label", "")]
+        if games is not None:
+            parts.append(f"{games} jogos")
+        parts.append(f"{size_kb:,.0f} KB".replace(",", "."))
+        return "   ·   ".join(p for p in parts if p)
+
+    def _on_backups_loaded(self, data: dict):
+        self.backup_list.clear()
+        for info in data.get("backups", []):
+            item = QListWidgetItem(self.describe_backup(info))
+            item.setData(Qt.UserRole, info["name"])
+            self.backup_list.addItem(item)
+        if not self.backup_list.count():
+            set_status(self.lbl_backup_status, "muted", "Nenhum backup ainda.")
+        elif data.get("folder"):
+            set_status(self.lbl_backup_status, "muted", f"Pasta: {data['folder']}")
+        self._update_backup_buttons()
+
+    def _update_backup_buttons(self):
+        self.btn_restore.setEnabled(self.backup_list.currentItem() is not None)
+
+    def on_backup_now(self):
+        self.btn_backup_now.setEnabled(False)
+        run_async(self, api_client.create_backup, self._on_backup_created, self._on_backup_failed)
+
+    def _on_backup_created(self, info: dict):
+        self.btn_backup_now.setEnabled(True)
+        self.load_backups()
+        set_status(self.lbl_backup_status, "ok", f"Backup criado: {self.describe_backup(info)}")
+
+    def _on_backup_failed(self, message: str):
+        self.btn_backup_now.setEnabled(True)
+        self.btn_restore.setEnabled(self.backup_list.currentItem() is not None)
+        set_status(self.lbl_backup_status, "error", f"Falha: {message}")
+
+    def on_restore(self):
+        item = self.backup_list.currentItem()
+        if item is None:
+            return
+        confirm = QMessageBox.question(
+            self, "Restaurar backup",
+            f"Restaurar o banco para:\n\n{item.text()}\n\nO estado atual será guardado como um novo backup antes.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        self.btn_restore.setEnabled(False)
+        run_async(self, api_client.restore_backup, self._on_restored, self._on_backup_failed, item.data(Qt.UserRole))
+
+    def _on_restored(self, result: dict):
+        self.load_backups()
+        set_status(self.lbl_backup_status, "ok",
+                   f"Banco restaurado. O estado anterior foi guardado em {result.get('safety_backup')}.")
+        self.data_imported.emit()  # recarrega todas as telas
 
     # --- Sobre ---
     def _build_about_tab(self) -> QWidget:

@@ -283,7 +283,7 @@ def test_dialog_cover_status_only_when_missing(qapp, monkeypatch):
 def test_settings_tabs_scope_and_card_size(qapp):
     from frontend_desktop.views.components.settings_view import SettingsView
     view = SettingsView()
-    assert [view.tabs.tabText(i) for i in range(view.tabs.count())] == ["Aparência", "Capas", "Sobre"]
+    assert [view.tabs.tabText(i) for i in range(view.tabs.count())] == ["Aparência", "Capas", "Backup", "Sobre"]
     assert not hasattr(view, "chk_auto_covers")  # importação do Notion removida
     changed = []
     view.settings_changed.connect(lambda: changed.append(True))
@@ -397,3 +397,43 @@ def test_locked_filter_hides_clear_button(qapp):
     assert not panel.combo_genre.isClearButtonEnabled() and not panel.combo_genre.isEnabled()
     panel.set_locked_filters({})
     assert panel.combo_genre.isClearButtonEnabled() and panel.combo_genre.text() == ""
+
+
+# --- Configurações → Backup ---
+def test_backup_tab_lists_creates_and_restores(qapp, monkeypatch):
+    from frontend_desktop.views.components import settings_view as sv
+    monkeypatch.setattr(sv, "run_async", lambda owner, fn, ok, err, *args: ok(fn(*args)))
+    backups = [{"name": "gameroom-20261018-090000.db", "created_at": "2026-10-18T09:00:00", "reason": "auto",
+                "reason_label": "Automático", "size_bytes": 700 * 1024, "games_count": 600}]
+    calls = []
+    monkeypatch.setattr(sv.api_client, "list_backups", lambda: {"folder": "/dados/backups", "max_backups": 10, "backups": backups})
+    monkeypatch.setattr(sv.api_client, "create_backup", lambda: calls.append("new") or {**backups[0], "reason_label": "Manual"})
+    monkeypatch.setattr(sv.api_client, "restore_backup",
+                        lambda name: calls.append(name) or {"restored": name, "safety_backup": "gameroom-x-antes-da-restauracao.db"})
+    view = sv.SettingsView()
+    reloaded = []
+    view.data_imported.connect(lambda: reloaded.append(True))
+    view.load_backups()
+    assert view.backup_list.count() == 1
+    assert view.backup_list.item(0).text() == "18/10/2026 09:00   ·   Automático   ·   600 jogos   ·   700 KB"
+    assert "/dados/backups" in view.lbl_backup_status.text() and not view.btn_restore.isEnabled()
+
+    view.on_backup_now()
+    assert calls == ["new"] and "Backup criado" in view.lbl_backup_status.text()
+
+    view.backup_list.setCurrentRow(0)
+    assert view.btn_restore.isEnabled()
+    monkeypatch.setattr(sv.QMessageBox, "question", lambda *a, **k: sv.QMessageBox.No)
+    view.on_restore()
+    assert calls == ["new"]
+    monkeypatch.setattr(sv.QMessageBox, "question", lambda *a, **k: sv.QMessageBox.Yes)
+    view.on_restore()
+    assert calls[-1] == "gameroom-20261018-090000.db" and reloaded == [True]
+    assert "antes-da-restauracao" in view.lbl_backup_status.text()
+
+    view._on_backup_failed("sem conexão")
+    assert "sem conexão" in view.lbl_backup_status.text() and view.btn_backup_now.isEnabled()
+    backups.clear()
+    view.load_backups()
+    assert view.lbl_backup_status.text() == "Nenhum backup ainda."
+    assert sv.SettingsView.describe_backup({"created_at": "x", "reason_label": "Manual", "size_bytes": 0}) == "x   ·   Manual   ·   0 KB"

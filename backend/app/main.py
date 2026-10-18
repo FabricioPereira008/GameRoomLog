@@ -6,12 +6,14 @@ from fastapi.staticfiles import StaticFiles
 from backend.app.core.config import settings
 from backend.app.core.database import engine
 from backend.app.core.migrations import run_migrations
+from backend.app.services.backup_service import auto_backup
 from backend.app.api.v1.api_router import api_router
 from backend.app.services.category_service import CategoryConflictError, CategoryNotFoundError
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Cria o schema (banco novo), adota bancos legados e aplica migrações pendentes
+    # Backup do dia (antes de qualquer migração), depois schema/migrações pendentes
+    auto_backup(engine)
     run_migrations(engine)
     yield
 

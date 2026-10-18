@@ -250,6 +250,16 @@ class ApiClient:
     def save_library_settings(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self._json("PUT", "library/settings", json=data)
 
+    # --- BACKUPS DO BANCO ---
+    def list_backups(self) -> Dict[str, Any]:
+        return self._json("GET", "backups/")
+
+    def create_backup(self) -> Dict[str, Any]:
+        return self._json("POST", "backups/", timeout=IMPORT_TIMEOUT)
+
+    def restore_backup(self, name: str) -> Dict[str, Any]:
+        return self._json("POST", f"backups/{name}/restore", timeout=IMPORT_TIMEOUT)
+
     # --- CAIXA DE ENTRADA DO APP DO PORTÁTIL ---
     def inbox_import(self, package: Dict[str, Any]) -> Dict[str, Any]:
         return self._json("POST", "inbox/import", timeout=IMPORT_TIMEOUT, json=package)

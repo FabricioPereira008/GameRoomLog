@@ -216,3 +216,14 @@ def test_category_scope_is_sent_only_when_given(client):
     assert all(u.endswith("?scope=all") for u in urls[1:6])
     assert urls[6] == f"{base}/platforms/2/details"
     assert urls[7].endswith("franchises/3/details?scope=completed")
+
+
+@responses.activate
+def test_backup_endpoints(client):
+    base = "http://test-server:8000/api/v1/backups"
+    responses.add(responses.GET, f"{base}/", json={"backups": []})
+    responses.add(responses.POST, f"{base}/", json={"name": "gameroom-1.db"}, status=201)
+    responses.add(responses.POST, f"{base}/gameroom-1.db/restore", json={"restored": "gameroom-1.db"})
+    assert client.list_backups() == {"backups": []}
+    assert client.create_backup()["name"] == "gameroom-1.db"
+    assert client.restore_backup("gameroom-1.db")["restored"] == "gameroom-1.db"
