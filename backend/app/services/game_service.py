@@ -1,7 +1,7 @@
 from typing import List, Optional
 from datetime import date
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, desc, asc
+from sqlalchemy import or_, desc, asc, update
 from backend.app.models.game import Game, GameStatus, game_genres
 from backend.app.models.genre import Genre
 from backend.app.models.developer import Developer
@@ -101,6 +101,22 @@ class GameService:
             data["developer_id"] = None
 
     @staticmethod
+    def _set_genres(db: Session, db_game: Game, genre_ids: List[int]) -> None:
+        """Grava os gêneros na ordem recebida (1º = principal), ignorando ids repetidos ou inexistentes."""
+        ordered = list(dict.fromkeys(genre_ids))
+        found = {g.id: g for g in db.query(Genre).filter(Genre.id.in_(ordered)).all()}
+        ordered = [gid for gid in ordered if gid in found]
+        db_game.genres = [found[gid] for gid in ordered]
+        db.flush()
+        for position, genre_id in enumerate(ordered):
+            db.execute(
+                update(game_genres)
+                .where(game_genres.c.game_id == db_game.id, game_genres.c.genre_id == genre_id)
+                .values(position=position)
+            )
+        db.expire(db_game, ["genres"])  # recarrega já na ordem de position
+
+    @staticmethod
     def create_game(db: Session, game_in: GameCreate) -> Game:
         data = game_in.model_dump(exclude={"genre_ids"})
         
@@ -117,11 +133,9 @@ class GameService:
 
         db_game = Game(**data)
 
-        if game_in.genre_ids:
-            genres = db.query(Genre).filter(Genre.id.in_(game_in.genre_ids)).all()
-            db_game.genres = genres
-
         db.add(db_game)
+        if game_in.genre_ids:
+            GameService._set_genres(db, db_game, game_in.genre_ids)
         db.commit()
         db.refresh(db_game)
         return db_game
@@ -149,8 +163,7 @@ class GameService:
             db_game.completion_year = date.today().year
 
         if genre_ids is not None:
-            genres = db.query(Genre).filter(Genre.id.in_(genre_ids)).all()
-            db_game.genres = genres
+            GameService._set_genres(db, db_game, genre_ids)
 
         db.commit()
         db.refresh(db_game)

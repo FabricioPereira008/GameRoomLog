@@ -210,7 +210,11 @@ class GameDialog(QDialog):
         grid.addWidget(self._field("Franquia / Série", self.combo_franchise), 1, 1)
 
         self.combo_genre = self._editable_combo("Selecione ou digite…")
-        grid.addWidget(self._field("Gênero", self.combo_genre), 2, 0)
+        grid.addWidget(self._field("Gênero principal", self.combo_genre), 2, 0)
+
+        self.combo_genre2 = self._editable_combo("Opcional")
+        self.combo_genre2.setToolTip("Um segundo gênero que também descreve o jogo (ex.: Roguelike + Metroidvania).")
+        grid.addWidget(self._field("Gênero secundário", self.combo_genre2), 2, 1)
 
         plat_layout = QHBoxLayout()
         plat_layout.setSpacing(6)
@@ -223,18 +227,18 @@ class GameDialog(QDialog):
         btn_add_plat.clicked.connect(self.add_new_platform)
         plat_layout.addWidget(self.combo_platform, 1)
         plat_layout.addWidget(btn_add_plat)
-        grid.addWidget(self._field("Plataforma", plat_layout), 2, 1)
+        grid.addWidget(self._field("Plataforma", plat_layout), 3, 0)
 
         self.combo_status = QComboBox()
         for s in STATUSES:
             self.combo_status.addItem(s, s)
         self._blank_combo(self.combo_status, "Selecione o status…")
-        grid.addWidget(self._field("Status", self.combo_status, required=True), 3, 0)
+        grid.addWidget(self._field("Status", self.combo_status, required=True), 3, 1)
 
         self.combo_format = QComboBox()
         self.combo_format.addItems(FORMATS)
         self._blank_combo(self.combo_format, "Selecione o formato…")
-        grid.addWidget(self._field("Formato", self.combo_format), 3, 1)
+        grid.addWidget(self._field("Formato", self.combo_format), 4, 0)
         return card
 
     @staticmethod
@@ -424,6 +428,7 @@ class GameDialog(QDialog):
         self._set_editable_combo(self.combo_franchise, [f["name"] for f in self.franchises_list])
         self.genres_list = options["genres"]
         self._set_editable_combo(self.combo_genre, [g["name"] for g in self.genres_list])
+        self._set_editable_combo(self.combo_genre2, [g["name"] for g in self.genres_list])
 
     def load_options(self):
         """Carrega as opções em background e preenche o formulário ao terminar."""
@@ -472,11 +477,9 @@ class GameDialog(QDialog):
             self.combo_franchise.setEditText("")
 
         # Genre
-        genres = self.game_data.get("genres", [])
-        if genres:
-            self.combo_genre.setEditText(genres[0].get("name") or "")
-        else:
-            self.combo_genre.setEditText("")
+        names = [g.get("name") or "" for g in self.game_data.get("genres") or []] + ["", ""]
+        self.combo_genre.setEditText(names[0])
+        self.combo_genre2.setEditText(names[1])
 
 
         # Horas
@@ -677,9 +680,19 @@ class GameDialog(QDialog):
         return payload
 
     @staticmethod
-    def persist_game(game_id, payload: dict, fran_text: str, gen_text: str,
+    def genre_names(texts: list) -> list:
+        """Nomes de gênero preenchidos, sem repetir (sem diferenciar maiúsculas); no máximo dois."""
+        names = []
+        for text in texts:
+            text = (text or "").strip()
+            if text and text.lower() not in (n.lower() for n in names):
+                names.append(text)
+        return names[:2]
+
+    @staticmethod
+    def persist_game(game_id, payload: dict, fran_text: str, gen_texts: list,
                      franchises: list, genres: list) -> dict:
-        """Resolve/cria franquia e gênero e grava o jogo (roda fora da thread da UI)."""
+        """Resolve/cria franquia e gêneros (principal, secundário) e grava o jogo (roda fora da thread da UI)."""
         payload = dict(payload)
 
         franchise_id = None
@@ -692,15 +705,17 @@ class GameDialog(QDialog):
                     logger.warning("Erro ao auto-criar franquia: %s", e)
         payload["franchise_id"] = franchise_id
 
-        genre_id = None
-        if gen_text:
+        genre_ids = []
+        for gen_text in GameDialog.genre_names(gen_texts):
             genre_id = GameDialog._find_id_by_name(genres, gen_text)
             if not genre_id:
                 try:
                     genre_id = api_client.create_genre(gen_text).get("id")
                 except Exception as e:
                     logger.warning("Erro ao auto-criar gênero: %s", e)
-        payload["genre_ids"] = [genre_id] if genre_id else []
+            if genre_id and genre_id not in genre_ids:
+                genre_ids.append(genre_id)
+        payload["genre_ids"] = genre_ids
 
         if game_id is not None:
             return api_client.update_game(game_id, payload)
@@ -729,7 +744,7 @@ class GameDialog(QDialog):
             self.game_data["id"] if self.is_edit else None,
             payload,
             self.combo_franchise.currentText().strip(),
-            self.combo_genre.currentText().strip(),
+            [self.combo_genre.currentText(), self.combo_genre2.currentText()],
             list(getattr(self, "franchises_list", [])),
             list(getattr(self, "genres_list", [])),
         )

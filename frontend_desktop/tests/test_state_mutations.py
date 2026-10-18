@@ -601,3 +601,56 @@ def test_category_detail_locks_own_dimension_and_enables_sorting(qapp):
     assert panel.combo_genre.isEnabled() and not panel.combo_plat.isEnabled()
     view._on_category_loaded("platform", 2, {"name": "Switch"})
     assert panel.combo_plat.text() == "Switch" and panel.combo_genre.text() == ""
+
+
+def test_save_primary_and_secondary_genres_in_order(qapp, save_dialog):
+    gd, calls = save_dialog
+    dialog = gd.GameDialog()
+    _fill(dialog, qapp, genre="Roguelike")
+    dialog.combo_genre2.setCurrentText("rpg")
+    dialog.save_game()
+    _wait_dialog(dialog, qapp)
+    assert calls["created"] == [("genre", "Roguelike")]
+    assert calls["sent"][1]["genre_ids"] == [30, 3]  # principal (criado) e secundário (existente)
+
+
+def test_secondary_genre_alone_or_repeated(qapp, save_dialog):
+    gd, calls = save_dialog
+    dialog = gd.GameDialog()
+    _fill(dialog, qapp)
+    dialog.combo_genre2.setCurrentText("RPG")  # só o secundário: vira o único gênero
+    dialog.save_game()
+    _wait_dialog(dialog, qapp)
+    assert calls["sent"][1]["genre_ids"] == [3]
+
+    dialog = gd.GameDialog()
+    _fill(dialog, qapp, genre="RPG")
+    dialog.combo_genre2.setCurrentText("rpg")  # repetido: ignorado
+    dialog.save_game()
+    _wait_dialog(dialog, qapp)
+    assert calls["sent"][1]["genre_ids"] == [3]
+
+
+def test_dialog_loads_both_genres(qapp, monkeypatch):
+    from frontend_desktop.views.dialogs import game_dialog as gd
+    monkeypatch.setattr(gd.GameDialog, "fetch_options", staticmethod(lambda: {
+        "developers": [], "platforms": [], "franchises": [],
+        "genres": [{"id": 1, "name": "Roguelike"}, {"id": 2, "name": "Metroidvania"}]}))
+    dialog = gd.GameDialog(game_data={"id": 5, "title": "Dead Cells", "status": "Fila",
+                                      "genres": [{"name": "Roguelike"}, {"name": "Metroidvania"}]})
+    _wait_dialog(dialog, qapp)
+    assert dialog.combo_genre.currentText() == "Roguelike"
+    assert dialog.combo_genre2.currentText() == "Metroidvania"
+    assert dialog.combo_genre2.findText("Metroidvania") >= 0
+
+    one = gd.GameDialog(game_data={"id": 6, "title": "X", "status": "Fila", "genres": [{"name": "Roguelike"}]})
+    _wait_dialog(one, qapp)
+    assert one.combo_genre.currentText() == "Roguelike" and one.combo_genre2.currentText() == ""
+
+
+def test_genre_names_dedup_and_limit():
+    from frontend_desktop.views.dialogs.game_dialog import GameDialog
+    assert GameDialog.genre_names(["  RPG ", "rpg"]) == ["RPG"]
+    assert GameDialog.genre_names(["", "Terror"]) == ["Terror"]
+    assert GameDialog.genre_names(["A", "B", "C"]) == ["A", "B"]
+    assert GameDialog.genre_names([None, ""]) == []

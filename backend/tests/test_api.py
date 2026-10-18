@@ -296,3 +296,35 @@ def test_game_validation_limits():
     assert client.post("/api/v1/games/", json={"title": "X", "score": 11}).status_code == 422
     assert client.post("/api/v1/games/", json={"title": "X", "played_hours": -1}).status_code == 422
     assert client.post("/api/v1/games/", json={"title": "X", "play_count": 0}).status_code == 422
+
+
+def test_game_keeps_primary_and_secondary_genre_order():
+    a = client.post("/api/v1/genres/", json={"name": "Roguelike"}).json()["id"]
+    b = client.post("/api/v1/genres/", json={"name": "Metroidvania"}).json()["id"]
+    # secundário com id menor que o principal: a ordem vem da lista, não do id
+    game = client.post("/api/v1/games/", json={"title": "Dead Cells", "genre_ids": [b, a]}).json()
+    assert [g["name"] for g in game["genres"]] == ["Metroidvania", "Roguelike"]
+
+    upd = client.put(f"/api/v1/games/{game['id']}", json={"genre_ids": [a, b]}).json()
+    assert [g["name"] for g in upd["genres"]] == ["Roguelike", "Metroidvania"]
+    listed = next(g for g in client.get("/api/v1/games/").json() if g["id"] == game["id"])
+    assert [g["name"] for g in listed["genres"]] == ["Roguelike", "Metroidvania"]
+    assert [g["name"] for g in client.get(f"/api/v1/games/{game['id']}").json()["genres"]] == ["Roguelike", "Metroidvania"]
+
+    # repetidos e inexistentes são ignorados; lista vazia limpa
+    upd = client.put(f"/api/v1/games/{game['id']}", json={"genre_ids": [a, a]}).json()
+    assert [g["name"] for g in upd["genres"]] == ["Roguelike"]
+    upd = client.put(f"/api/v1/games/{game['id']}", json={"genre_ids": [9999, b]}).json()
+    assert [g["name"] for g in upd["genres"]] == ["Metroidvania"]
+    assert client.put(f"/api/v1/games/{game['id']}", json={"genre_ids": []}).json()["genres"] == []
+
+    # o filtro encontra o jogo pelo gênero secundário também
+    client.put(f"/api/v1/games/{game['id']}", json={"genre_ids": [a, b]})
+    assert any(g["id"] == game["id"] for g in client.get(f"/api/v1/games/?genre_id={b}").json())
+
+
+def test_game_rejects_more_than_two_genres():
+    ids = [client.post("/api/v1/genres/", json={"name": f"G{i}"}).json()["id"] for i in range(3)]
+    assert client.post("/api/v1/games/", json={"title": "X", "genre_ids": ids}).status_code == 422
+    game = client.post("/api/v1/games/", json={"title": "X"}).json()
+    assert client.put(f"/api/v1/games/{game['id']}", json={"genre_ids": ids}).status_code == 422

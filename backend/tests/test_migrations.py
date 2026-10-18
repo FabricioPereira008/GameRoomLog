@@ -4,7 +4,7 @@ from sqlalchemy import inspect
 from backend.app.core.database import Base
 from backend.app.core.migrations import BASELINE_REVISION, run_migrations
 
-HEAD_REVISION = "0003_inbox_events"
+HEAD_REVISION = "0004_genre_position"
 import backend.app.models  # noqa: F401
 
 
@@ -33,11 +33,13 @@ def test_legacy_database_is_adopted_without_losing_data(tmp_path):
     later = {"game_store_links", "ignored_store_games", "inbox_events"}
     Base.metadata.create_all(engine, tables=[t for n, t in Base.metadata.tables.items() if n not in later])
     with engine.begin() as c:
+        c.execute(sa.text("alter table game_genres drop column position"))  # coluna da 0004
         c.execute(sa.text("insert into genres (name, color) values ('RPG', '#fff')"))
     run_migrations(engine)
     with engine.connect() as c:
         assert c.execute(sa.text("select name from genres")).scalar() == "RPG"
         assert c.execute(sa.text("select version_num from alembic_version")).scalar() == HEAD_REVISION
+    assert "position" in {col["name"] for col in inspect(engine).get_columns("game_genres")}
 
 
 def test_models_and_migrations_have_no_drift(tmp_path):

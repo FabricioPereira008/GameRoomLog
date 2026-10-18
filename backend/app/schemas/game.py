@@ -28,8 +28,11 @@ class GameBase(BaseModel):
     is_favorite: bool = False
     notes: Optional[str] = None
 
+MAX_GENRES = 2  # gênero principal + secundário (a ordem da lista define qual é qual)
+
+
 class GameCreate(GameBase):
-    genre_ids: List[int] = Field(default_factory=list)
+    genre_ids: List[int] = Field(default_factory=list, max_length=MAX_GENRES)
 
 class GameUpdate(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=255)
@@ -51,7 +54,7 @@ class GameUpdate(BaseModel):
     format: Optional[GameFormat] = None
     is_favorite: Optional[bool] = None
     notes: Optional[str] = None
-    genre_ids: Optional[List[int]] = None
+    genre_ids: Optional[List[int]] = Field(default=None, max_length=MAX_GENRES)
 
 class GameResponse(GameBase):
     # Respostas não revalidam limites: dados legados/importados podem estar fora da faixa

@@ -1,6 +1,6 @@
 """Card de jogo pintado com QPainter: zero widgets por card, rolagem e resize fluidos."""
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QModelIndex, QPoint, QRect, QRectF, QSettings, QSize, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
@@ -54,6 +54,17 @@ def text_color_for(background_hex: str) -> QColor:
         return QColor("#ffffff")
     lum = (0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()) / 255
     return QColor("#000000") if lum > 0.62 else QColor("#ffffff")
+
+
+def genre_badge_limits(genres: list, fm: QFontMetrics, available: int) -> List[int]:
+    """Largura máxima de cada badge de gênero. Se os dois não cabem inteiros, dividem o espaço;
+    um secundário curto cede o que sobra ao principal."""
+    widths = [fm.horizontalAdvance(g["name"]) + 12 for g in genres]
+    if len(widths) < 2 or widths[0] + 4 + widths[1] <= available:
+        return [available - (widths[0] + 4 if i else 0) for i in range(len(widths))] if widths else []
+    half = (available - 4) // 2
+    first = max(half, available - 4 - widths[1])
+    return [first, available - 4 - first]
 
 
 _PLACEHOLDERS: Dict[Tuple[int, int], QPixmap] = {}
@@ -135,7 +146,7 @@ class GameCardDelegate(QStyledItemDelegate):
         title = title_fm.elidedText(game.get("title") or "Sem título", Qt.ElideRight, inner_w)
         painter.drawText(QRect(rect.x() + PADDING, y, inner_w, 18), Qt.AlignVCenter | Qt.AlignLeft, title)
 
-        # badges: plataforma + gênero
+        # badges: gênero principal (sólido) + secundário (contorno)
         y += 18 + ROW_GAP
         small = QFont(option.font)
         small.setPixelSize(11)
@@ -143,26 +154,31 @@ class GameCardDelegate(QStyledItemDelegate):
         x = rect.x() + PADDING
         right_limit = rect.x() + PADDING + inner_w
 
-        platform = game.get("platform")
-        if platform and platform.get("name"):
-            text = small_fm.elidedText(platform["name"], Qt.ElideRight, int(inner_w * 0.5))
-            x = self._badge(painter, small, small_fm, x, y, text, QColor(COLORS["surface_3"]), QColor(COLORS["text_muted"]), right_limit)
-        genres = game.get("genres") or []
-        if genres and genres[0].get("name"):
-            gcolor = genres[0].get("color") or "#4f46e5"
-            avail = right_limit - x
-            if avail > 30:
-                text = small_fm.elidedText(genres[0]["name"], Qt.ElideRight, avail - 12)
-                self._badge(painter, small, small_fm, x, y, text, QColor(gcolor), text_color_for(gcolor), right_limit)
+        genres = [g for g in (game.get("genres") or []) if g.get("name")][:2]
+        for i, (genre, limit) in enumerate(zip(genres, genre_badge_limits(genres, small_fm, inner_w))):
+            if limit < 30:
+                continue
+            gcolor = QColor(genre.get("color") or "#4f46e5")
+            if not gcolor.isValid():
+                gcolor = QColor("#4f46e5")
+            text = small_fm.elidedText(genre["name"], Qt.ElideRight, limit - 12)
+            if i == 0:
+                x = self._badge(painter, small, small_fm, x, y, text, gcolor, text_color_for(gcolor.name()), right_limit)
+            else:
+                soft = QColor(gcolor)
+                soft.setAlpha(40)
+                x = self._badge(painter, small, small_fm, x, y, text, soft, QColor(COLORS["text"]), right_limit, gcolor)
 
-        # linha de meta: horas + nota
+        # linha de meta: horas, plataforma e nota
         y += BADGE_H + ROW_GAP
         hours = game.get("played_hours") or game.get("hltb_hours") or 0.0
         painter.drawPixmap(QRect(rect.x() + PADDING, y + (BADGE_H - 12) // 2, 12, 12), icons.pixmap("clock", COLORS["text_muted"], 12))
         painter.setFont(small)
         painter.setPen(QColor(COLORS["text_muted"]))
-        painter.drawText(QRect(rect.x() + PADDING + 16, y, inner_w // 2, BADGE_H), Qt.AlignVCenter | Qt.AlignLeft, f"{int(hours)}h")
+        hours_text = f"{int(hours)}h"
+        painter.drawText(QRect(rect.x() + PADDING + 16, y, inner_w // 2, BADGE_H), Qt.AlignVCenter | Qt.AlignLeft, hours_text)
 
+        meta_right = right_limit
         score = game.get("score")
         if score is not None:
             score_font = QFont(small)
@@ -171,19 +187,32 @@ class GameCardDelegate(QStyledItemDelegate):
             text = f"{score:.1f}"
             w = fm.horizontalAdvance(text) + 12
             self._badge(painter, score_font, fm, right_limit - w, y, text, _rgba(COLORS["accent_soft"]), QColor(COLORS["accent_text"]), right_limit)
+            meta_right = right_limit - w - 4
+
+        platform = game.get("platform")
+        if platform and platform.get("name"):
+            px = rect.x() + PADDING + 16 + small_fm.horizontalAdvance(hours_text) + 6
+            avail = meta_right - px
+            if avail >= 28:
+                text = small_fm.elidedText(platform["name"], Qt.ElideRight, avail - 12)
+                self._badge(painter, small, small_fm, px, y, text, QColor(COLORS["surface_3"]), QColor(COLORS["text_muted"]), meta_right)
 
         painter.restore()
 
     @staticmethod
-    def _badge(painter, font, fm, x, y, text, bg: QColor, fg: QColor, right_limit: int) -> int:
+    def _badge(painter, font, fm, x, y, text, bg: QColor, fg: QColor, right_limit: int,
+               border: Optional[QColor] = None) -> int:
         """Desenha um badge e devolve o x seguinte (com espaçamento)."""
         w = fm.horizontalAdvance(text) + 12
         if x + w > right_limit:
             return x
         r = QRectF(x, y, w, BADGE_H)
         path = QPainterPath()
-        path.addRoundedRect(r, 4, 4)
+        path.addRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5) if border else r, 4, 4)
         painter.fillPath(path, bg)
+        if border:
+            painter.setPen(QPen(border, 1))
+            painter.drawPath(path)
         painter.setFont(font)
         painter.setPen(fg)
         painter.drawText(r, Qt.AlignCenter, text)

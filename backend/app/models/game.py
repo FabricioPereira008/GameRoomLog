@@ -10,12 +10,13 @@ from backend.app.core.database import Base
 def get_utc_now():
     return datetime.now(timezone.utc)
 
-# Tabela associativa Many-to-Many entre Game e Genre
+# Tabela associativa Many-to-Many entre Game e Genre; position 0 = gênero principal
 game_genres = Table(
     "game_genres",
     Base.metadata,
     Column("game_id", Integer, ForeignKey("games.id", ondelete="CASCADE"), primary_key=True),
     Column("genre_id", Integer, ForeignKey("genres.id", ondelete="CASCADE"), primary_key=True),
+    Column("position", Integer, nullable=False, server_default="0"),
 )
 
 class GameStatus(str, enum.Enum):
@@ -83,5 +84,6 @@ class Game(Base):
     platform = relationship("Platform", back_populates="games")
     franchise = relationship("Franchise", back_populates="games")
     developer_rel = relationship("Developer", back_populates="games")
-    genres = relationship("Genre", secondary="game_genres", back_populates="games")
+    genres = relationship("Genre", secondary=game_genres, back_populates="games",
+                          order_by=(game_genres.c.position, game_genres.c.genre_id))
     store_links = relationship("GameStoreLink", back_populates="game", cascade="all, delete-orphan")

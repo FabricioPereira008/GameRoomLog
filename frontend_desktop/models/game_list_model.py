@@ -23,8 +23,11 @@ class GameListModel(QAbstractListModel):
         game = self._games[index.row()]
         if role == GameRole:
             return game
-        if role in (Qt.DisplayRole, Qt.ToolTipRole):
+        if role == Qt.DisplayRole:
             return game.get("title") or ""
+        if role == Qt.ToolTipRole:  # nome completo dos gêneros, que podem estar elididos no card
+            genres = " · ".join(g["name"] for g in game.get("genres") or [] if g.get("name"))
+            return (game.get("title") or "") + (f"\n{genres}" if genres else "")
         return None
 
     @property

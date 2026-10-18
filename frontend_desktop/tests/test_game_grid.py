@@ -8,7 +8,7 @@ from PySide6.QtGui import QImage
 from frontend_desktop import cover_loader as cl
 from frontend_desktop.models.game_list_model import GameFilterProxy, GameListModel, GameRole
 from frontend_desktop.views.components.game_card_delegate import (
-    CARD_WIDTHS, CardMetrics, GameCardDelegate, text_color_for
+    CARD_WIDTHS, CardMetrics, genre_badge_limits, GameCardDelegate, text_color_for
 )
 from frontend_desktop.views.components.game_grid import (
     MODE_BUTTON, MODE_FULL, GameGrid, ScrollableGameGrid, make_predicate
@@ -35,6 +35,16 @@ def test_model_set_insert_update_remove(qapp):
 
     assert model.remove_game(99) is True and model.remove_game(99) is False
     assert [g["id"] for g in model.games] == [1, 2, 3]
+
+
+def test_model_tooltip_lists_genres(qapp):
+    from PySide6.QtCore import Qt
+    model = GameListModel()
+    model.set_games([{"id": 1, "title": "Dead Cells", "genres": [{"name": "Roguelike"}, {"name": "Metroidvania"}]},
+                     {"id": 2, "title": "Sem gênero"}])
+    assert model.index(0, 0).data(Qt.ToolTipRole) == "Dead Cells\nRoguelike · Metroidvania"
+    assert model.index(1, 0).data(Qt.ToolTipRole) == "Sem gênero"
+    assert model.index(0, 0).data(Qt.DisplayRole) == "Dead Cells"
 
 
 def test_model_notifies_in_place_changes(qapp):
@@ -203,6 +213,49 @@ def test_card_metrics_scale_with_size_mode():
     assert small.card_width < medium.card_width < large.card_width
     assert small.card_height < medium.card_height < large.card_height
     assert CardMetrics.for_mode("desconhecido") == medium
+
+
+class _FakeFM:
+    """Métrica de fonte previsível: 6px por caractere."""
+    def horizontalAdvance(self, text):
+        return 6 * len(text)
+
+
+def test_genre_badge_limits_share_space():
+    fm = _FakeFM()
+    g = lambda n: {"name": n}
+    assert genre_badge_limits([], fm, 150) == []
+    assert genre_badge_limits([g("RPG")], fm, 150) == [150]
+    # cabem inteiros: o secundário usa o que sobra depois do principal
+    assert genre_badge_limits([g("RPG"), g("Terror")], fm, 150) == [150, 150 - (18 + 12 + 4)]
+    # não cabem: secundário curto cede espaço ao principal
+    limits = genre_badge_limits([g("A" * 20), g("Terror")], fm, 110)
+    assert limits == [110 - 4 - 48, 48]
+    # dois longos: metade para cada
+    assert genre_badge_limits([g("A" * 20), g("B" * 20)], fm, 110) == [53, 53]
+
+
+def test_card_paints_both_genres_and_platform(qapp, monkeypatch):
+    from frontend_desktop.views.components import game_card_delegate as gcd
+    drawn = []
+    original = gcd.GameCardDelegate._badge
+
+    def spy(painter, font, fm, x, y, text, bg, fg, right_limit, border=None):
+        drawn.append((text, border is not None))
+        return original(painter, font, fm, x, y, text, bg, fg, right_limit, border)
+    monkeypatch.setattr(gcd.GameCardDelegate, "_badge", staticmethod(spy))
+    grid = GameGrid(mode=MODE_FULL)
+    grid.resize(700, 500)
+    grid.set_games([{"id": 1, "title": "Dead Cells", "platform": {"name": "PC"}, "score": 9.0, "played_hours": 30,
+                     "genres": [{"name": "Roguelike", "color": "#ff0000"}, {"name": "Metroidvania", "color": "bad"}]}])
+    grid.show()
+    qapp.processEvents()
+    grid.grab()
+    texts = [t for t, _ in drawn]
+    assert "Roguelike" in texts and "PC" in texts and "9.0" in texts
+    secondary = [t for t, outlined in drawn if outlined]
+    assert secondary and secondary[0].startswith("Metro")  # secundário com contorno (pode ser elidido)
+    grid.close()
 
 
 def test_text_color_contrast_for_genre_badges():
