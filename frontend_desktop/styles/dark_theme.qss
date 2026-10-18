@@ -384,3 +384,10 @@ QTreeWidget#syncTree::indicator:checked {
 QListWidget#ignoredList { background-color: $surface; border: 1px solid $border; border-radius: $r_md; padding: 4px; }
 QListWidget#ignoredList::item { padding: 8px 10px; border-radius: $r_sm; }
 QListWidget#ignoredList::item:selected { background-color: $accent_soft; color: $accent_text; }
+
+/* ===== Anuário ===== */
+QFrame[class="podium-card"] { background-color: $surface_2; border: 1px solid $border; border-radius: $r_lg; }
+QFrame[class="podium-card"]:hover { border: 1px solid $accent_border; }
+QLabel[class="podium-title"] { font-size: $fs_md; font-weight: 700; color: $text; }
+QFrame[class="highlight-tile"] { background-color: $surface_2; border: 1px solid $border; border-radius: $r_md; }
+QLabel[class="highlight-value"] { font-size: $fs_md; font-weight: 600; color: $text; }

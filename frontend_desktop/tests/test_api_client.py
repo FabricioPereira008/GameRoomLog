@@ -1,4 +1,5 @@
 import json
+import json
 import pytest
 from app_version import __version__
 import responses
@@ -93,6 +94,14 @@ def test_get_stats_and_yearbook(client):
 
     overall = client.get_overall_stats()
     assert overall["total_hours"] == 850.0
+
+
+@responses.activate
+def test_set_yearbook_top3_sends_ids(client):
+    responses.add(responses.PUT, "http://test-server:8000/api/v1/stats/yearbook/2026/top3",
+                  json={"year": 2026, "top3_custom": True}, status=200)
+    assert client.set_yearbook_top3(2026, [3, 1])["top3_custom"] is True
+    assert json.loads(responses.calls[0].request.body) == {"game_ids": [3, 1]}
 
 
 @responses.activate

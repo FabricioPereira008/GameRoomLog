@@ -5,6 +5,7 @@ from backend.app.models.developer import Developer
 from backend.app.models.store_link import GameStoreLink, IgnoredStoreGame
 from backend.app.models.game import Game, GameStatus, PlayType, GameFormat, game_genres
 from backend.app.models.inbox import InboxEvent
+from backend.app.models.yearbook import YearbookPick
 
 __all__ = [
     "Genre",
@@ -19,4 +20,5 @@ __all__ = [
     "GameStoreLink",
     "IgnoredStoreGame",
     "InboxEvent",
+    "YearbookPick",
 ]

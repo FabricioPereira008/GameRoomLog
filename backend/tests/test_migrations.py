@@ -4,7 +4,7 @@ from sqlalchemy import inspect
 from backend.app.core.database import Base
 from backend.app.core.migrations import BASELINE_REVISION, run_migrations
 
-HEAD_REVISION = "0005_remove_paused_dropped"
+HEAD_REVISION = "0006_yearbook_picks"
 import backend.app.models  # noqa: F401
 
 
@@ -16,7 +16,7 @@ def test_new_database_gets_full_schema_and_version(tmp_path):
     engine = _engine(tmp_path)
     run_migrations(engine)
     tables = set(inspect(engine).get_table_names())
-    assert {"games", "genres", "platforms", "franchises", "developers", "game_genres", "alembic_version", "game_store_links", "ignored_store_games", "inbox_events"} <= tables
+    assert {"games", "genres", "platforms", "franchises", "developers", "game_genres", "alembic_version", "game_store_links", "ignored_store_games", "inbox_events", "yearbook_picks"} <= tables
     with engine.connect() as c:
         assert c.execute(sa.text("select version_num from alembic_version")).scalar() == HEAD_REVISION
 
@@ -30,7 +30,7 @@ def test_migrations_are_idempotent(tmp_path):
 def test_legacy_database_is_adopted_without_losing_data(tmp_path):
     engine = _engine(tmp_path)
     # como versões antigas criavam o banco (sem as tabelas posteriores à baseline)
-    later = {"game_store_links", "ignored_store_games", "inbox_events"}
+    later = {"game_store_links", "ignored_store_games", "inbox_events", "yearbook_picks"}
     Base.metadata.create_all(engine, tables=[t for n, t in Base.metadata.tables.items() if n not in later])
     with engine.begin() as c:
         c.execute(sa.text("alter table game_genres drop column position"))  # coluna da 0004

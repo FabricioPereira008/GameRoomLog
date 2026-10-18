@@ -216,6 +216,9 @@ class ApiClient:
     def get_yearbook(self, year: int) -> Dict[str, Any]:
         return self._json("GET", f"stats/yearbook/{year}")
 
+    def set_yearbook_top3(self, year: int, game_ids: List[int]) -> Dict[str, Any]:
+        return self._json("PUT", f"stats/yearbook/{year}/top3", json={"game_ids": game_ids})
+
     def get_overall_stats(self) -> Dict[str, Any]:
         return self._json("GET", "stats/overall")
 
