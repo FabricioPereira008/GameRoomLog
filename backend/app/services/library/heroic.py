@@ -43,6 +43,10 @@ def _read_json(path: Path) -> Any:
         return None
 
 
+def _text(value) -> Optional[str]:
+    return value.strip() or None if isinstance(value, str) else None
+
+
 def _gog_entries(heroic: Path) -> Optional[List[LibraryEntry]]:
     data = _read_json(heroic / "store_cache" / "gog_library.json")
     if data is None:
@@ -56,7 +60,7 @@ def _gog_entries(heroic: Path) -> Optional[List[LibraryEntry]]:
         if not app_id or not title:
             continue
         is_dlc = bool((game.get("install") or {}).get("is_dlc"))
-        entries.append(LibraryEntry("gog", str(app_id), title, None, not is_dlc))
+        entries.append(LibraryEntry("gog", str(app_id), title, None, not is_dlc, _text(game.get("developer"))))
     return entries
 
 
@@ -75,7 +79,7 @@ def _epic_entries(heroic: Path) -> Optional[List[LibraryEntry]]:
             continue
         paths = {c.get("path") for c in meta.get("categories") or [] if isinstance(c, dict)}
         is_game = not meta.get("mainGameItem") and not (paths & NON_GAME_EPIC_CATEGORIES)
-        entries.append(LibraryEntry("epic", str(app_id), title, None, is_game))
+        entries.append(LibraryEntry("epic", str(app_id), title, None, is_game, _text(meta.get("developer"))))
     return entries
 
 
@@ -93,7 +97,8 @@ def _amazon_entries(heroic: Path) -> Optional[List[LibraryEntry]]:
         app_id = item.get("app_name") or item.get("id") or product.get("id")
         title = (item.get("title") or product.get("title") or "").strip()
         if app_id and title:
-            entries.append(LibraryEntry("amazon", str(app_id), title))
+            developer = _text(item.get("developer") or product.get("developer"))
+            entries.append(LibraryEntry("amazon", str(app_id), title, developer=developer))
     return entries
 
 

@@ -103,3 +103,18 @@ def test_candidate_dirs_per_platform(tmp_path, monkeypatch, platform, env_key):
     dirs = heroic.candidate_dirs()
     assert dirs[0] == tmp_path / "heroic"
     assert (len(dirs) == 2) == (platform == "linux")
+
+
+def test_reads_developers_from_every_store(env):
+    write(env / "legendaryConfig/legendary/metadata/e1.json",
+          {"app_name": "e1", "app_title": "Fall Guys", "metadata": {"developer": "Mediatonic ", "categories": [{"path": "games"}]}})
+    write(env / "store_cache/gog_library.json", {"games": [
+        {"app_name": "1", "title": "Prey", "developer": "Arkane Studios"},
+        {"app_name": "2", "title": "Sem dev", "developer": "   "},
+        {"app_name": "3", "title": "Dev estranho", "developer": 42}]})
+    write(env / "store_cache/nile_library.json", {"library": [
+        {"app_name": "a1", "title": "Metal Slug", "developer": "SNK"},
+        {"id": "a2", "product": {"title": "Outro", "developer": "Studio X"}}]})
+    devs = {e.title: e.developer for e in HeroicProvider().fetch()}
+    assert devs == {"Fall Guys": "Mediatonic", "Prey": "Arkane Studios", "Sem dev": None, "Dev estranho": None,
+                    "Metal Slug": "SNK", "Outro": "Studio X"}

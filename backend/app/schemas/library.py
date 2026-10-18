@@ -18,6 +18,7 @@ class ScanRequest(BaseModel):
 class Candidate(LibraryEntryBase):
     played_hours: Optional[float] = None
     ambiguous: bool = False  # título bate com mais de um jogo já cadastrado
+    developer: Optional[str] = None  # já limpa e casada com as desenvolvedoras cadastradas
 
 
 class StoreError(BaseModel):
@@ -29,6 +30,10 @@ class ScanResponse(BaseModel):
     candidates: List[Candidate]
     auto_linked: int
     errors: List[StoreError]
+
+
+class GameDetails(BaseModel):
+    developer: Optional[str] = None
 
 
 class ImportItem(LibraryEntryBase):

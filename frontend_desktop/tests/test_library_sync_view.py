@@ -77,7 +77,9 @@ def test_scan_lists_candidates_unchecked(qapp, monkeypatch):
     assert "3 jogo(s)" in view.status_label.text() and "2 já cadastrado" in view.status_label.text()
     doom = next(i for i in view._items() if i.text(0).startswith("Doom"))
     assert "ambíguo" in doom.text(0)
-    assert view.store_filter.count() == 2
+    assert list(view.store_buttons) == ["", "steam"]  # "Todas" + uma loja
+    assert view.store_buttons[""].text() == "Todas  3" and view.store_buttons[""].isChecked()
+    assert view.stack.currentWidget() is view.tree
 
 
 def test_scan_shows_store_errors(qapp, monkeypatch):
@@ -107,8 +109,9 @@ def test_filters_and_select_visible(qapp, monkeypatch):
     view._set_visible_checked(True)
     assert [i.text(0) for i in view.checked_items()] == ["Hades"]
     assert view.btn_import.text() == "Importar selecionados (1)" and view.btn_import.isEnabled()
+    assert view.selection_label.text() == "1 de 1 selecionado(s)"
     view.chk_played.setChecked(False)
-    view.store_filter.setCurrentIndex(0)
+    view.set_store_filter("")
     assert len(titles(view)) == 3
     view._set_all_checked(False)
     assert view.checked_items() == []
@@ -265,3 +268,65 @@ def test_confirm_continue_asks_user(qapp, monkeypatch):
     assert view.confirm_continue(2) is True
     monkeypatch.setattr(lsv.QMessageBox, "question", lambda *a, **k: lsv.QMessageBox.No)
     assert view.confirm_continue(2) is False
+
+
+def test_store_chips_filter_and_developer_column(qapp, monkeypatch):
+    view = LibrarySyncView()
+    scanned(view, monkeypatch, {"candidates": [
+        {"store": "steam", "external_id": "1", "title": "Hades", "played_hours": 3.0, "developer": None},
+        {"store": "gog", "external_id": "g1", "title": "Prey", "played_hours": None, "developer": "Arkane Studios"},
+        {"store": "gog", "external_id": "g2", "title": "Thief", "played_hours": None, "developer": "Looking Glass"},
+    ], "auto_linked": 0, "errors": []})
+    assert view.store_buttons["gog"].text() == "GOG  2"
+    view.store_buttons["gog"].click()
+    assert titles(view) == ["Prey", "Thief"] and view._store == "gog"
+    view.search_input.setText("arkane")  # busca também pela desenvolvedora
+    assert titles(view) == ["Prey"]
+    prey = next(i for i in view._items() if i.text(0) == "Prey")
+    assert prey.text(2) == "Arkane Studios" and prey.data(1, Qt.UserRole + 1) == "gog"
+    view._toggle_item(prey)
+    assert view.checked_items() == [prey]
+    view._toggle_item(prey)
+    assert view.checked_items() == []
+    view.set_store_filter("amazon")  # loja que não está na lista: volta para "Todas"
+    assert view._store == ""
+
+    scanned(view, monkeypatch, {"candidates": [], "auto_linked": 0, "errors": []})
+    assert view.stack.currentIndex() == 0 and "Nenhum jogo novo" in view.empty_label.text()
+
+
+def test_steam_import_fetches_developer_while_dialog_is_open(qapp, monkeypatch):
+    view = LibrarySyncView()
+    events = []
+
+    class FakeDialog:
+        def __init__(self, data, parent):
+            self.data, self.saved_game, self.is_deleted = data, None, False
+            events.append(("open", data.get("developer")))
+
+        def setWindowTitle(self, text):
+            pass
+
+        def suggest_developer(self, name):
+            events.append(("suggest", name))
+
+        def exec(self):
+            return lsv.QDialog.Rejected
+    monkeypatch.setattr(lsv, "GameDialog", FakeDialog)
+    monkeypatch.setattr(lsv, "run_async", lambda owner, fn, ok, err, *args: ok(fn(*args)))
+    monkeypatch.setattr(lsv.api_client, "library_details", lambda store, ext: events.append(("ask", ext)) or {"developer": "Valve"})
+    view.edit_before_import({"store": "steam", "external_id": "220", "title": "Half-Life 2"}, 1, 1)
+    view.edit_before_import({"store": "gog", "external_id": "g", "title": "Prey", "developer": "Arkane"}, 1, 1)
+    assert events == [("open", None), ("ask", "220"), ("suggest", "Valve"), ("open", "Arkane")]
+
+
+def test_settings_state_and_ignored_placeholder(qapp, monkeypatch):
+    view = LibrarySyncView()
+    view._on_settings_loaded({"steam_api_key_set": True, "steam_id": "1", "heroic_path": ""})
+    assert view.steam_state.text() == "Configurada"
+    view._on_settings_loaded({"steam_api_key_set": False, "steam_id": ""})
+    assert "Falta" in view.steam_state.text()
+    view._on_ignored_loaded([])
+    assert view.ignored_list.count() == 1 and view.ignored_list.item(0).flags() == Qt.NoItemFlags
+    view.ignored_list.selectAll()
+    view.unignore_selected()  # o aviso "Nenhum jogo ignorado" não vira chamada à API

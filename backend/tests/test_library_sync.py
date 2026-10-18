@@ -247,3 +247,72 @@ def test_deleting_game_removes_its_links():
     assert db.query(GameStoreLink).count() == 0
     assert db.query(Game).count() == 0
     db.close()
+
+
+def test_clean_developer_strips_legal_suffixes_and_reuses_known_names():
+    from backend.app.services.library_service import clean_developer
+    known = {"cd projekt red": "CD PROJEKT RED", "drago entertainment": "Drago Entertainment"}
+    assert clean_developer("KRAFTON, Inc.") == "KRAFTON"
+    assert clean_developer("Bethesda Softworks LLC") == "Bethesda Softworks"
+    assert clean_developer("COGNOSPHERE PTE. LTD.") == "COGNOSPHERE"
+    assert clean_developer("Square Enix Co., Ltd.") == "Square Enix"
+    assert clean_developer("Ubisoft Entertainment S.A.S.") == "Ubisoft Entertainment"
+    assert clean_developer("Valve™") == "Valve"
+    assert clean_developer("CD Projekt RED", known) == "CD PROJEKT RED"
+    assert clean_developer("DRAGO Entertainment S.A.", known) == "Drago Entertainment"
+    assert clean_developer("Abbey Games") == "Abbey Games"  # "Games" não é sufixo jurídico
+    assert clean_developer(None) is None and clean_developer("") is None
+
+
+def test_scan_sends_clean_developer_matched_to_existing(monkeypatch):
+    client.post("/api/v1/developers/", json={"name": "Supergiant Games"})
+    register_provider("fake", lambda: FakeProvider([
+        LibraryEntry("fake", "1", "Hades", None, True, "SUPERGIANT GAMES, LLC"),
+        LibraryEntry("fake", "2", "Celeste", None, True, "Maddy Makes Games Inc."),
+        LibraryEntry("fake", "3", "Sem dev", None, True, None)]))
+    devs = {c["title"]: c["developer"] for c in scan()["candidates"]}
+    assert devs == {"Hades": "Supergiant Games", "Celeste": "Maddy Makes Games", "Sem dev": None}
+
+
+def test_game_details_endpoint(monkeypatch):
+    from backend.app.services import library_service as ls
+    use(e("1", "Hades"))
+    client.post("/api/v1/developers/", json={"name": "Supergiant Games"})
+    register_provider("steam", lambda: FakeProvider([]))
+    asked = []
+    monkeypatch.setattr(ls, "fetch_app_developer", lambda appid: asked.append(appid) or "Supergiant Games, LLC")
+    res = client.get("/api/v1/library/details/steam/1145360")
+    assert res.status_code == 200 and res.json() == {"developer": "Supergiant Games"} and asked == ["1145360"]
+    assert client.get("/api/v1/library/details/fake/1").json() == {"developer": None}  # só a Steam precisa disso
+    assert client.get("/api/v1/library/details/nope/1").status_code == 422
+
+
+def test_fetch_app_developer_parses_store_api(monkeypatch):
+    import httpx
+    from backend.app.services.library import steam
+
+    class Res:
+        def __init__(self, status, payload):
+            self.status_code, self._payload = status, payload
+
+        def json(self):
+            if isinstance(self._payload, Exception):
+                raise self._payload
+            return self._payload
+
+    responses = {
+        "10": Res(200, {"10": {"success": True, "data": {"developers": ["Valve "]}}}),
+        "11": Res(200, {"11": {"success": False}}),
+        "12": Res(500, {}),
+        "13": Res(200, ValueError("html")),
+        "14": Res(200, {"14": {"success": True, "data": {"developers": []}}}),
+    }
+
+    def fake_get(url, params, timeout):
+        if params["appids"] == "15":
+            raise httpx.ConnectError("offline")
+        return responses[params["appids"]]
+    monkeypatch.setattr(steam.httpx, "get", fake_get)
+    assert steam.fetch_app_developer("10") == "Valve"
+    assert [steam.fetch_app_developer(a) for a in ("11", "12", "13", "14", "15")] == [None] * 5
+    assert steam.fetch_app_developer("../x") is None  # só ids numéricos

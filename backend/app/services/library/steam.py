@@ -1,6 +1,6 @@
 """Provedor Steam: lista os jogos da conta via Web API oficial (GetOwnedGames)."""
 import logging
-from typing import List
+from typing import List, Optional
 
 import httpx
 
@@ -12,6 +12,25 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 OWNED_GAMES_URL = "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/"
 TIMEOUT = 20.0
+
+
+APP_DETAILS_URL = "https://store.steampowered.com/api/appdetails"
+
+
+def fetch_app_developer(appid: str) -> Optional[str]:
+    """Desenvolvedora de um app pela API pública da loja (sem key). None se não der para saber."""
+    if not appid.isdigit():
+        return None
+    try:
+        res = httpx.get(APP_DETAILS_URL, params={"appids": appid, "l": "brazilian"}, timeout=10.0)
+        data = res.json().get(appid, {}) if res.status_code == 200 else {}
+    except (httpx.HTTPError, ValueError):
+        logging.getLogger(__name__).warning("Falha ao consultar detalhes do app %s na Steam", appid)
+        return None
+    developers = (data.get("data") or {}).get("developers") if data.get("success") else None
+    if isinstance(developers, list) and developers and isinstance(developers[0], str):
+        return developers[0].strip() or None
+    return None
 
 
 class SteamProvider:

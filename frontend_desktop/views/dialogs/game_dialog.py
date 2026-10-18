@@ -516,6 +516,14 @@ class GameDialog(QDialog):
 
         self.update_cover_preview()
 
+    def suggest_developer(self, name) -> None:
+        """Preenche a desenvolvedora vinda da loja, sem sobrescrever o que já está no campo."""
+        if not name or (self.game_data.get("developer") or "").strip():
+            return
+        self.game_data["developer"] = name  # caso as opções ainda estejam carregando
+        if not self.combo_developer.currentText().strip():
+            self.combo_developer.setEditText(name)
+
     def auto_search_cover(self):
         title = self.input_title.text().strip()
         if not title:

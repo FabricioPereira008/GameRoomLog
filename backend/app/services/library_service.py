@@ -7,11 +7,15 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from sqlalchemy.orm import Session
 
+from backend.app.models.developer import Developer
 from backend.app.models.game import Game, GameFormat, GameStatus
 from backend.app.models.platform import Platform
 from backend.app.models.store_link import GameStoreLink, IgnoredStoreGame
-from backend.app.schemas.library import Candidate, ImportItem, LibraryEntryBase, ScanResponse, StoreError
+from backend.app.schemas.library import (
+    Candidate, GameDetails, ImportItem, LibraryEntryBase, ScanResponse, StoreError,
+)
 from backend.app.services.library.base import PROVIDERS, LibraryEntry, LibraryProviderError
+from backend.app.services.library.steam import fetch_app_developer
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +50,32 @@ def normalize_title(title: str) -> str:
     text = text.replace("&", " and ")
     text = re.sub(r"[^a-z0-9]+", " ", text)
     return text.strip()
+
+
+_LEGAL_SUFFIX_RE = re.compile(
+    r"[,\s]+(inc|llc|l\.l\.c|ltd|limited|co\.?,?\s*ltd|pte\.?\s*ltd|pte|corp|corporation|gmbh|s\.?a|s\.?r\.?l|"
+    r"ab|oy|plc|k\.?k|pty\.?\s*ltd|b\.?v|s\.?a\.?s)\.?$",
+    re.IGNORECASE,
+)
+
+
+def clean_developer(name: Optional[str], known: Optional[Dict[str, str]] = None) -> Optional[str]:
+    """Tira ™/®/© e sufixos jurídicos ("KRAFTON, Inc." -> "KRAFTON") e, se o nome já existe no
+    GameRoom (comparando como os títulos), devolve a grafia cadastrada."""
+    if not name:
+        return None
+    text = re.sub(r"[™®©]", "", name).strip()
+    previous = None
+    while previous != text:
+        previous = text
+        text = _LEGAL_SUFFIX_RE.sub("", text).strip(" ,")
+    if not text:
+        return None
+    return (known or {}).get(normalize_title(text), text)
+
+
+def known_developers(db: Session) -> Dict[str, str]:
+    return {normalize_title(name): name for (name,) in db.query(Developer.name)}
 
 
 def looks_like_non_game(title: str) -> bool:
@@ -86,6 +116,7 @@ class LibraryService:
         for game_id, title in db.query(Game.id, Game.title):
             by_title[normalize_title(title)].append(game_id)
 
+        developers = known_developers(db)
         candidates: List[Candidate] = []
         auto_linked = 0
         seen: Set[Tuple[str, str]] = set()
@@ -107,6 +138,7 @@ class LibraryService:
                 title=entry.title[:MAX_TITLE_LEN],
                 played_hours=entry.played_hours,
                 ambiguous=len(matches) > 1,
+                developer=clean_developer(entry.developer, developers),
             ))
         db.commit()
         candidates.sort(key=lambda c: c.title.lower())
@@ -169,6 +201,14 @@ class LibraryService:
         db.commit()
         db.refresh(link)
         return link
+
+    @staticmethod
+    def game_details(db: Session, store: str, external_id: str) -> GameDetails:
+        """Dados extras de um item da loja sob demanda (hoje: a desenvolvedora de apps da Steam)."""
+        if store not in PROVIDERS:
+            raise UnknownStoreError(f"Loja desconhecida: {store}")
+        developer = fetch_app_developer(external_id) if store == "steam" else None
+        return GameDetails(developer=clean_developer(developer, known_developers(db)))
 
     @staticmethod
     def ignore(db: Session, items: Sequence[LibraryEntryBase]) -> int:

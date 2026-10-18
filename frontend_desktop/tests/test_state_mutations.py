@@ -654,3 +654,16 @@ def test_genre_names_dedup_and_limit():
     assert GameDialog.genre_names(["", "Terror"]) == ["Terror"]
     assert GameDialog.genre_names(["A", "B", "C"]) == ["A", "B"]
     assert GameDialog.genre_names([None, ""]) == []
+
+
+def test_suggest_developer_only_fills_empty_field(qapp, monkeypatch):
+    from frontend_desktop.views.dialogs import game_dialog as gd
+    monkeypatch.setattr(gd.GameDialog, "load_options", lambda self: None)
+    empty = gd.GameDialog(game_data={"title": "Half-Life 2"})
+    empty.suggest_developer("Valve")
+    assert empty.combo_developer.currentText() == "Valve" and empty.game_data["developer"] == "Valve"
+    empty.suggest_developer(None)
+    assert empty.combo_developer.currentText() == "Valve"
+    filled = gd.GameDialog(game_data={"title": "Prey", "developer": "Arkane Austin"})
+    filled.suggest_developer("Arkane Studios")
+    assert filled.game_data["developer"] == "Arkane Austin"

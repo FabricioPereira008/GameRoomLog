@@ -26,6 +26,10 @@ def window(qapp, monkeypatch):
     for owner in [w, *w._views.values()]:
         for worker in list(owner.__dict__.get("_workers", ())):
             worker.wait(5000)
+    # Destrói a árvore de widgets agora: deixá-la para o coletor de lixo (em ordem arbitrária,
+    # junto com o lixo de outros testes) derruba o PySide
+    import shiboken6
+    shiboken6.delete(w)
 
 
 def _ids(grid):

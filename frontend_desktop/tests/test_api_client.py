@@ -227,3 +227,9 @@ def test_backup_endpoints(client):
     assert client.list_backups() == {"backups": []}
     assert client.create_backup()["name"] == "gameroom-1.db"
     assert client.restore_backup("gameroom-1.db")["restored"] == "gameroom-1.db"
+
+
+@responses.activate
+def test_library_details(client):
+    responses.add(responses.GET, "http://test-server:8000/api/v1/library/details/steam/220", json={"developer": "Valve"})
+    assert client.library_details("steam", "220") == {"developer": "Valve"}

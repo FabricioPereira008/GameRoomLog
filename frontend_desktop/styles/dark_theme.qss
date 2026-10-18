@@ -362,3 +362,25 @@ QListWidget#backupList { background-color: $surface; border: 1px solid $border; 
 QListWidget#backupList::item { padding: 8px 10px; border-radius: $r_sm; color: $text; }
 QListWidget#backupList::item:selected { background-color: $accent_soft; color: $accent_text; }
 QListWidget#backupList::item:hover { background-color: $surface_2; }
+
+/* ===== Sincronizar lojas ===== */
+QToolButton[class="store-chip"] {
+    background-color: $surface; color: $text_muted; border: 1px solid $border; border-radius: 13px;
+    padding: 5px 12px; font-weight: 600; font-size: $fs_sm;
+}
+QToolButton[class="store-chip"]:hover { color: $text; border-color: $border_strong; }
+QToolButton[class="store-chip"]:checked { background-color: $surface_2; color: $accent_text; border-color: $accent_border; }
+QFrame[class="action-bar"] { background-color: $surface; border: 1px solid $border; border-radius: $r_md; }
+QTreeWidget#syncTree { background-color: $surface; alternate-background-color: $surface_2; border: 1px solid $border; border-radius: $r_md; }
+QTreeWidget#syncTree::item { padding: 4px 6px; border: none; }
+QTreeWidget#syncTree::item:selected { background-color: $accent_soft; color: $text; }
+QTreeWidget#syncTree::indicator { width: 16px; height: 16px; }
+QTreeWidget#syncTree::indicator:unchecked {
+    border: 1px solid $border_strong; border-radius: 4px; background-color: $surface_3;
+}
+QTreeWidget#syncTree::indicator:checked {
+    border: 1px solid $accent; border-radius: 4px; background-color: $accent;
+}
+QListWidget#ignoredList { background-color: $surface; border: 1px solid $border; border-radius: $r_md; padding: 4px; }
+QListWidget#ignoredList::item { padding: 8px 10px; border-radius: $r_sm; }
+QListWidget#ignoredList::item:selected { background-color: $accent_soft; color: $accent_text; }

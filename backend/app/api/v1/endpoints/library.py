@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.schemas.library import (
     IgnoredResponse, IgnoreRequest, ImportRequest, ImportResponse, LibrarySettingsResponse,
-    LibrarySettingsUpdate, LinkRequest, LinkResponse, ScanRequest, ScanResponse,
+    GameDetails, LibrarySettingsUpdate, LinkRequest, LinkResponse, ScanRequest, ScanResponse,
 )
 from backend.app.services.library.settings_store import LibrarySettings, load_settings, save_settings
 from backend.app.services.library_service import (
@@ -18,6 +18,14 @@ router = APIRouter()
 def scan_libraries(payload: ScanRequest, db: Session = Depends(get_db)):
     try:
         return library_service.scan(db, payload.stores, payload.include_all)
+    except UnknownStoreError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/details/{store}/{external_id}", response_model=GameDetails)
+def game_details(store: str, external_id: str, db: Session = Depends(get_db)):
+    try:
+        return library_service.game_details(db, store, external_id)
     except UnknownStoreError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 

@@ -17,6 +17,7 @@ class LibraryEntry:
     title: str
     played_hours: Optional[float] = None
     is_game: bool = True  # False para DLC, ferramentas, trilhas etc. identificados pelo provedor
+    developer: Optional[str] = None  # como a loja informa (pode vir com sufixo jurídico)
 
 
 class LibraryProvider(Protocol):
