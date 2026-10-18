@@ -5,6 +5,15 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [1.1.0] - 2026-10-17
+### Adicionado
+- Importar pela **Sincronização de lojas** agora abre a tela de informações de cada jogo selecionado, já preenchida (título, horas jogadas, PC, Digital, Disponível), para completar os dados antes de salvar. O jogo só é criado ao salvar; cancelar mantém o item na lista e pergunta se deseja continuar com os próximos.
+- Endpoint `POST /api/v1/library/link` para vincular um jogo já cadastrado a um item da loja.
+
+### Modificado
+- Após salvar, o jogo é vinculado à loja e ganha capa automática se nenhuma foi escolhida.
+- A janela de jogo aceita a plataforma pré-preenchida pelo nome.
+
 ## [1.0.0] - 2026-10-17
 ### Adicionado
 - Integração com o app Android **GameRoom Portátil** ([GameRoomApp](https://github.com/FabricioPereira008/GameRoomApp)): registre no portátil o que está jogando, zerou ou platinou e importe no PC.
