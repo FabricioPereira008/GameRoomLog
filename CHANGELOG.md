@@ -5,6 +5,16 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [1.2.0] - 2026-10-17
+### Adicionado
+- Jogos podem ter **dois gêneros**: principal e secundário (opcional), com um novo campo "Gênero secundário" na janela de jogo.
+- Os cards mostram os dois gêneros: o principal em destaque e o secundário com contorno na cor do gênero; o tooltip do card lista os dois nomes completos.
+- O filtro por gênero também encontra jogos pelo gênero secundário.
+
+### Modificado
+- A plataforma passou para a linha de horas e nota do card, mantendo a mesma altura.
+- Migração `0004_genre_position`: a ordem dos gêneros (principal/secundário) é guardada no banco; a API aceita no máximo dois gêneros por jogo e devolve o principal primeiro.
+
 ## [1.1.0] - 2026-10-17
 ### Adicionado
 - Importar pela **Sincronização de lojas** agora abre a tela de informações de cada jogo selecionado, já preenchida (título, horas jogadas, PC, Digital, Disponível), para completar os dados antes de salvar. O jogo só é criado ao salvar; cancelar mantém o item na lista e pergunta se deseja continuar com os próximos.
