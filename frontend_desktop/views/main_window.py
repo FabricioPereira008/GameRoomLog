@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 from app_version import __version__
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMessageBox, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget,
@@ -23,7 +24,8 @@ from frontend_desktop.views.dialogs.quick_search_dialog import QuickSearchDialog
 from frontend_desktop.workers import run_async
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.views import game_status as gs
-from frontend_desktop.views.view_ids import ViewId, VIEW_META
+from frontend_desktop.views.view_ids import NAV_SECTIONS, ViewId, VIEW_META
+from frontend_desktop import preferences
 from frontend_desktop.styles.tokens import COLORS
 from frontend_desktop.ui_helpers import set_button_icon
 
@@ -56,7 +58,7 @@ def fetch_all_data():
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, auto_load: bool = True):
+    def __init__(self, auto_load: bool = True, restore_state: Optional[bool] = None):
         super().__init__()
         self.setWindowTitle("GameRoomLog — Backlog & Anuário Gamer")
         self.resize(1260, 790)
@@ -68,6 +70,8 @@ class MainWindow(QMainWindow):
         self._loading = False
         self._refresh_pending = False
         self.init_ui()
+        if auto_load if restore_state is None else restore_state:
+            self.restore_window_state()
         if auto_load:
             self.refresh_all_data()
 
@@ -334,7 +338,25 @@ class MainWindow(QMainWindow):
     def _on_load_failed(self, message: str):
         self.statusBar().showMessage(f"Erro de conexão com a API: {message}")
 
+    # --- estado da janela (tamanho/posição e última tela) ---
+    RESTORABLE_VIEWS = {int(v) for _section, ids in NAV_SECTIONS for v in ids} | {int(ViewId.SETTINGS)}
+
+    def restore_window_state(self):
+        geometry = preferences.window_geometry()
+        if geometry is not None:
+            self.restoreGeometry(geometry)
+        view = preferences.last_view(int(ViewId.GAME_ROOM))
+        if view in self.RESTORABLE_VIEWS and view != int(ViewId.GAME_ROOM):
+            self.switch_view(view)
+
+    def save_window_state(self):
+        view = int(self.current_view_id)
+        if view not in self.RESTORABLE_VIEWS:  # ex.: detalhe de categoria volta para a lista de origem
+            view = self.previous_nav_index if self.previous_nav_index in self.RESTORABLE_VIEWS else int(ViewId.GAME_ROOM)
+        preferences.save_window_state(self.saveGeometry(), view)
+
     def closeEvent(self, event):
+        self.save_window_state()
         if self._loader is not None and self._loader.isRunning():
             self._loader.wait(5000)
         super().closeEvent(event)

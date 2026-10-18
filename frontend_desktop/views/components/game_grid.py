@@ -1,5 +1,7 @@
 """Grades de jogos baseadas em model/view: cards pintados por delegate, filtro sem recriar widgets."""
 import math
+
+import shiboken6
 from typing import Callable, List, Optional
 
 from PySide6.QtCore import QModelIndex, QSize, Qt, QTimer, Signal
@@ -123,7 +125,7 @@ class GameGrid(QWidget):
         for signal in (self.proxy.rowsInserted, self.proxy.rowsRemoved, self.proxy.modelReset, self.proxy.layoutChanged):
             signal.connect(self._update_empty_state)
         cover_loader.loaded.connect(self._on_cover_loaded)
-        preferences.notifier.card_size_changed.connect(self._on_card_size_changed)
+        preferences.subscribe_card_size(self._on_card_size_changed)
 
     def _on_card_size_changed(self, size: str) -> None:
         if self._fixed_size is None and self.delegate.set_size_mode(size):
@@ -192,11 +194,11 @@ class GameGrid(QWidget):
         return math.ceil(self.proxy.rowCount() / self._columns()) if self.proxy.rowCount() else 0
 
     def _schedule_height_update(self, *args) -> None:
-        QTimer.singleShot(0, self._update_height)
+        QTimer.singleShot(0, self, self._update_height)  # com contexto: cancelado se a grade for destruída
 
     def _update_height(self) -> None:
         """Em modos sem rolagem própria, ajusta a altura da lista ao número de linhas exibidas."""
-        if self.mode == MODE_INFINITE:
+        if self.mode == MODE_INFINITE or not shiboken6.isValid(self.proxy):
             return
         if self.mode == MODE_STRIP:
             has = self.proxy.rowCount() > 0
@@ -266,7 +268,7 @@ class CardSizeSelector(QWidget):
             layout.addWidget(btn)
             btn.clicked.connect(lambda _checked=False, s=size: preferences.set_card_size(s))
         self._sync(preferences.card_size())
-        preferences.notifier.card_size_changed.connect(self._sync)
+        preferences.subscribe_card_size(self._sync)
 
     def _sync(self, size: str) -> None:
         btn = self.buttons.get(size)

@@ -437,3 +437,23 @@ def test_backup_tab_lists_creates_and_restores(qapp, monkeypatch):
     view.load_backups()
     assert view.lbl_backup_status.text() == "Nenhum backup ainda."
     assert sv.SettingsView.describe_backup({"created_at": "x", "reason_label": "Manual", "size_bytes": 0}) == "x   ·   Manual   ·   0 KB"
+
+
+def test_card_size_subscription_is_dropped_with_its_owner(qapp):
+    import shiboken6
+    from PySide6.QtCore import QObject
+
+    class Owner(QObject):
+        def __init__(self):
+            super().__init__()
+            self.seen = []
+
+        def on_size(self, size):
+            self.seen.append(size)
+
+    alive, dead = Owner(), Owner()
+    preferences.subscribe_card_size(alive.on_size)
+    preferences.subscribe_card_size(dead.on_size)
+    shiboken6.delete(dead)  # C++ apagado: a ligação some junto
+    preferences.set_card_size("large")
+    assert alive.seen == ["large"]

@@ -146,7 +146,7 @@ class SettingsView(QWidget):
             rb.clicked.connect(lambda _c=False, s=size: preferences.set_card_size(s))
         self.rb_small, self.rb_medium, self.rb_large = (self.size_buttons[k] for k in ("small", "medium", "large"))
         self._sync_card_size(preferences.card_size())
-        preferences.notifier.card_size_changed.connect(self._sync_card_size)
+        preferences.subscribe_card_size(self._sync_card_size)
         layout.addWidget(size_group)
 
         scope_group, scope_layout = self._group(

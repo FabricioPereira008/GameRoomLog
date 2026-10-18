@@ -203,3 +203,30 @@ def test_delete_selected_game_confirms_and_removes(window, monkeypatch):
     monkeypatch.setattr(mw.QApplication, "focusWidget", staticmethod(lambda: None))
     window.delete_selected_game()  # nada selecionado: não faz nada
     assert deleted == [1]
+
+
+def test_window_state_is_saved_and_restored(window, monkeypatch):
+    from frontend_desktop import preferences
+    from frontend_desktop.views.components import yearbook_view as yv
+    from frontend_desktop.views.view_ids import ViewId
+    monkeypatch.setattr(yv.YearbookView, "load_data", lambda self: None)  # sem rede real
+    preferences.settings().clear()
+    window.switch_view(int(ViewId.YEARBOOK))
+    window.save_window_state()
+    assert preferences.last_view() == int(ViewId.YEARBOOK) and preferences.window_geometry() is not None
+
+    window.stack.setCurrentWidget(window.view_category_detail)  # detalhe: salva a lista de origem
+    window.save_window_state()
+    assert preferences.last_view() == int(ViewId.YEARBOOK)
+
+    window.switch_view(int(ViewId.QUEUE))
+    window.restore_window_state()  # volta para a última tela salva
+    assert window.current_view_id == ViewId.YEARBOOK
+
+    preferences.settings().clear()
+    window.switch_view(int(ViewId.QUEUE))
+    window.restore_window_state()  # nada salvo: não muda de tela
+    assert window.current_view_id == ViewId.QUEUE
+    preferences.settings().setValue("last_view", "lixo")
+    assert preferences.last_view(3) == 3
+    preferences.settings().clear()

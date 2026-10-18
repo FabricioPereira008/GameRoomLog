@@ -1,3 +1,4 @@
+import gc
 import os
 import time
 
@@ -18,9 +19,16 @@ def sample(n):
 
 
 def timed(fn):
-    start = time.perf_counter()
-    fn()
-    return (time.perf_counter() - start) * 1000
+    """Tempo de `fn` em ms. Coleta o lixo antes e pausa o GC durante a medição: uma coleta completa
+    dos objetos Qt criados pelo resto da suíte (~70 ms) não deve ser atribuída ao código medido."""
+    gc.collect()
+    gc.disable()
+    try:
+        start = time.perf_counter()
+        fn()
+        return (time.perf_counter() - start) * 1000
+    finally:
+        gc.enable()
 
 
 def test_loading_600_games_into_grid_is_fast(qapp):
