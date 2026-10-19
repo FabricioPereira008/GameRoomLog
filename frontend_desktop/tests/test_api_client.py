@@ -260,3 +260,23 @@ def test_backup_export_and_import(client, tmp_path):
 def test_library_details(client):
     responses.add(responses.GET, "http://test-server:8000/api/v1/library/details/steam/220", json={"developer": "Valve"})
     assert client.library_details("steam", "220") == {"developer": "Valve"}
+
+
+@responses.activate
+def test_cover_cleanup_endpoints(client):
+    base = "http://test-server:8000/api/v1/uploads/covers"
+    responses.add(responses.GET, f"{base}/orphans", json={"count": 2, "bytes": 10})
+    responses.add(responses.POST, f"{base}/cleanup", json={"removed": 2, "freed_bytes": 10})
+    assert client.orphan_covers() == {"count": 2, "bytes": 10}
+    assert client.cleanup_covers()["removed"] == 2
+
+
+def test_prune_cover_cache_keeps_covers_in_use(tmp_path):
+    cache = tmp_path / "cache"
+    c = ApiClient(base_url="http://test-server:8000/api/v1", cover_cache_dir=cache)
+    assert c.prune_cover_cache({"a.jpg"}) == 0              # cache ainda não existe
+    cache.mkdir()
+    for name in ("a.jpg", "b.jpg", "c.png"):
+        (cache / name).write_bytes(b"x")
+    assert c.prune_cover_cache({"a.jpg", None, ""}) == 2
+    assert [p.name for p in cache.iterdir()] == ["a.jpg"]

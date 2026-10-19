@@ -232,7 +232,68 @@ class SettingsView(QWidget):
         self.lbl_cover_status.setVisible(False)
         batch_layout.addWidget(self.lbl_cover_status)
         layout.addWidget(batch_group)
+
+        cleanup_group, cleanup_layout = self._group(
+            "Capas sem uso",
+            "Capas trocadas ou de jogos excluídos ficam ocupando espaço. A limpeza apaga as que nenhum jogo usa "
+            "(as guardadas nos backups continuam lá) e também esvazia o cache local delas.",
+        )
+        cleanup_row = QHBoxLayout()
+        self.btn_cleanup_covers = QPushButton("Limpar capas sem uso")
+        self.btn_cleanup_covers.setProperty("class", "cancel-btn")
+        self.btn_cleanup_covers.setCursor(Qt.PointingHandCursor)
+        self.btn_cleanup_covers.setEnabled(False)
+        self.btn_cleanup_covers.clicked.connect(self.on_cleanup_covers)
+        cleanup_row.addWidget(self.btn_cleanup_covers)
+        cleanup_row.addStretch()
+        cleanup_layout.addLayout(cleanup_row)
+        self.lbl_cleanup_status = QLabel("")
+        self.lbl_cleanup_status.setWordWrap(True)
+        cleanup_layout.addWidget(self.lbl_cleanup_status)
+        layout.addWidget(cleanup_group)
         return page
+
+    @staticmethod
+    def format_size(size_bytes: int) -> str:
+        mb = (size_bytes or 0) / (1024 * 1024)
+        return f"{mb:,.1f} MB".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    def load_orphan_covers(self):
+        run_async(self, api_client.orphan_covers, self._on_orphans_loaded,
+                  lambda msg: set_status(self.lbl_cleanup_status, "error", f"Não foi possível verificar: {msg}"))
+
+    def _on_orphans_loaded(self, data: dict):
+        count = data.get("count") or 0
+        self.btn_cleanup_covers.setEnabled(count > 0)
+        if count:
+            set_status(self.lbl_cleanup_status, "muted",
+                       f"{count} capa(s) sem uso, ocupando {self.format_size(data.get('bytes'))}.")
+        else:
+            set_status(self.lbl_cleanup_status, "muted", "Nenhuma capa sem uso.")
+
+    def on_cleanup_covers(self):
+        confirm = QMessageBox.question(
+            self, "Limpar capas sem uso", "Apagar as capas que nenhum jogo usa?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        self.btn_cleanup_covers.setEnabled(False)
+        run_async(self, self.cleanup_covers, self._on_covers_cleaned,
+                  lambda msg: set_status(self.lbl_cleanup_status, "error", f"Falha na limpeza: {msg}"))
+
+    @staticmethod
+    def cleanup_covers() -> dict:
+        """Limpa no servidor e depois o cache local (roda fora da thread da interface)."""
+        result = api_client.cleanup_covers()
+        in_use = {g.get("cover_image") for g in api_client.get_games()}
+        result["cache_removed"] = api_client.prune_cover_cache(in_use)
+        return result
+
+    def _on_covers_cleaned(self, result: dict):
+        set_status(self.lbl_cleanup_status, "ok",
+                   f"{result.get('removed', 0)} capa(s) apagada(s), {self.format_size(result.get('freed_bytes'))} "
+                   f"liberados; {result.get('cache_removed', 0)} removida(s) do cache local.")
 
     # --- Backup ---
     def _build_backup_tab(self) -> QWidget:
@@ -286,6 +347,7 @@ class SettingsView(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self.load_backups()
+        self.load_orphan_covers()
 
     def load_backups(self, select: Optional[str] = None):
         run_async(self, api_client.list_backups, lambda data: self._on_backups_loaded(data, select),

@@ -18,6 +18,7 @@ def window(qapp, monkeypatch):
     monkeypatch.setattr(mw.api_client, "get_library_settings", lambda: {"steam_api_key_set": False, "steam_id": "", "heroic_path": ""})
     monkeypatch.setattr(mw.api_client, "inbox_pending", lambda threshold=None: {"total_events": 0, "groups": []})
     monkeypatch.setattr(mw.api_client, "list_backups", lambda: {"folder": None, "max_backups": 10, "backups": []})
+    monkeypatch.setattr(mw.api_client, "orphan_covers", lambda: {"count": 0, "bytes": 0})
     w = MainWindow(auto_load=False)
     w.refresh_all_data_sync()
     yield w

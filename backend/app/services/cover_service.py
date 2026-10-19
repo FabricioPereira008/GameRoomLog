@@ -1,15 +1,19 @@
 """Processamento, armazenamento e busca automática de capas de jogos."""
 import io
 import logging
+import time
 import urllib.parse
 import uuid
-from typing import Optional, Tuple
+from pathlib import Path
+from typing import List, Optional, Tuple
 
 import httpx
 from PIL import Image, ImageFilter
+from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
 from backend.app.core.net_safety import UnsafeURLError, download_public_bytes
+from backend.app.models.game import Game
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +28,9 @@ STEAM_ASSET_HOSTS = (
     "https://steamcdn-a.akamaihd.net/steam/apps",
 )
 STEAM_CDN_FALLBACK = "https://cdn.akamai.steamstatic.com/steam/apps"
+COVER_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+# Capa enviada há pouco pode ainda não ter sido gravada no jogo (diálogo de edição aberto)
+ORPHAN_GRACE_SECONDS = 3600
 
 
 def process_cover_image(img_bytes: bytes) -> Tuple[bytes, str]:
@@ -129,3 +136,53 @@ async def find_cover(title: str, api_key: Optional[str] = None) -> Optional[Tupl
                 return save_cover_bytes(content), source
     return None
 
+
+
+# --- capas sem uso ---
+
+def discard_cover_if_unused(db: Session, filename: Optional[str]) -> bool:
+    """Apaga o arquivo da capa se nenhum jogo a usa mais (chamar depois do commit)."""
+    name = Path(filename or "").name
+    if not name or db.query(Game.id).filter(Game.cover_image == filename).first():
+        return False
+    path = settings.COVERS_DIR / name
+    if not path.is_file():
+        return False
+    try:
+        path.unlink()
+    except OSError:
+        logger.warning("Não foi possível apagar a capa sem uso %s", name)
+        return False
+    return True
+
+
+def orphan_covers(db: Session, grace_seconds: float = ORPHAN_GRACE_SECONDS) -> List[Path]:
+    """Imagens da pasta de capas que nenhum jogo usa (ignora as enviadas há menos de `grace_seconds`)."""
+    folder = settings.COVERS_DIR
+    if not folder.is_dir():
+        return []
+    used = {Path(c).name for (c,) in db.query(Game.cover_image).filter(Game.cover_image.isnot(None))}
+    limit = time.time() - grace_seconds
+    return sorted(
+        p for p in folder.iterdir()
+        if p.is_file() and p.suffix.lower() in COVER_EXTENSIONS and p.name not in used and p.stat().st_mtime < limit
+    )
+
+
+def orphan_covers_summary(db: Session) -> dict:
+    files = orphan_covers(db)
+    return {"count": len(files), "bytes": sum(p.stat().st_size for p in files)}
+
+
+def remove_orphan_covers(db: Session) -> dict:
+    removed, freed = 0, 0
+    for path in orphan_covers(db):
+        try:
+            size = path.stat().st_size
+            path.unlink()
+        except OSError:
+            continue
+        removed, freed = removed + 1, freed + size
+    if removed:
+        logger.info("%d capa(s) sem uso removida(s) (%d bytes)", removed, freed)
+    return {"removed": removed, "freed_bytes": freed}

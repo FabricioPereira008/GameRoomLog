@@ -12,7 +12,9 @@ from backend.app.core.config import settings
 from backend.app.core.database import get_db
 from backend.app.models.game import Game
 from backend.app.core.net_safety import UnsafeURLError, download_public_bytes
-from backend.app.services.cover_service import find_cover, save_cover_bytes
+from backend.app.services.cover_service import (
+    discard_cover_if_unused, find_cover, orphan_covers_summary, remove_orphan_covers, save_cover_bytes,
+)
 
 router = APIRouter()
 
@@ -117,8 +119,10 @@ async def auto_cover_game(
     try:
         res = await auto_search_cover(AutoCoverRequest(title=game.title, api_key=payload.api_key))
         filename = res["filename"]
-        game.cover_image = filename
+        old_cover, game.cover_image = game.cover_image, filename
         db.commit()
+        if old_cover and old_cover != filename:
+            discard_cover_if_unused(db, old_cover)
         return {
             "success": True,
             "game_id": game_id,
@@ -149,3 +153,15 @@ def get_cover(filename: str):
         raise HTTPException(status_code=404, detail="Imagem não encontrada")
     return FileResponse(file_path)
 
+
+
+@router.get("/covers/orphans")
+def get_orphan_covers(db: Session = Depends(get_db)):
+    """Quantas capas da pasta nenhum jogo usa (e quanto espaço ocupam)."""
+    return orphan_covers_summary(db)
+
+
+@router.post("/covers/cleanup")
+def cleanup_orphan_covers(db: Session = Depends(get_db)):
+    """Apaga as capas que nenhum jogo usa (as dos backups continuam guardadas)."""
+    return remove_orphan_covers(db)

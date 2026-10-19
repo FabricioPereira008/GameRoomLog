@@ -497,3 +497,29 @@ def test_card_size_subscription_is_dropped_with_its_owner(qapp):
     shiboken6.delete(dead)  # C++ apagado: a ligação some junto
     preferences.set_card_size("large")
     assert alive.seen == ["large"]
+
+
+def test_covers_tab_cleans_unused_covers(qapp, monkeypatch):
+    from frontend_desktop.views.components import settings_view as sv
+    monkeypatch.setattr(sv, "run_async", lambda owner, fn, ok, err, *args: ok(fn(*args)))
+    calls = []
+    monkeypatch.setattr(sv.api_client, "orphan_covers", lambda: {"count": 3, "bytes": 3 * 1024 * 1024})
+    monkeypatch.setattr(sv.api_client, "cleanup_covers",
+                        lambda: calls.append("cleanup") or {"removed": 3, "freed_bytes": 3 * 1024 * 1024})
+    monkeypatch.setattr(sv.api_client, "get_games", lambda: [{"cover_image": "a.jpg"}, {"cover_image": None}])
+    monkeypatch.setattr(sv.api_client, "prune_cover_cache", lambda keep: calls.append(keep) or 5)
+    view = sv.SettingsView()
+    view.load_orphan_covers()
+    assert view.btn_cleanup_covers.isEnabled() and "3 capa(s) sem uso, ocupando 3,0 MB" in view.lbl_cleanup_status.text()
+
+    monkeypatch.setattr(sv.QMessageBox, "question", lambda *a, **k: sv.QMessageBox.No)
+    view.on_cleanup_covers()
+    assert calls == []
+    monkeypatch.setattr(sv.QMessageBox, "question", lambda *a, **k: sv.QMessageBox.Yes)
+    view.on_cleanup_covers()
+    assert calls == ["cleanup", {"a.jpg", None}]
+    assert "3 capa(s) apagada(s), 3,0 MB liberados; 5 removida(s) do cache local." in view.lbl_cleanup_status.text()
+
+    view._on_orphans_loaded({"count": 0, "bytes": 0})
+    assert not view.btn_cleanup_covers.isEnabled() and view.lbl_cleanup_status.text() == "Nenhuma capa sem uso."
+    assert sv.SettingsView.format_size(1536 * 1024 * 1024) == "1.536,0 MB"

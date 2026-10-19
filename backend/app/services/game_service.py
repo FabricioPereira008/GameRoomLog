@@ -6,6 +6,7 @@ from backend.app.models.game import Game, GameStatus, game_genres
 from backend.app.models.genre import Genre
 from backend.app.models.developer import Developer
 from backend.app.schemas.game import GameCreate, GameUpdate
+from backend.app.services.cover_service import discard_cover_if_unused
 
 class GameService:
     @staticmethod
@@ -148,6 +149,7 @@ class GameService:
 
         update_data = game_in.model_dump(exclude_unset=True)
         genre_ids = update_data.pop("genre_ids", None)
+        old_cover = db_game.cover_image
 
         GameService._sync_developer(db, update_data)
 
@@ -166,6 +168,8 @@ class GameService:
             GameService._set_genres(db, db_game, genre_ids)
 
         db.commit()
+        if old_cover and old_cover != db_game.cover_image:
+            discard_cover_if_unused(db, old_cover)  # capa trocada: o arquivo antigo não serve mais
         db.refresh(db_game)
         return db_game
 
@@ -175,6 +179,8 @@ class GameService:
         db_game = GameService.get_game_by_id(db, game_id)
         if not db_game:
             return False
+        cover = db_game.cover_image
         db.delete(db_game)
         db.commit()
+        discard_cover_if_unused(db, cover)
         return True

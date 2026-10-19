@@ -80,6 +80,28 @@ class ApiClient:
         except Exception:
             return None
 
+    def prune_cover_cache(self, keep) -> int:
+        """Apaga do cache local as capas fora de `keep` (nomes em uso); devolve quantas saíram."""
+        keep_names = {Path(name).name for name in keep if name}
+        cache_dir = self.cover_cache_dir or get_cover_cache_dir()
+        if not cache_dir.is_dir():
+            return 0
+        removed = 0
+        for path in cache_dir.iterdir():
+            if path.is_file() and path.name not in keep_names:
+                try:
+                    path.unlink()
+                    removed += 1
+                except OSError:
+                    pass
+        return removed
+
+    def orphan_covers(self) -> Dict[str, Any]:
+        return self._json("GET", "uploads/covers/orphans")
+
+    def cleanup_covers(self) -> Dict[str, Any]:
+        return self._json("POST", "uploads/covers/cleanup", timeout=IMPORT_TIMEOUT)
+
     # --- JOGOS ---
     def get_games(
         self,
