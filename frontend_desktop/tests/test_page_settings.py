@@ -249,5 +249,10 @@ def test_main_window_opens_maximized_and_f5_only_in_dev(qapp, monkeypatch):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     packaged = main_app.create_main_window(qapp)
     assert not any(s.key().toString() == "F5" for s in packaged.findChildren(main_app.QShortcut))
-    for window in (dev, packaged):
+    import shiboken6
+    for window in (dev, packaged):  # como a fixture `window`: destruir já, não deixar para o coletor de lixo
         window.close()
+        for owner in [window, *window._views.values()]:
+            for worker in list(owner.__dict__.get("_workers", ())):
+                worker.wait(5000)
+        shiboken6.delete(window)

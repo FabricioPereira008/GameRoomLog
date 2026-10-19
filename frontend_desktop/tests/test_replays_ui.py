@@ -1,7 +1,7 @@
 """Rejogadas na GUI: vínculo no GameDialog, filtro, contador do original e revisão da caixa de entrada."""
 import pytest
 
-from frontend_desktop.views.components.filter_panel import PLAYS_REPLAYED, PLAYS_REPLAYS, FilterPanel
+from frontend_desktop.views.components.filter_panel import FilterPanel
 from frontend_desktop.views.dialogs import game_dialog as gd
 from frontend_desktop.views.dialogs.game_dialog_replay import brief_label, describe_plays, replay_group
 
@@ -122,9 +122,7 @@ def test_filter_by_plays(qapp):
     games = [original, replay, unlinked, single]
     shown = lambda: [g["id"] for g in games if panel.matches(g)]
     assert shown() == [1, 2, 3, 4]
-    panel.combo_plays.setCurrentIndex(panel.combo_plays.findData(PLAYS_REPLAYED))
-    assert shown() == [1, 2, 3] and panel.count_active_filters() == 1
-    panel.combo_plays.setCurrentIndex(panel.combo_plays.findData(PLAYS_REPLAYS))
-    assert shown() == [2, 3]
+    panel.chk_replayed.setChecked(True)
+    assert shown() == [1, 2, 3] and panel.count_active_filters() == 1   # original + rejogadas (até sem vínculo)
     panel.clear_filters()
     assert shown() == [1, 2, 3, 4] and panel.count_active_filters() == 0

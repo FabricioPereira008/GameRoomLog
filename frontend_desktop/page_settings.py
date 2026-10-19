@@ -67,7 +67,7 @@ FILTER_FIELDS: Dict[str, str] = {
     "platform": "Plataforma",
     "franchise": "Franquia / Série",
     "hltb": "Tempo HLTB",
-    "plays": "Jogadas",
+    "plays": "Só jogos rejogados",
     "status": "Status",
     "incomplete": "Só jogos com dados faltando",
 }

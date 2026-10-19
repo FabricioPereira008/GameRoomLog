@@ -11,16 +11,15 @@ from frontend_desktop.views import game_status as gs
 
 FIELD_DEBOUNCE_MS = 150
 STATUS_COMPLETED = "__concluidos__"  # opção "Zerados e platinados" do filtro de status
-PLAYS_REPLAYED, PLAYS_REPLAYS = "replayed", "replays"
-PLAYS_OPTIONS = (
-    ("Todas", ""),
-    ("Jogos rejogados", PLAYS_REPLAYED),  # todas as jogadas de quem foi rejogado (inclui a original)
-    ("Só as rejogadas", PLAYS_REPLAYS),
-)
 
 
 def is_replay(game: dict) -> bool:
     return bool(game.get("replay_of_id")) or game.get("play_type") == "Rejogada"
+
+
+def was_replayed(game: dict) -> bool:
+    """Faz parte de um jogo rejogado: é uma rejogada ou o original de alguma."""
+    return is_replay(game) or bool(game.get("replays_count"))
 
 
 class SuggestField(QLineEdit):
@@ -190,15 +189,11 @@ class FilterPanel(QWidget):
         grid.addWidget(self.status_label, 2, 2)
         grid.addWidget(self.combo_status, 2, 3)
 
-        # Linha 3: rejogadas
-        self.plays_label = make_label("Jogadas:")
-        grid.addWidget(self.plays_label, 3, 0)
-        self.combo_plays = QComboBox()
-        self.combo_plays.setProperty("class", "filter-combo")
-        for text, value in PLAYS_OPTIONS:
-            self.combo_plays.addItem(text, value)
-        self.combo_plays.setToolTip("Jogos rejogados mostra todas as jogadas (a original e as rejogadas).")
-        grid.addWidget(self.combo_plays, 3, 1)
+        # Linha 3: rejogados
+        self.chk_replayed = QCheckBox("Só jogos rejogados")
+        self.chk_replayed.setToolTip("Mostra todas as jogadas dos jogos rejogados: a original e as rejogadas.")
+        self.chk_replayed.setCursor(Qt.PointingHandCursor)
+        grid.addWidget(self.chk_replayed, 3, 0, 1, 2)
 
         # Linha 4: só incompletos e Limpar
         self.chk_incomplete = QCheckBox("Só jogos com dados faltando")
@@ -226,7 +221,7 @@ class FilterPanel(QWidget):
         self.combo_hltb_op.currentIndexChanged.connect(self._on_any_change)
         self.spin_hltb.valueChanged.connect(self._on_any_change)
         self.combo_status.currentIndexChanged.connect(self._on_any_change)
-        self.combo_plays.currentIndexChanged.connect(self._on_any_change)
+        self.chk_replayed.toggled.connect(self._on_any_change)
         self.chk_incomplete.toggled.connect(self._on_any_change)
 
         main_layout.addWidget(self.panel_frame)
@@ -255,7 +250,7 @@ class FilterPanel(QWidget):
             return self._fields[kind]
         return {
             "hltb": (self.hltb_label, self.combo_hltb_op, self.spin_hltb),
-            "plays": (self.plays_label, self.combo_plays),
+            "plays": (self.chk_replayed,),
             "status": (self.status_label, self.combo_status),
             "incomplete": (self.chk_incomplete,),
         }[kind]
@@ -276,7 +271,7 @@ class FilterPanel(QWidget):
             return True
         widget, active, reset = {
             "hltb": (self.spin_hltb, self.spin_hltb.value() > 0, lambda: self.spin_hltb.setValue(0)),
-            "plays": (self.combo_plays, self.combo_plays.currentIndex() > 0, lambda: self.combo_plays.setCurrentIndex(0)),
+            "plays": (self.chk_replayed, self.chk_replayed.isChecked(), lambda: self.chk_replayed.setChecked(False)),
             "status": (self.combo_status, self.combo_status.currentIndex() > 0, lambda: self.combo_status.setCurrentIndex(0)),
             "incomplete": (self.chk_incomplete, self.chk_incomplete.isChecked(), lambda: self.chk_incomplete.setChecked(False)),
         }[kind]
@@ -347,7 +342,7 @@ class FilterPanel(QWidget):
             count += 1
         if self.combo_status.currentData():
             count += 1
-        if self.combo_plays.currentData():
+        if self.chk_replayed.isChecked():
             count += 1
         if self.chk_incomplete.isChecked():
             count += 1
@@ -374,7 +369,7 @@ class FilterPanel(QWidget):
             field.blockSignals(False)
         for widget, reset in ((self.spin_hltb, lambda: self.spin_hltb.setValue(0)),
                               (self.combo_status, lambda: self.combo_status.setCurrentIndex(0)),
-                              (self.combo_plays, lambda: self.combo_plays.setCurrentIndex(0)),
+                              (self.chk_replayed, lambda: self.chk_replayed.setChecked(False)),
                               (self.chk_incomplete, lambda: self.chk_incomplete.setChecked(False))):
             widget.blockSignals(True)
             reset()
@@ -390,7 +385,7 @@ class FilterPanel(QWidget):
         op = self.combo_hltb_op.currentText()
         at_least, at_most = "≥" in op, "≤" in op
         status = self.combo_status.currentData() or ""  # escondido = sempre "Todos os status"
-        plays = self.combo_plays.currentData() or ""
+        only_replayed = self.chk_replayed.isChecked()
         only_incomplete = self.chk_incomplete.isChecked()
 
         def name_of(value) -> str:
@@ -413,9 +408,7 @@ class FilterPanel(QWidget):
                 return False
             if status and status != STATUS_COMPLETED and game.get("status") != status:
                 return False
-            if plays == PLAYS_REPLAYS and not is_replay(game):
-                return False
-            if plays == PLAYS_REPLAYED and not (is_replay(game) or game.get("replays_count")):
+            if only_replayed and not was_replayed(game):
                 return False
             if only_incomplete and not is_incomplete(game):
                 return False
