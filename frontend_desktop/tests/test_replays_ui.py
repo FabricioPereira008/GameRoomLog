@@ -3,7 +3,7 @@ import pytest
 
 from frontend_desktop.views.components.filter_panel import PLAYS_REPLAYED, PLAYS_REPLAYS, FilterPanel
 from frontend_desktop.views.dialogs import game_dialog as gd
-from frontend_desktop.views.dialogs.game_dialog import brief_label, describe_plays, replay_group
+from frontend_desktop.views.dialogs.game_dialog_replay import brief_label, describe_plays, replay_group
 
 BRIEFS = [
     {"id": 1, "title": "Hades", "platform": "PC", "status": "Zerado", "play_type": "Primeira Jogada",

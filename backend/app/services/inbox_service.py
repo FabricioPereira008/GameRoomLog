@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session, joinedload
 
 from backend.app.models.game import Game, GameStatus, PlayType
-from backend.app.models.inbox import InboxEvent
+from backend.app.models.inbox import InboxEvent, InboxEventStatus, InboxEventType
 from backend.app.models.platform import Platform
 from backend.app.schemas.inbox import (
     INBOX_VERSION, CatalogGame, CatalogResponse, InboxEventIn, InboxEventOut, InboxGroup,
@@ -31,7 +31,7 @@ DEFAULT_THRESHOLD = 85
 MAX_CANDIDATES = 3
 CONTAINMENT_SIMILARITY = 90  # "Hollow Knight" contido em "Hollow Knight Voidheart Edition"
 
-PENDING, APPLIED, DISCARDED = "pending", "applied", "discarded"
+PENDING, APPLIED, DISCARDED = InboxEventStatus.PENDING, InboxEventStatus.APPLIED, InboxEventStatus.DISCARDED
 
 # Campos que um evento pode alterar, na ordem em que aparecem na revisão
 TRACKED_FIELDS = (
@@ -129,12 +129,12 @@ def _simulate(current: Optional[Game], events: Sequence[InboxEvent]) -> Tuple[Di
     for index, ev in enumerate(sorted(events, key=_event_sort_key)):
         d = ev.event_date
         completed = state["status"] in _COMPLETED
-        if ev.event_type == "playing":
+        if ev.event_type == InboxEventType.PLAYING:
             if completed:
                 in_replay = True
                 state["play_type"] = PlayType.REJOGADA
             state["status"] = GameStatus.JOGANDO
-        elif ev.event_type == "finished":
+        elif ev.event_type == InboxEventType.FINISHED:
             if completed and state["finish_date"] and state["finish_date"] != d:
                 in_replay = True
             if in_replay:
@@ -144,7 +144,7 @@ def _simulate(current: Optional[Game], events: Sequence[InboxEvent]) -> Tuple[Di
                 state["finish_date"] = d
             state["status"] = GameStatus.PLATINADO if state["platinum_date"] else GameStatus.ZERADO
             completed_in_batch = True
-        elif ev.event_type == "platinum":
+        elif ev.event_type == InboxEventType.PLATINUM:
             if (state["platinum_date"] and state["platinum_date"] != d
                     and state["status"] == GameStatus.PLATINADO and not completed_in_batch):
                 in_replay = True

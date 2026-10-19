@@ -1,108 +1,30 @@
+"""Diálogo de criação/edição de jogo. A capa e o vínculo de rejogada ficam em mixins próprios."""
 import logging
-import os
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QFrame, QLineEdit, QComboBox,
-    QSpinBox, QDoubleSpinBox, QDateEdit, QTextEdit, QPushButton, QLabel, QFileDialog,
+    QSpinBox, QDoubleSpinBox, QTextEdit, QPushButton, QLabel,
     QCheckBox, QMessageBox, QScrollArea, QWidget, QInputDialog, QCompleter
 )
-from PySide6.QtCore import Qt, QDate, QSettings
+from PySide6.QtCore import Qt, QDate
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.workers import run_async
 from frontend_desktop.cover_loader import cover_loader
 from frontend_desktop.styles.tokens import COLORS
-from frontend_desktop.text_search import fold
 from frontend_desktop.ui_helpers import set_button_icon, set_status
+from frontend_desktop.views.dialogs.game_dialog_cover import COVER_PREVIEW_SIZE, NO_COVER_TEXT, CoverMixin  # noqa: F401
+from frontend_desktop.views.dialogs.game_dialog_replay import (  # noqa: F401  (reexportados)
+    ReplayLinkMixin, brief_label, describe_plays, replay_group,
+)
+from frontend_desktop.views.dialogs.optional_date_edit import OptionalDateEdit
 
 
 logger = logging.getLogger(__name__)
 
-COVER_PREVIEW_SIZE = (160, 240)
 STATUSES = ["Disponível", "Fila", "Próximo", "Jogando", "Zerado", "Platinado", "Lista de Desejos"]
 FORMATS = ["Digital", "Físico", "Emulado"]
 
 
-NO_COVER_TEXT = "Nenhuma imagem selecionada"
-
-
-def brief_label(brief: dict) -> str:
-    """Rótulo de um jogo na escolha do original: "Hades (PC, 2020)"."""
-    extra = [x for x in (brief.get("platform"), brief.get("completion_year")) if x]
-    return f"{brief['title']} ({', '.join(str(x) for x in extra)})" if extra else brief["title"]
-
-
-def replay_group(briefs: list, game_id, replay_of_id) -> list:
-    """Jogadas do mesmo jogo (o original e as rejogadas vinculadas), da mais antiga para a mais recente."""
-    root = replay_of_id or game_id
-    if root is None:
-        return []
-    return sorted((b for b in briefs if b["id"] == root or b.get("replay_of_id") == root), key=lambda b: b["id"])
-
-
-def describe_plays(group: list, current_id=None) -> str:
-    """ "1ª: 2020 · Zerado · nota 9  |  2ª (esta): Jogando" """
-    parts = []
-    for number, play in enumerate(group, start=1):
-        details = [str(play["completion_year"])] if play.get("completion_year") else []
-        details.append(play.get("status") or "")
-        if play.get("score") is not None:
-            details.append(f"nota {play['score']:g}")
-        mark = " (esta)" if play["id"] == current_id else ""
-        parts.append(f"{number}ª{mark}: {' · '.join(d for d in details if d)}")
-    return "  |  ".join(parts)
-
-
-class OptionalDateEdit(QDateEdit):
-    """Campo de data que começa vazio ("Selecione a data") e só assume um valor quando o usuário interage."""
-    BLANK = QDate(1970, 1, 1)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setCalendarPopup(True)
-        self.setDisplayFormat("dd/MM/yyyy")
-        self.setMinimumDate(self.BLANK)
-        self.setSpecialValueText("Selecione a data")
-        self.setDate(self.BLANK)
-
-    def is_blank(self) -> bool:
-        return self.date() == self.BLANK
-
-    def date_or_none(self):
-        return None if self.is_blank() else self.date()
-
-    def set_optional_date(self, value) -> None:
-        self.setDate(value if value is not None and value.isValid() else self.BLANK)
-
-    def _start_today(self) -> bool:
-        if self.is_blank():
-            self.setDate(QDate.currentDate())
-            return True
-        return False
-
-    def mousePressEvent(self, event):
-        # o calendário abre no mês atual, não em 1970; o clique que preenche não conta como passo das setas
-        self._skip_step = self._start_today()
-        super().mousePressEvent(event)
-        self._skip_step = False
-
-    def stepBy(self, steps):
-        if getattr(self, "_skip_step", False) or self._start_today():
-            return
-        super().stepBy(steps)
-
-    def wheelEvent(self, event):
-        if self.is_blank():
-            event.ignore()  # rolar a página não deve preencher a data sem querer
-            return
-        super().wheelEvent(event)
-
-    def keyPressEvent(self, event):
-        if event.key() in (Qt.Key_Delete, Qt.Key_Backspace):
-            self.setDate(self.BLANK)
-            return
-        super().keyPressEvent(event)
-
-
-class GameDialog(QDialog):
+class GameDialog(CoverMixin, ReplayLinkMixin, QDialog):
     def __init__(self, game_data: dict = None, parent=None):
         super().__init__(parent)
         self.game_data = game_data or {}
@@ -351,45 +273,6 @@ class GameDialog(QDialog):
         grid.addWidget(self.chk_favorite, 3, 0)
         return card
 
-    def _build_cover_card(self) -> QFrame:
-        """Capa: preview, busca automática, link, arquivo local e recorte."""
-        card, grid = self._card("Capa")
-        card.setFixedWidth(210)
-
-        self.lbl_cover_preview = QLabel("Sem\ncapa")
-        self.lbl_cover_preview.setFixedSize(*COVER_PREVIEW_SIZE)
-        self.lbl_cover_preview.setProperty("class", "cover-preview")
-        self.lbl_cover_preview.setAlignment(Qt.AlignCenter)
-        grid.addWidget(self.lbl_cover_preview, 0, 0, 1, 2, Qt.AlignHCenter)
-
-        self.lbl_cover_status = QLabel("" if self.cover_filename else NO_COVER_TEXT)
-        self.lbl_cover_status.setProperty("class", "status-muted")
-        self.lbl_cover_status.setWordWrap(True)
-        grid.addWidget(self.lbl_cover_status, 1, 0, 1, 2)
-
-        self.btn_auto_cover = QPushButton("Buscar automático")
-        set_button_icon(self.btn_auto_cover, "wand-sparkles")
-        self.btn_auto_cover.setToolTip("Pesquisa e baixa a capa automaticamente pelo título do jogo")
-        self.btn_auto_cover.clicked.connect(self.auto_search_cover)
-
-        self.btn_url_cover = QPushButton("Link / URL…")
-        set_button_icon(self.btn_url_cover, "link")
-        self.btn_url_cover.clicked.connect(self.choose_cover_url)
-
-        self.btn_select_cover = QPushButton("Arquivo…")
-        set_button_icon(self.btn_select_cover, "folder-open")
-        self.btn_select_cover.clicked.connect(self.choose_cover_image)
-
-        self.btn_edit_cover = QPushButton("Ajustar recorte")
-        set_button_icon(self.btn_edit_cover, "crop")
-        self.btn_edit_cover.setVisible(False)
-        self.btn_edit_cover.clicked.connect(self.open_image_cropper)
-
-        for row, btn in enumerate((self.btn_auto_cover, self.btn_url_cover, self.btn_select_cover, self.btn_edit_cover), 2):
-            btn.setProperty("class", "small-btn")
-            grid.addWidget(btn, row, 0, 1, 2)
-        return card
-
     def _build_notes_card(self) -> QFrame:
         card, grid = self._card("Anotações")
         self.input_notes = QTextEdit()
@@ -436,71 +319,6 @@ class GameDialog(QDialog):
             self.load_briefs()
             if self._briefs is not None and self.combo_replay_of.currentIndex() < 0:
                 self._suggest_original()
-
-    # --- vínculo de rejogada ---
-    def load_briefs(self):
-        if self._briefs is not None or self._briefs_loading:
-            return
-        self._briefs_loading = True
-        run_async(self, api_client.get_game_briefs, self.apply_briefs, self._on_briefs_failed)
-
-    def _on_briefs_failed(self, message: str):
-        self._briefs_loading = False
-        logger.warning("Não foi possível carregar a lista de jogos para o vínculo de rejogada: %s", message)
-
-    def apply_briefs(self, briefs: list):
-        """Preenche a escolha do original (só registros que não são rejogadas) e o histórico de jogadas."""
-        self._briefs_loading = False
-        self._briefs = briefs
-        own_id = self.game_data.get("id")
-        originals = [b for b in briefs if b.get("replay_of_id") is None and b["id"] != own_id]
-        self.combo_replay_of.blockSignals(True)
-        self.combo_replay_of.clear()
-        for brief in originals:
-            self.combo_replay_of.addItem(brief_label(brief), brief["id"])
-        completer = QCompleter([brief_label(b) for b in originals], self)
-        completer.setCaseSensitivity(Qt.CaseInsensitive)
-        completer.setFilterMode(Qt.MatchContains)
-        self.combo_replay_of.setCompleter(completer)
-        self.combo_replay_of.setCurrentIndex(self.combo_replay_of.findData(self.game_data.get("replay_of_id")))
-        self.combo_replay_of.blockSignals(False)
-        if self.chk_replay.isChecked() and self.combo_replay_of.currentIndex() < 0:
-            self._suggest_original()
-        self._update_plays_label()
-
-    def _suggest_original(self):
-        """Rejogada nova: pré-seleciona o registro com o mesmo título (ignorando acentos e maiúsculas)."""
-        title = fold(self.input_title.text().strip())
-        if not title:
-            return
-        for i in range(self.combo_replay_of.count()):
-            brief = next(b for b in self._briefs if b["id"] == self.combo_replay_of.itemData(i))
-            if fold(brief["title"]) == title:
-                self.combo_replay_of.setCurrentIndex(i)
-                return
-
-    def _on_replay_of_changed(self, *_):
-        root = self.combo_replay_of.currentData()
-        if root is not None and not self.is_edit and self._briefs is not None:
-            plays = len(replay_group(self._briefs, None, root))
-            self.spin_play_count.setValue(max(2, plays + 1))  # próxima jogada do grupo
-        self._update_plays_label()
-
-    def selected_replay_of(self):
-        """id do original escolhido; sem a lista carregada, mantém o vínculo que o jogo já tinha."""
-        if self.combo_replay_of.count() == 0:
-            return self.game_data.get("replay_of_id")
-        index = self.combo_replay_of.findText(self.combo_replay_of.currentText().strip(), Qt.MatchFixedString)
-        return self.combo_replay_of.itemData(index) if index >= 0 else None
-
-    def _update_plays_label(self):
-        if self._briefs is None:
-            return
-        own_id = self.game_data.get("id")
-        root = self.combo_replay_of.currentData() if self.chk_replay.isChecked() else None
-        group = replay_group(self._briefs, own_id, root)
-        self.lbl_plays.setText(f"Jogadas deste jogo — {describe_plays(group, own_id)}" if len(group) > 1 else "")
-        self.lbl_plays.setVisible(len(group) > 1)
 
     def _wait_workers(self):
         for w in list(self.__dict__.get("_workers", ())):
@@ -636,107 +454,6 @@ class GameDialog(QDialog):
         self.game_data["developer"] = name  # caso as opções ainda estejam carregando
         if not self.combo_developer.currentText().strip():
             self.combo_developer.setEditText(name)
-
-    def auto_search_cover(self):
-        title = self.input_title.text().strip()
-        if not title:
-            QMessageBox.warning(self, "Aviso", "Digite o título do jogo antes de buscar a capa.")
-            return
-
-        self.btn_auto_cover.setEnabled(False)
-        self.btn_auto_cover.setText("Buscando...")
-        set_status(self.lbl_cover_status, "muted", "Pesquisando nos repositórios...")
-
-        sgdb_key = QSettings("GameRoom", "GameRoomLog").value("steamgriddb_key", "")
-        run_async(
-            self, api_client.auto_search_cover,
-            lambda filename: self._on_auto_cover_done(title, filename),
-            lambda _msg: self._on_auto_cover_done(title, None),
-            title, api_key=sgdb_key if sgdb_key else None,
-        )
-
-    def _on_auto_cover_done(self, title: str, filename):
-        self.btn_auto_cover.setEnabled(True)
-        self.btn_auto_cover.setText("Buscar automático")
-
-        if filename:
-            self.cover_filename = filename
-            set_status(self.lbl_cover_status, "ok", f"Capa baixada com sucesso: {filename[:12]}...")
-            self.update_cover_preview()
-        else:
-            set_status(self.lbl_cover_status, "error", "Capa não encontrada automaticamente.")
-            QMessageBox.warning(
-                self, "Não Encontrado",
-                f"Não foi possível encontrar automaticamente uma capa para '{title}'.\nVocê pode colar o link direto da imagem pelo botão 'Link / URL'."
-            )
-
-    def choose_cover_image(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Selecionar Imagem de Capa", "", "Imagens (*.png *.jpg *.jpeg *.webp)"
-        )
-        if file_path:
-            filename = api_client.upload_cover(file_path)
-            if filename:
-                self.cover_filename = filename
-                set_status(self.lbl_cover_status, "ok", f"Imagem: {filename[:12]}...")
-                self.update_cover_preview()
-                self.open_image_cropper()
-            else:
-                QMessageBox.warning(self, "Erro", "Não foi possível enviar a imagem.")
-
-    def choose_cover_url(self):
-        url, ok = QInputDialog.getText(self, "Importar Capa por URL", "Cole o link/URL da imagem:")
-        if ok and url.strip():
-            filename = api_client.upload_cover_url(url.strip())
-            if filename:
-                self.cover_filename = filename
-                set_status(self.lbl_cover_status, "ok", f"Baixado: {filename[:12]}...")
-                self.update_cover_preview()
-                self.open_image_cropper()
-            else:
-                QMessageBox.warning(self, "Erro", "Não foi possível baixar a imagem do link fornecido.")
-
-    def update_cover_preview(self):
-        """Mostra a capa atual; o download/escala acontece em background (cover_loader)."""
-        if not self.cover_filename:
-            return
-        if self.lbl_cover_status.text() == NO_COVER_TEXT:
-            self.lbl_cover_status.setText("")
-        pixmap = cover_loader.request(self.cover_filename, *COVER_PREVIEW_SIZE)
-        if pixmap is not None:
-            self.lbl_cover_preview.setPixmap(pixmap)
-            self.btn_edit_cover.setVisible(True)
-
-    def _on_cover_loaded(self, filename: str):
-        if filename == self.cover_filename:
-            self.update_cover_preview()
-
-    def open_image_cropper(self):
-        if not self.cover_filename:
-            return
-            
-        storage_path = api_client.get_cover_path(self.cover_filename)
-        if not storage_path:
-            return
-
-
-        from frontend_desktop.views.dialogs.image_cropper_dialog import ImageCropperDialog
-        
-        dialog = ImageCropperDialog(storage_path, self)
-        if dialog.exec() == QDialog.Accepted and dialog.cropped_filepath:
-            # Upload da imagem cortada para o servidor substituir a antiga logicamente
-            crop_filename = api_client.upload_cover(dialog.cropped_filepath)
-            if crop_filename:
-                self.cover_filename = crop_filename
-                self.update_cover_preview()
-                set_status(self.lbl_cover_status, "ok", f"Recorte salvo: {crop_filename[:12]}...")
-                
-                # Cleanup: deletar temp file local se quiser
-                try:
-                    os.remove(dialog.cropped_filepath)
-                except OSError:
-                    pass
-
 
     def add_new_platform(self):
         name, ok = QInputDialog.getText(self, "Nova Plataforma", "Nome da plataforma:")

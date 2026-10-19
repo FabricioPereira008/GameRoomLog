@@ -499,3 +499,13 @@ def test_catalog_lists_each_group_of_plays_once(db):
     add_game(db, "Celeste")
     games = client.get("/api/v1/inbox/catalog").json()["games"]
     assert [(g["title"], g["id"]) for g in games] == [("Celeste", games[0]["id"]), ("Hades", latest.id)]
+
+
+def test_status_and_type_are_stored_as_plain_text(db):
+    from sqlalchemy import text
+    post(ev("a", "finished", "Celeste"))
+    event_id = pending()["groups"][0]["events"][0]["id"]
+    assert db.execute(text("select status, event_type from inbox_events")).one() == ("pending", "finished")
+    client.post("/api/v1/inbox/resolve", json={"event_ids": [event_id], "action": "applied", "game_id": None})
+    db.expire_all()
+    assert db.execute(text("select status from inbox_events")).scalar() == "applied"
