@@ -430,12 +430,29 @@ class MainWindow(QMainWindow):
 
     def apply_game_deletion(self, game_id: int):
         """Remove o jogo in-place de todas as views sem recarregar telas."""
+        deleted = next((g for g in self.all_games if g.get("id") == game_id), {})
+        if deleted.get("replays_count"):
+            # Era o original de rejogadas: o servidor promoveu outra jogada e religou as demais
+            self.refresh_all_data()
+            return
         self.all_games = [g for g in self.all_games if g.get("id") != game_id]
+        self._refresh_replay_originals({deleted.get("replay_of_id")})
         self.view_game_room.remove_game(game_id)
         for _, grid in self._list_grids():
             grid.remove_game(game_id)
         self.view_table.remove_game(game_id)
         self.statusBar().showMessage(f"Jogo removido com sucesso. Total: {len(self.all_games)}")
+
+    def _refresh_replay_originals(self, game_ids) -> None:
+        """Rejogada ligada/desligada/excluída: atualiza o contador de rejogadas dos registros originais."""
+        for original_id in {i for i in game_ids if i}:
+            original = next((g for g in self.all_games if g.get("id") == original_id), None)
+            if original is None:
+                continue
+            run_async(self, api_client.get_game,
+                      lambda game, status=original.get("status"): self.apply_game_mutation(game, old_status=status),
+                      lambda msg: logger.warning("Falha ao atualizar o original da rejogada: %s", msg),
+                      original_id)
 
     def _list_grids(self):
         """Pares (chave da lista, grid) alimentados por status; ver game_status.LIST_STATUSES."""
@@ -452,6 +469,9 @@ class MainWindow(QMainWindow):
         game_id = saved_game.get("id")
         new_status = saved_game.get("status")
         title = saved_game.get("title")
+        previous = {} if is_new else next((g for g in self.all_games if g.get("id") == game_id), {})
+        if previous.get("replay_of_id") != saved_game.get("replay_of_id"):
+            self._refresh_replay_originals({previous.get("replay_of_id"), saved_game.get("replay_of_id")})
 
         if is_new:
             self.all_games.insert(0, saved_game)

@@ -20,3 +20,18 @@ def qapp():
     if app is None:
         app = QApplication(sys.argv)
     yield app
+
+
+@pytest.fixture(autouse=True)
+def _no_real_backend(monkeypatch):
+    """O singleton `api_client` nunca fala com um backend de verdade (o app pode estar aberto em :8000).
+
+    Chamadas não simuladas falham na hora, como com a API offline; testes do ApiClient usam
+    instâncias próprias com `responses`.
+    """
+    import requests
+    from frontend_desktop.api_client.client import api_client
+
+    def offline(*_args, **_kwargs):
+        raise requests.ConnectionError("rede desligada nos testes")
+    monkeypatch.setattr(api_client._session, "request", offline)

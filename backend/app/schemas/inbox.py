@@ -80,6 +80,8 @@ class MatchCandidate(BaseModel):
     platform_matches: bool
     current: Dict[str, Any]  # valores atuais dos campos que mudariam
     changes: Dict[str, Any]  # valores propostos (só os que mudam)
+    # Rejogada de um jogo já concluído: jogo a criar, vinculado ao original (changes vale para o atual)
+    replay: Optional[Dict[str, Any]] = None
 
 
 class InboxGroup(BaseModel):

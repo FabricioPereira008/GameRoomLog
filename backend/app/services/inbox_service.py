@@ -4,6 +4,11 @@ O app manda eventos (jogando/zerado/platinado) com título e plataforma em texto
 agrupados por jogo, casados com o catálogo por semelhança e convertidos numa proposta que o
 usuário revisa. Nada é aplicado ao jogo por este serviço: a GUI grava pelo endpoint de jogos e
 depois marca os eventos como resolvidos.
+
+Rejogada é um registro novo vinculado ao original (`replay_of_id`): quando os eventos indicam
+que um jogo já concluído foi jogado de novo, a proposta traz `replay` (o jogo a criar) em vez de
+sobrescrever o registro antigo. Um grupo de jogadas é tratado como um jogo só, representado pela
+jogada mais recente.
 """
 import difflib
 import re
@@ -95,6 +100,15 @@ def propose_state(current: Optional[Game], events: Sequence[InboxEvent]) -> Dict
     - Um jogo com platinum_date continua Platinado ao ser zerado de novo.
     - Horas, nota e dificuldade: vale o último valor informado. Observações são acrescentadas.
     """
+    return _simulate(current, events)[0]
+
+
+def replay_start(current: Optional[Game], events: Sequence[InboxEvent]) -> Optional[int]:
+    """Posição (nos eventos em ordem cronológica) em que começa uma rejogada; None se não houver."""
+    return _simulate(current, events)[1]
+
+
+def _simulate(current: Optional[Game], events: Sequence[InboxEvent]) -> Tuple[Dict[str, Any], Optional[int]]:
     if current is not None:
         state = {f: getattr(current, f) for f in TRACKED_FIELDS}
     else:
@@ -104,6 +118,8 @@ def propose_state(current: Optional[Game], events: Sequence[InboxEvent]) -> Dict
 
     in_replay = False
     completed_in_batch = False
+    start: Optional[int] = None  # evento que abriu a 1ª rejogada (Jogando, ou zerou/platinou de novo)
+    plays_before = state["play_count"]
 
     def close_replay():
         nonlocal in_replay
@@ -111,7 +127,7 @@ def propose_state(current: Optional[Game], events: Sequence[InboxEvent]) -> Dict
         state["play_type"] = PlayType.REJOGADA
         in_replay = False
 
-    for ev in sorted(events, key=_event_sort_key):
+    for index, ev in enumerate(sorted(events, key=_event_sort_key)):
         d = ev.event_date
         completed = state["status"] in _COMPLETED
         if ev.event_type == "playing":
@@ -141,6 +157,8 @@ def propose_state(current: Optional[Game], events: Sequence[InboxEvent]) -> Dict
             state["platinum_date"] = d
             state["status"] = GameStatus.PLATINADO
             completed_in_batch = True
+        if start is None and (in_replay or state["play_count"] > plays_before):
+            start = index
 
         for field in ("played_hours", "score", "difficulty"):
             if getattr(ev, field) is not None:
@@ -150,11 +168,35 @@ def propose_state(current: Optional[Game], events: Sequence[InboxEvent]) -> Dict
             existing = state["notes"] or ""
             if line not in existing:
                 state["notes"] = f"{existing}\n{line}" if existing else line
-    return state
+    return state, start
 
 
 def _serialize(state: Dict[str, Any]) -> Dict[str, Any]:
     return {k: (v.isoformat() if isinstance(v, date) else _value(v)) for k, v in state.items()}
+
+
+# Campos copiados do registro original para a nova jogada (o resto vem dos eventos)
+REPLAY_COPIED_FIELDS = ("title", "platform_id", "developer", "developer_id", "franchise_id", "format",
+                        "hltb_hours", "cover_image")
+
+
+def replay_payload(original: Game, events: Sequence[InboxEvent], root_id: int, plays: int) -> Dict[str, Any]:
+    """Jogo a criar para a rejogada: dados do original + estado dos eventos, vinculado ao 1º registro."""
+    payload = {f: _value(getattr(original, f)) for f in REPLAY_COPIED_FIELDS if getattr(original, f) is not None}
+    payload["genre_ids"] = [g.id for g in original.genres]
+    payload.update({k: v for k, v in _serialize(propose_state(None, events)).items() if v is not None})
+    payload.update(play_type=PlayType.REJOGADA.value, play_count=plays + 1, replay_of_id=root_id)
+    return payload
+
+
+def replay_groups(games: Iterable[Game]) -> Dict[int, List[Game]]:
+    """id do registro original -> jogadas do grupo, da mais antiga para a mais recente."""
+    groups: Dict[int, List[Game]] = defaultdict(list)
+    for g in games:
+        groups[g.replay_of_id or g.id].append(g)
+    for members in groups.values():
+        members.sort(key=lambda g: g.id)
+    return groups
 
 
 def diff_state(current: Game, proposed: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
@@ -224,14 +266,23 @@ class InboxService:
 
     @staticmethod
     def _candidate(game: Game, score: int, platform_match: Optional[PlatformMatch],
-                   events: Sequence[InboxEvent]) -> MatchCandidate:
-        current, changes = diff_state(game, propose_state(game, events))
+                   events: Sequence[InboxEvent], group: Optional[Sequence[Game]] = None) -> MatchCandidate:
+        """`game` deve ser a jogada mais recente do grupo (`group`: todas as jogadas, da 1ª à última)."""
+        group = list(group or [game])
+        ordered = sorted(events, key=_event_sort_key)
+        start = replay_start(game, ordered)
+        replay = None
+        if start is not None:  # o que veio antes da rejogada ainda vale para este registro
+            replay = replay_payload(game, ordered[start:], group[0].id, len(group))
+            ordered = ordered[:start]
+        current, changes = diff_state(game, propose_state(game, ordered))
         platform_ok = bool(platform_match and platform_match.platform_id
                            and platform_match.platform_id == game.platform_id)
         return MatchCandidate(
             game_id=game.id, title=game.title, platform=game.platform.name if game.platform else None,
             status=_value(game.status), cover_image=game.cover_image, similarity=score,
             platform_matches=platform_ok or platform_match is None, current=current, changes=changes,
+            replay=replay,
         )
 
     @staticmethod
@@ -240,9 +291,13 @@ class InboxService:
         if not events:
             return InboxPendingResponse(total_events=0, groups=[])
 
-        games = db.query(Game).options(joinedload(Game.platform)).all()
+        games = db.query(Game).options(joinedload(Game.platform), joinedload(Game.genres)).all()
         by_id = {g.id: g for g in games}
-        game_keys = [(g, match_key(g.title)) for g in games]
+        groups_by_root = replay_groups(games)
+        group_of = {g.id: groups_by_root[g.replay_of_id or g.id] for g in games}
+        # Cada grupo de jogadas aparece uma vez, pela jogada mais recente
+        heads = [members[-1] for members in groups_by_root.values()]
+        game_keys = [(g, match_key(g.title)) for g in heads]
         platforms = db.query(Platform).all()
 
         grouped: Dict[str, List[InboxEvent]] = defaultdict(list)
@@ -260,14 +315,14 @@ class InboxService:
             plat = InboxService._match_platform(latest.platform, platforms, threshold)
 
             if key.startswith("id:"):
-                game = by_id[int(key[3:])]
-                candidates = [InboxService._candidate(game, 100, plat, evs)]
+                group = group_of[int(key[3:])]
+                candidates = [InboxService._candidate(group[-1], 100, plat, evs, group)]
                 match = "exact"
             else:
                 tkey = match_key(latest.title)
                 scored = [(similarity(tkey, gk), g) for g, gk in game_keys]
                 scored = [(s, g) for s, g in scored if s >= threshold]
-                candidates = [InboxService._candidate(g, s, plat, evs) for s, g in scored]
+                candidates = [InboxService._candidate(g, s, plat, evs, group_of[g.id]) for s, g in scored]
                 candidates.sort(key=lambda c: (c.similarity, c.platform_matches), reverse=True)
                 candidates = candidates[:MAX_CANDIDATES]
                 exact = [c for c in candidates if c.similarity == 100]
@@ -301,13 +356,16 @@ class InboxService:
         events = db.query(InboxEvent).filter(InboxEvent.id.in_(list(event_ids))).all()
         if not events:
             raise InboxEventNotFoundError("Nenhum evento encontrado")
-        game = db.query(Game).options(joinedload(Game.platform)).filter(Game.id == game_id).first()
+        game = db.query(Game).filter(Game.id == game_id).first()
         if game is None:
             raise InboxEventNotFoundError("Jogo não encontrado")
+        root_id = game.replay_of_id or game.id
+        group = (db.query(Game).options(joinedload(Game.platform), joinedload(Game.genres))
+                 .filter((Game.id == root_id) | (Game.replay_of_id == root_id)).order_by(Game.id).all())
         latest = max(events, key=_event_sort_key)
         plat = InboxService._match_platform(latest.platform, db.query(Platform).all(), threshold)
-        score = similarity(match_key(latest.title), match_key(game.title))
-        return InboxService._candidate(game, score, plat, events)
+        score = similarity(match_key(latest.title), match_key(group[-1].title))
+        return InboxService._candidate(group[-1], score, plat, events, group)
 
     @staticmethod
     def resolve(db: Session, event_ids: Iterable[int], action: str, game_id: Optional[int] = None) -> int:
@@ -330,6 +388,8 @@ class InboxService:
     @staticmethod
     def catalog(db: Session) -> CatalogResponse:
         games = db.query(Game).options(joinedload(Game.platform)).order_by(Game.title).all()
+        # Um item por grupo de jogadas (a mais recente), para o app não listar o mesmo jogo várias vezes
+        games = sorted((members[-1] for members in replay_groups(games).values()), key=lambda g: (g.title, g.id))
         platforms = [p.name for p in db.query(Platform).order_by(Platform.name)]
         return CatalogResponse(
             exported_at=datetime.now(timezone.utc),

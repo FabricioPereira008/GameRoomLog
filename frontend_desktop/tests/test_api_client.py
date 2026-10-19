@@ -280,3 +280,9 @@ def test_prune_cover_cache_keeps_covers_in_use(tmp_path):
         (cache / name).write_bytes(b"x")
     assert c.prune_cover_cache({"a.jpg", None, ""}) == 2
     assert [p.name for p in cache.iterdir()] == ["a.jpg"]
+
+
+@responses.activate
+def test_get_game_briefs(client):
+    responses.add(responses.GET, "http://test-server:8000/api/v1/games/brief", json=[{"id": 1, "title": "Hades"}])
+    assert client.get_game_briefs() == [{"id": 1, "title": "Hades"}]

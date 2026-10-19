@@ -69,6 +69,9 @@ class Game(Base):
     # Metadados adicionais
     play_type = Column(SQLEnum(PlayType), default=PlayType.PRIMEIRA_JOGADA, nullable=False)
     play_count = Column(Integer, default=1, nullable=False)
+    # Rejogada = novo registro; aponta sempre para o registro original (a 1ª jogada)
+    replay_of_id = Column(Integer, ForeignKey("games.id", ondelete="SET NULL"),
+                          nullable=True, index=True)
     format = Column(SQLEnum(GameFormat), default=GameFormat.DIGITAL, nullable=False)
 
 
@@ -85,3 +88,6 @@ class Game(Base):
     genres = relationship("Genre", secondary=game_genres, back_populates="games",
                           order_by=(game_genres.c.position, game_genres.c.genre_id))
     store_links = relationship("GameStoreLink", back_populates="game", cascade="all, delete-orphan")
+
+    # Calculado pelo GameService (não é coluna): quantas rejogadas apontam para este registro
+    replays_count = 0

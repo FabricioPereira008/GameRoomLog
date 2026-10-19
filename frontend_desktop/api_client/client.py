@@ -134,6 +134,10 @@ class ApiClient:
 
         return self._json("GET", "games/", params=params)
 
+    def get_game_briefs(self) -> List[Dict[str, Any]]:
+        """Todos os jogos em formato resumido (id, título, plataforma, status, vínculo de rejogada...)."""
+        return self._json("GET", "games/brief")
+
     def get_game(self, game_id: int) -> Dict[str, Any]:
         return self._json("GET", f"games/{game_id}")
 

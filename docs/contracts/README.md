@@ -22,6 +22,11 @@ O GameRoom e o app Android (`GameRoomApp`, repositório separado) só se conhece
 - `date`: dia do evento (`YYYY-MM-DD`); se ausente, vale a data de `created_at`.
 - `played_hours` é o **total** acumulado, não o tempo da sessão.
 - `score` e `difficulty` vão de 0 a 10.
+- Rejogadas: no GameRoom cada jogada é um registro próprio, vinculado ao original. Um `playing` (ou um novo `finished`/`platinum`) num jogo já concluído vira, na revisão, a proposta de um registro novo de rejogada; o app não precisa fazer nada diferente.
+
+## Semântica do `gameroom-catalog`
+
+- Cada jogo aparece **uma vez**, mesmo que tenha rejogadas: o item representa a jogada mais recente (é o `game_id` que o app deve mandar). Um `game_id` de outra jogada do mesmo jogo continua aceito e é levado para a mais recente.
 
 ## Entrega
 

@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.models.game import GameStatus
-from backend.app.schemas.game import GameCreate, GameUpdate, GameResponse
-from backend.app.services.game_service import GameService
+from backend.app.schemas.game import GameBrief, GameCreate, GameUpdate, GameResponse
+from backend.app.services.game_service import GameService, ReplayLinkError
 
 router = APIRouter()
 
@@ -32,9 +32,17 @@ def list_games(
         sort_by=sort_by
     )
 
+@router.get("/brief", response_model=List[GameBrief])
+def list_game_briefs(db: Session = Depends(get_db)):
+    """Todos os jogos em formato resumido (escolha do jogo original de uma rejogada, histórico de jogadas)."""
+    return GameService.get_briefs(db)
+
 @router.post("/", response_model=GameResponse, status_code=status.HTTP_201_CREATED)
 def create_game(game_in: GameCreate, db: Session = Depends(get_db)):
-    return GameService.create_game(db=db, game_in=game_in)
+    try:
+        return GameService.create_game(db=db, game_in=game_in)
+    except ReplayLinkError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 @router.get("/{game_id}", response_model=GameResponse)
 def get_game(game_id: int, db: Session = Depends(get_db)):
@@ -45,7 +53,10 @@ def get_game(game_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{game_id}", response_model=GameResponse)
 def update_game(game_id: int, game_in: GameUpdate, db: Session = Depends(get_db)):
-    game = GameService.update_game(db=db, game_id=game_id, game_in=game_in)
+    try:
+        game = GameService.update_game(db=db, game_id=game_id, game_in=game_in)
+    except ReplayLinkError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     if not game:
         raise HTTPException(status_code=404, detail="Jogo não encontrado")
     return game

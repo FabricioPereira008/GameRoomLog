@@ -73,6 +73,27 @@ def apply_to_existing(game_id: int, changes: dict, event_ids: List[int]) -> dict
     return {"game": game, "old_status": old.get("status")}
 
 
+def apply_replay(game_id: int, changes: dict, replay: dict, event_ids: List[int]) -> dict:
+    """Cria o registro da rejogada (o antigo só recebe o que veio antes dela) e marca os eventos."""
+    old = api_client.get_game(game_id)
+    updated = api_client.update_game(game_id, changes) if changes else None
+    game = api_client.create_game(replay)
+    api_client.inbox_resolve(event_ids, "applied", game["id"])
+    return {"game": game, "updated": updated, "old_status": old.get("status")}
+
+
+# Campos do registro antigo que não passam para a rejogada (o resto vem da proposta)
+_NOT_COPIED_TO_REPLAY = {"id", "created_at", "updated_at", "replays_count", "completion_year",
+                         "finish_date", "platinum_date", "played_hours", "score", "difficulty", "notes", "status"}
+
+
+def replay_dialog_data(original: dict, replay: dict) -> dict:
+    """Dados para abrir o GameDialog da rejogada: o jogo original (gêneros, série...) + a proposta."""
+    data = {k: v for k, v in original.items() if k not in _NOT_COPIED_TO_REPLAY}
+    data.update({k: v for k, v in replay.items() if k not in ("platform_id", "developer_id", "franchise_id", "genre_ids")})
+    return data
+
+
 def resolve_saved(game: dict, event_ids: List[int], is_new: bool, cover_key: str = "") -> dict:
     """Marca os eventos de um jogo salvo pelo GameDialog; jogos novos ganham capa automática."""
     api_client.inbox_resolve(event_ids, "applied", game["id"])
@@ -347,25 +368,35 @@ class InboxReviewDialog(QDialog):
         cand = None if is_new or group is None else next(
             (c for c in group["candidates"] if c["game_id"] == button_id), None)
         self.diff_table.setRowCount(0)
+        replay = cand.get("replay") if cand is not None else None
         if is_new and group is not None:
-            rows = [(f, None, group["new_game"].get(f)) for f in FIELD_LABELS if group["new_game"].get(f) is not None]
+            rows = [(FIELD_LABELS[f], f, None, group["new_game"].get(f))
+                    for f in FIELD_LABELS if group["new_game"].get(f) is not None]
         elif cand is not None:
-            rows = [(f, cand["current"].get(f), cand["changes"][f]) for f in FIELD_LABELS if f in cand["changes"]]
+            rows = [(FIELD_LABELS[f], f, cand["current"].get(f), cand["changes"][f])
+                    for f in FIELD_LABELS if f in cand["changes"]]
+            if replay:  # a rejogada é um registro novo: "Atual" fica vazio
+                rows.append(("Rejogada", None, None, f"Novo registro ({replay.get('play_count')}ª jogada)"))
+                rows += [(f"{FIELD_LABELS[f]} (rejogada)", f, None, replay[f])
+                         for f in FIELD_LABELS if f not in ("play_type", "play_count") and replay.get(f) is not None]
         else:
             rows = []
-        for field, old, new in rows:
+        for label, field, old, new in rows:
             r = self.diff_table.rowCount()
             self.diff_table.insertRow(r)
-            self.diff_table.setItem(r, 0, QTableWidgetItem(FIELD_LABELS[field]))
-            self.diff_table.setItem(r, 1, QTableWidgetItem(format_value(field, old)))
-            self.diff_table.setItem(r, 2, QTableWidgetItem(format_value(field, new)))
+            self.diff_table.setItem(r, 0, QTableWidgetItem(label))
+            self.diff_table.setItem(r, 1, QTableWidgetItem(format_value(field, old) if field else ""))
+            self.diff_table.setItem(r, 2, QTableWidgetItem(format_value(field, new) if field else str(new)))
         self.diff_table.resizeRowsToContents()
 
-        self.btn_apply.setText("Criar jogo..." if is_new else "Aplicar")
+        self.btn_apply.setText("Criar jogo..." if is_new else "Criar rejogada" if replay else "Aplicar")
         self.btn_apply.setEnabled(not self._busy and (is_new or cand is not None))
         self.btn_edit.setVisible(not is_new)
         self.btn_edit.setEnabled(not self._busy and cand is not None)
-        if cand is not None and not cand["changes"]:
+        if replay:
+            set_status(self.lbl_status, "ok", "Jogo já concluído jogado de novo: a rejogada vira um registro novo, "
+                                              "vinculado a este; o registro antigo continua como está.")
+        elif cand is not None and not cand["changes"]:
             set_status(self.lbl_status, "ok", "Nada muda neste jogo; aplicar só marca os eventos como revisados.")
         else:
             self.lbl_status.setText("")
@@ -422,8 +453,21 @@ class InboxReviewDialog(QDialog):
         if cand is None:
             return
         self._set_busy(True)
+        if cand.get("replay"):
+            run_async(self, apply_replay, lambda res: self._on_replay_applied(group, res), self._on_failed,
+                      cand["game_id"], cand["changes"], cand["replay"], self._event_ids(group))
+            return
         run_async(self, apply_to_existing, lambda res: self._on_applied(group, res), self._on_failed,
                   cand["game_id"], cand["changes"], self._event_ids(group))
+
+    def _on_replay_applied(self, group: dict, result: dict):
+        self.applied_count += 1
+        if result.get("updated"):
+            self.game_saved.emit(result["updated"], False, result["old_status"])
+        self.game_saved.emit(result["game"], True, None)
+        if self.current_group is group:
+            self._remove_current(f"Rejogada de “{result['game']['title']}” criada.")
+        self._set_busy(False)
 
     def _on_applied(self, group: dict, result: dict):
         self.applied_count += 1
@@ -442,6 +486,16 @@ class InboxReviewDialog(QDialog):
 
     def _open_edit_dialog(self, group: dict, cand: dict, game: dict):
         self._set_busy(False)
+        if cand.get("replay"):
+            dialog = GameDialog(replay_dialog_data(game, cand["replay"]), self)
+            if dialog.exec() != QDialog.Accepted or not dialog.saved_game:
+                return
+            if cand["changes"]:  # o que veio antes da rejogada ainda vale para o registro antigo
+                run_async(self, api_client.update_game,
+                          lambda updated: self.game_saved.emit(updated, False, game.get("status")),
+                          self._on_failed, game["id"], cand["changes"])
+            self._finish_with_dialog(group, dialog.saved_game, is_new=True, old_status=None)
+            return
         dialog = GameDialog({**game, **cand["changes"]}, self)
         if dialog.exec() != QDialog.Accepted or not dialog.saved_game or dialog.is_deleted:
             return

@@ -24,6 +24,7 @@ class GameBase(BaseModel):
     completion_year: Optional[int] = None
     play_type: PlayType = PlayType.PRIMEIRA_JOGADA
     play_count: int = Field(default=1, ge=1)
+    replay_of_id: Optional[int] = None  # registro original desta rejogada
     format: GameFormat = GameFormat.DIGITAL
     is_favorite: bool = False
     notes: Optional[str] = None
@@ -51,6 +52,7 @@ class GameUpdate(BaseModel):
     completion_year: Optional[int] = None
     play_type: Optional[PlayType] = None
     play_count: Optional[int] = Field(default=None, ge=1)
+    replay_of_id: Optional[int] = None
     format: Optional[GameFormat] = None
     is_favorite: Optional[bool] = None
     notes: Optional[str] = None
@@ -71,5 +73,20 @@ class GameResponse(GameBase):
     franchise: Optional[FranchiseResponse] = None
     developer_rel: Optional[DeveloperResponse] = None
     genres: List[GenreResponse] = []
+    replays_count: int = 0  # no registro original: quantas rejogadas estão vinculadas a ele
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class GameBrief(BaseModel):
+    """Resumo leve de um jogo (listas de escolha e histórico de jogadas)."""
+    id: int
+    title: str
+    status: GameStatus
+    platform: Optional[str] = None
+    play_type: PlayType
+    play_count: int = 1
+    replay_of_id: Optional[int] = None
+    finish_date: Optional[date] = None
+    completion_year: Optional[int] = None
+    score: Optional[float] = None

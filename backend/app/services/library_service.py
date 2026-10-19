@@ -113,7 +113,8 @@ class LibraryService:
             (s, e) for s, e in db.query(IgnoredStoreGame.store, IgnoredStoreGame.external_id)
         }
         by_title: Dict[str, List[int]] = defaultdict(list)
-        for game_id, title in db.query(Game.id, Game.title):
+        # Rejogadas vinculadas não contam como outro jogo: a loja se liga ao registro original
+        for game_id, title in db.query(Game.id, Game.title).filter(Game.replay_of_id.is_(None)):
             by_title[normalize_title(title)].append(game_id)
 
         developers = known_developers(db)

@@ -235,3 +235,34 @@ def test_window_state_is_saved_and_restored(window, monkeypatch):
     preferences.settings().setValue("last_view", "lixo")
     assert preferences.last_view(3) == 3
     preferences.settings().clear()
+
+
+def _sync(monkeypatch):
+    from frontend_desktop.views import main_window as mw
+    monkeypatch.setattr(mw, "run_async", lambda owner, fn, ok, err=None, *a: ok(fn(*a)))
+    return mw
+
+
+def test_linking_a_replay_refreshes_the_original_counter(window, monkeypatch):
+    mw = _sync(monkeypatch)
+    fetched = []
+    monkeypatch.setattr(mw.api_client, "get_game",
+                        lambda gid: fetched.append(gid) or {**_game(gid, "Zerado"), "replays_count": 1})
+    window.apply_game_mutation({**_game(10, "Jogando"), "replay_of_id": 2}, is_new=True)
+    assert fetched == [2]
+    assert next(g for g in window.all_games if g["id"] == 2)["replays_count"] == 1
+    window.apply_game_mutation({**_game(10, "Jogando"), "replay_of_id": 2}, old_status="Jogando")
+    assert fetched == [2]                                    # vínculo igual: nada a atualizar
+
+
+def test_deleting_replays_updates_or_reloads(window, monkeypatch):
+    mw = _sync(monkeypatch)
+    fetched, reloads = [], []
+    monkeypatch.setattr(mw.api_client, "get_game", lambda gid: fetched.append(gid) or _game(gid, "Zerado"))
+    window.all_games.append({**_game(10, "Jogando"), "replay_of_id": 2})
+    window.apply_game_deletion(10)
+    assert fetched == [2] and all(g["id"] != 10 for g in window.all_games)
+    monkeypatch.setattr(window, "refresh_all_data", lambda: reloads.append(True))
+    window.all_games[1]["replays_count"] = 2               # jogo 2 é original de rejogadas
+    window.apply_game_deletion(2)
+    assert reloads == [True]

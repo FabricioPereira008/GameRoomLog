@@ -352,3 +352,61 @@ def test_settings_review_forwards_saved_games(settings_view, monkeypatch):
 def test_threshold_spin_persists_setting(settings_view):
     settings_view.spin_inbox_threshold.setValue(92)
     assert settings_view.inbox_threshold == 92
+
+
+# --- rejogada como novo registro ---
+
+def replay_candidate(changes=None):
+    cand = candidate(7, changes=changes if changes is not None else {})
+    cand["status"] = "Zerado"
+    cand["replay"] = {"title": "Hollow Knight", "platform_id": 3, "status": "Jogando", "played_hours": 5.0,
+                      "play_type": "Rejogada", "play_count": 2, "replay_of_id": 7, "genre_ids": [1]}
+    return cand
+
+
+def test_replay_candidate_shows_new_record_and_creates_it(qapp, api, monkeypatch):
+    calls, state = api
+    created = []
+    monkeypatch.setattr(ird.api_client, "create_game",
+                        lambda data: created.append(data) or {"id": 70, **data})
+    dialog = make_dialog(state, group("exact", candidates=[replay_candidate()]))
+    labels = [dialog.diff_table.item(r, 0).text() for r in range(dialog.diff_table.rowCount())]
+    assert labels[0] == "Rejogada" and "Status (rejogada)" in labels
+    assert dialog.diff_table.item(0, 2).text() == "Novo registro (2ª jogada)"
+    assert dialog.btn_apply.text() == "Criar rejogada" and "registro novo" in dialog.lbl_status.text()
+    saved = []
+    dialog.game_saved.connect(lambda game, is_new, old: saved.append((game["id"], is_new)))
+    dialog.apply_current()
+    assert created[0]["replay_of_id"] == 7 and calls["update"] == []      # o registro antigo não muda
+    assert calls["resolve"] == [([1], "applied", 70)] and saved == [(70, True)]
+
+
+def test_replay_applies_earlier_events_to_the_original(qapp, api, monkeypatch):
+    calls, state = api
+    monkeypatch.setattr(ird.api_client, "create_game", lambda data: {"id": 70, **data})
+    dialog = make_dialog(state, group("exact", candidates=[replay_candidate({"status": "Platinado"})]))
+    saved = []
+    dialog.game_saved.connect(lambda game, is_new, old: saved.append((game["id"], is_new)))
+    dialog.apply_current()
+    assert calls["update"] == [(7, {"status": "Platinado"})] and saved == [(7, False), (70, True)]
+
+
+def test_edit_replay_opens_new_game_dialog_with_original_data(qapp, api, fake_dialog, monkeypatch):
+    calls, state = api
+    monkeypatch.setattr(ird.api_client, "get_game", lambda gid: {
+        "id": gid, "title": "Hollow Knight", "status": "Zerado", "finish_date": "2020-01-01", "score": 9,
+        "genres": [{"id": 1, "name": "Metroidvania"}], "platform": {"id": 3, "name": "Nintendo Switch"}})
+    dialog = make_dialog(state, group("exact", candidates=[replay_candidate({"status": "Platinado"})]))
+    dialog.edit_and_apply()
+    data = fake_dialog.opened[0]
+    assert "id" not in data and data["replay_of_id"] == 7 and data["status"] == "Jogando"
+    assert "finish_date" not in data and "score" not in data           # eram da jogada antiga
+    assert data["genres"] == [{"id": 1, "name": "Metroidvania"}] and data["platform"]["id"] == 3
+    assert calls["update"] == [(7, {"status": "Platinado"})]
+    assert calls["resolve"] == [([1], "applied", 50)]
+
+
+def test_replay_dialog_data_helper():
+    data = ird.replay_dialog_data({"id": 1, "title": "A", "notes": "antiga", "replays_count": 2},
+                                  {"title": "A", "status": "Jogando", "platform_id": 3, "replay_of_id": 1})
+    assert data == {"title": "A", "status": "Jogando", "replay_of_id": 1}

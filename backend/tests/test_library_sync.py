@@ -217,6 +217,16 @@ def test_ambiguous_title_is_listed_and_not_linked():
     assert data["candidates"][0]["ambiguous"] is True
 
 
+def test_linked_replays_do_not_make_the_title_ambiguous():
+    original = client.post("/api/v1/games/", json={"title": "Hades", "status": "Zerado"}).json()
+    client.post("/api/v1/games/", json={"title": "Hades", "replay_of_id": original["id"]})
+    use(e("9", "Hades"))
+    assert scan()["auto_linked"] == 1
+    db = TestingSessionLocal()
+    assert db.query(GameStoreLink).filter_by(external_id="9").one().game_id == original["id"]
+    db.close()
+
+
 def test_ignore_flow():
     use(e("1", "Hades"), e("2", "Zelda"))
     item = {"store": "fake", "external_id": "1", "title": "Hades"}

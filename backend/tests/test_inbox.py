@@ -404,3 +404,97 @@ def test_proposal_404s(db):
     ids = [e["id"] for e in pending()["groups"][0]["events"]]
     assert client.post("/api/v1/inbox/proposal", json={"event_ids": ids, "game_id": 999}).status_code == 404
     assert client.post("/api/v1/inbox/proposal", json={"event_ids": [999], "game_id": game.id}).status_code == 404
+
+
+# --- rejogadas como novo registro vinculado ---
+
+def _finished_game(db, title="Hades", **kw):
+    from backend.app.models.genre import Genre
+    genre = Genre(name="Roguelike")
+    db.add(genre)
+    db.flush()
+    game = add_game(db, title, "PC", status=GameStatus.ZERADO, finish_date=date(2023, 1, 1),
+                    play_type=PlayType.PRIMEIRA_JOGADA, play_count=1, developer="Supergiant",
+                    cover_image="hades.jpg", **kw)
+    game.genres = [genre]
+    db.commit()
+    return game
+
+
+def test_playing_a_finished_game_proposes_a_linked_replay(db):
+    game = _finished_game(db)
+    post(ev("a", "playing", "Hades", "PC", day="2026-10-01", played_hours=3))
+    cand = pending()["groups"][0]["candidates"][0]
+    assert cand["game_id"] == game.id and cand["changes"] == {}  # o registro antigo fica intacto
+    replay = cand["replay"]
+    assert replay["replay_of_id"] == game.id and replay["play_type"] == "Rejogada" and replay["play_count"] == 2
+    assert replay["status"] == "Jogando" and replay["played_hours"] == 3.0
+    assert replay["title"] == "Hades" and replay["platform_id"] == game.platform_id
+    assert replay["developer"] == "Supergiant" and replay["cover_image"] == "hades.jpg"
+    assert replay["genre_ids"] == [g.id for g in game.genres]
+    assert "finish_date" not in replay
+
+
+def test_finishing_again_with_new_date_proposes_finished_replay(db):
+    game = _finished_game(db)
+    post(ev("a", "finished", "Hades", "PC", day="2026-10-12", score=10))
+    cand = pending()["groups"][0]["candidates"][0]
+    assert cand["changes"] == {}
+    assert cand["replay"]["status"] == "Zerado" and cand["replay"]["finish_date"] == "2026-10-12"
+    assert cand["replay"]["score"] == 10.0
+
+
+def test_events_before_the_replay_still_update_the_original(db):
+    game = _finished_game(db)
+    post(ev("a", "platinum", "Hades", "PC", day="2026-01-05"), ev("b", "playing", "Hades", "PC", day="2026-10-01"))
+    cand = pending()["groups"][0]["candidates"][0]
+    assert cand["changes"]["status"] == "Platinado" and cand["changes"]["platinum_date"] == "2026-01-05"
+    assert cand["replay"]["status"] == "Jogando"
+
+
+def test_replay_in_progress_receives_the_next_events(db):
+    original = _finished_game(db)
+    current = add_game(db, "Hades", "PC", status=GameStatus.JOGANDO, play_type=PlayType.REJOGADA,
+                       play_count=2, replay_of_id=original.id)
+    post(ev("a", "finished", "Hades", "PC", day="2026-10-20"))
+    group = pending()["groups"][0]
+    assert group["match"] == "exact" and len(group["candidates"]) == 1  # o grupo conta como um jogo só
+    cand = group["candidates"][0]
+    assert cand["game_id"] == current.id and cand["replay"] is None
+    assert cand["changes"] == {"status": "Zerado", "finish_date": "2026-10-20"}
+
+
+def test_catalog_game_id_of_the_original_goes_to_the_latest_play(db):
+    original = _finished_game(db)
+    current = add_game(db, "Hades", "PC", status=GameStatus.JOGANDO, play_type=PlayType.REJOGADA,
+                       play_count=2, replay_of_id=original.id)
+    post(ev("a", "finished", "Hades", "PC", day="2026-10-20", game_id=original.id))
+    assert pending()["groups"][0]["candidates"][0]["game_id"] == current.id
+
+
+def test_third_play_links_to_the_first_record(db):
+    original = _finished_game(db)
+    add_game(db, "Hades", "PC", status=GameStatus.ZERADO, finish_date=date(2024, 6, 1),
+             play_type=PlayType.REJOGADA, play_count=2, replay_of_id=original.id)
+    post(ev("a", "playing", "Hades", "PC", day="2026-10-01"))
+    replay = pending()["groups"][0]["candidates"][0]["replay"]
+    assert replay["replay_of_id"] == original.id and replay["play_count"] == 3
+
+
+def test_manual_proposal_uses_the_latest_play(db):
+    original = _finished_game(db)
+    current = add_game(db, "Hades", "PC", status=GameStatus.JOGANDO, play_type=PlayType.REJOGADA,
+                       play_count=2, replay_of_id=original.id)
+    post(ev("a", "finished", "Outro nome", day="2026-10-20"))
+    ids = [e["id"] for e in pending()["groups"][0]["events"]]
+    r = client.post("/api/v1/inbox/proposal", json={"event_ids": ids, "game_id": original.id})
+    assert r.status_code == 200 and r.json()["game_id"] == current.id and r.json()["replay"] is None
+
+
+def test_catalog_lists_each_group_of_plays_once(db):
+    original = _finished_game(db)
+    latest = add_game(db, "Hades", "PC", status=GameStatus.JOGANDO, play_type=PlayType.REJOGADA,
+                      play_count=2, replay_of_id=original.id)
+    add_game(db, "Celeste")
+    games = client.get("/api/v1/inbox/catalog").json()["games"]
+    assert [(g["title"], g["id"]) for g in games] == [("Celeste", games[0]["id"]), ("Hades", latest.id)]

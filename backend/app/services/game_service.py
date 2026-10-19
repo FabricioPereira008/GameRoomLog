@@ -1,14 +1,75 @@
 from typing import List, Optional
 from datetime import date
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, desc, asc, update
-from backend.app.models.game import Game, GameStatus, game_genres
+from sqlalchemy import or_, desc, asc, update, func
+from backend.app.models.game import Game, GameStatus, PlayType, game_genres
 from backend.app.models.genre import Genre
 from backend.app.models.developer import Developer
 from backend.app.schemas.game import GameCreate, GameUpdate
 from backend.app.services.cover_service import discard_cover_if_unused
 
+MAX_REPLAY_DEPTH = 50  # proteção contra ciclos em dados antigos/corrompidos
+
+
+class ReplayLinkError(Exception):
+    """Vínculo de rejogada inválido (vira 422 na API)."""
+
+
 class GameService:
+    @staticmethod
+    def attach_replay_counts(db: Session, games: List[Game]) -> List[Game]:
+        """Preenche `replays_count` (rejogadas vinculadas a cada registro) com uma única consulta."""
+        if not games:
+            return games
+        query = db.query(Game.replay_of_id, func.count(Game.id)).filter(Game.replay_of_id.isnot(None))
+        if len(games) <= 500:
+            query = query.filter(Game.replay_of_id.in_([g.id for g in games]))
+        counts = dict(query.group_by(Game.replay_of_id).all())
+        for game in games:
+            game.replays_count = counts.get(game.id, 0)
+        return games
+
+    @staticmethod
+    def replay_root(db: Session, game: Game) -> Game:
+        """Registro original (1ª jogada) do grupo de jogadas de `game`."""
+        current = game
+        for _ in range(MAX_REPLAY_DEPTH):
+            if current.replay_of_id is None:
+                return current
+            parent = db.get(Game, current.replay_of_id)
+            if parent is None:
+                return current
+            current = parent
+        return current
+
+    @staticmethod
+    def _link_replay(db: Session, data: dict, game_id: Optional[int] = None) -> None:
+        """Valida `replay_of_id` e o aponta para o registro original; rejogada vinculada é sempre Rejogada."""
+        target_id = data.get("replay_of_id")
+        if target_id is None:
+            if data.get("play_type") == PlayType.PRIMEIRA_JOGADA:
+                data["replay_of_id"] = None  # deixou de ser rejogada: desfaz o vínculo
+            return
+        if target_id == game_id:
+            raise ReplayLinkError("Um jogo não pode ser rejogada de si mesmo")
+        target = db.get(Game, target_id)
+        if target is None:
+            raise ReplayLinkError("Jogo original não encontrado")
+        root = GameService.replay_root(db, target)
+        if game_id is not None and root.id == game_id:
+            raise ReplayLinkError("Este jogo já é o original desse grupo de jogadas")
+        data["replay_of_id"] = root.id
+        data["play_type"] = PlayType.REJOGADA
+
+    @staticmethod
+    def get_briefs(db: Session) -> List[dict]:
+        rows = db.query(Game).options(joinedload(Game.platform)).order_by(asc(Game.title), asc(Game.id)).all()
+        return [{
+            "id": g.id, "title": g.title, "status": g.status, "platform": g.platform.name if g.platform else None,
+            "play_type": g.play_type, "play_count": g.play_count, "replay_of_id": g.replay_of_id,
+            "finish_date": g.finish_date, "completion_year": g.completion_year, "score": g.score,
+        } for g in rows]
+
     @staticmethod
     def get_games(
         db: Session,
@@ -64,16 +125,19 @@ class GameService:
         else:
             query = query.order_by(asc(Game.title))
 
-        return query.all()
+        return GameService.attach_replay_counts(db, query.all())
 
     @staticmethod
     def get_game_by_id(db: Session, game_id: int) -> Optional[Game]:
-        return db.query(Game).options(
+        game = db.query(Game).options(
             joinedload(Game.platform),
             joinedload(Game.franchise),
             joinedload(Game.developer_rel),
             joinedload(Game.genres)
         ).filter(Game.id == game_id).first()
+        if game is not None:
+            GameService.attach_replay_counts(db, [game])
+        return game
 
     @staticmethod
     def _sync_developer(db: Session, data: dict) -> None:
@@ -120,8 +184,9 @@ class GameService:
     @staticmethod
     def create_game(db: Session, game_in: GameCreate) -> Game:
         data = game_in.model_dump(exclude={"genre_ids"})
-        
+
         GameService._sync_developer(db, data)
+        GameService._link_replay(db, data)
 
         # Se preencheu finish_date ou platinum_date mas não completion_year, calcula o ano
         if not data.get("completion_year"):
@@ -139,7 +204,7 @@ class GameService:
             GameService._set_genres(db, db_game, game_in.genre_ids)
         db.commit()
         db.refresh(db_game)
-        return db_game
+        return GameService.attach_replay_counts(db, [db_game])[0]
 
     @staticmethod
     def update_game(db: Session, game_id: int, game_in: GameUpdate) -> Optional[Game]:
@@ -152,6 +217,11 @@ class GameService:
         old_cover = db_game.cover_image
 
         GameService._sync_developer(db, update_data)
+        GameService._link_replay(db, update_data, game_id)
+        if update_data.get("replay_of_id") is not None:
+            # Era o original de outras jogadas: elas passam para o novo original
+            db.query(Game).filter(Game.replay_of_id == game_id).update(
+                {Game.replay_of_id: update_data["replay_of_id"]}, synchronize_session=False)
 
         for key, value in update_data.items():
             setattr(db_game, key, value)
@@ -171,7 +241,7 @@ class GameService:
         if old_cover and old_cover != db_game.cover_image:
             discard_cover_if_unused(db, old_cover)  # capa trocada: o arquivo antigo não serve mais
         db.refresh(db_game)
-        return db_game
+        return GameService.attach_replay_counts(db, [db_game])[0]
 
 
     @staticmethod
@@ -180,6 +250,13 @@ class GameService:
         if not db_game:
             return False
         cover = db_game.cover_image
+        replays = db.query(Game).filter(Game.replay_of_id == game_id).order_by(asc(Game.id)).all()
+        if replays:  # o original saiu: a jogada mais antiga que sobrou vira o original do grupo
+            new_root, others = replays[0], replays[1:]
+            new_root.replay_of_id = None
+            for replay in others:
+                replay.replay_of_id = new_root.id
+            db.flush()
         db.delete(db_game)
         db.commit()
         discard_cover_if_unused(db, cover)
