@@ -5,6 +5,7 @@ from PySide6.QtCore import QAbstractListModel, QModelIndex, QSortFilterProxyMode
 
 from frontend_desktop.cover_loader import cover_loader
 from frontend_desktop.data_quality import missing_fields
+from frontend_desktop.text_search import fold
 from frontend_desktop.views.game_status import display_hours, is_completed
 
 GameRole = Qt.UserRole + 1
@@ -91,21 +92,35 @@ class GameFilterProxy(QSortFilterProxyModel):
         super().__init__(parent)
         self._predicate: Optional[Callable[[dict], bool]] = None
         self._sort_key: Optional[Callable[[dict], object]] = None
+        self._descending = False
 
     def set_sort(self, key: Optional[Callable[[dict], object]], descending: bool = False) -> None:
-        """Ordena a exibição por `key(game)` (None volta à ordem original do model)."""
+        """Ordena a exibição por `key(game)` (None volta à ordem original do model).
+
+        Jogos em que `key` devolve None ficam sempre no fim, nas duas direções; empates saem por nome.
+        A direção é aplicada aqui (o Qt ordena sempre "crescente") para não inverter esses dois casos.
+        """
         self._sort_key = key
+        self._descending = descending
         if key is None:
             self.sort(-1)
         else:
             self.invalidate()
-            self.sort(0, Qt.DescendingOrder if descending else Qt.AscendingOrder)
+            self.sort(0, Qt.AscendingOrder)
 
     def lessThan(self, left, right) -> bool:
         if self._sort_key is None:
             return left.row() < right.row()
         a, b = left.data(GameRole), right.data(GameRole)
-        return self._sort_key(a) < self._sort_key(b)
+        ka, kb = self._sort_key(a), self._sort_key(b)
+        if (ka is None) != (kb is None):
+            return kb is None  # quem tem valor vem antes
+        if ka is not None and ka != kb:
+            return ka > kb if self._descending else ka < kb
+        ta, tb = fold(a.get("title")), fold(b.get("title"))
+        if ta != tb:
+            return ta < tb
+        return left.row() < right.row()
 
     def set_predicate(self, predicate: Optional[Callable[[dict], bool]]) -> None:
         if hasattr(self, "beginFilterChange"):  # Qt >= 6.9 (invalidateFilter foi descontinuado)

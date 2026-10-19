@@ -283,7 +283,7 @@ def test_dialog_cover_status_only_when_missing(qapp, monkeypatch):
 def test_settings_tabs_scope_and_card_size(qapp):
     from frontend_desktop.views.components.settings_view import SettingsView
     view = SettingsView()
-    assert [view.tabs.tabText(i) for i in range(view.tabs.count())] == ["Aparência", "Capas", "Backup", "Sobre"]
+    assert [view.tabs.tabText(i) for i in range(view.tabs.count())] == ["Aparência", "Páginas", "Capas", "Backup", "Atalhos", "Sobre"]
     assert not hasattr(view, "chk_auto_covers")  # importação do Notion removida
     changed = []
     view.settings_changed.connect(lambda: changed.append(True))

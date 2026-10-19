@@ -210,31 +210,28 @@ def test_delete_selected_game_confirms_and_removes(window, monkeypatch):
     assert deleted == [1]
 
 
-def test_window_state_is_saved_and_restored(window, monkeypatch):
+def test_window_no_longer_saves_geometry_or_last_view(window):
     from frontend_desktop import preferences
-    from frontend_desktop.views.components import yearbook_view as yv
-    from frontend_desktop.views.view_ids import ViewId
-    monkeypatch.setattr(yv.YearbookView, "load_data", lambda self: None)  # sem rede real
-    preferences.settings().clear()
-    window.switch_view(int(ViewId.YEARBOOK))
-    window.save_window_state()
-    assert preferences.last_view() == int(ViewId.YEARBOOK) and preferences.window_geometry() is not None
+    preferences.settings().setValue("window_geometry", b"old")
+    preferences.settings().setValue("last_view", 5)
+    window.close()                                         # fechar não grava nada
+    preferences.clear_legacy_keys()                        # chamado ao abrir a nova versão
+    assert not preferences.settings().contains("window_geometry")
+    assert not preferences.settings().contains("last_view")
 
-    window.stack.setCurrentWidget(window.view_category_detail)  # detalhe: salva a lista de origem
-    window.save_window_state()
-    assert preferences.last_view() == int(ViewId.YEARBOOK)
 
-    window.switch_view(int(ViewId.QUEUE))
-    window.restore_window_state()  # volta para a última tela salva
-    assert window.current_view_id == ViewId.YEARBOOK
+def test_shortcuts_come_from_the_registry(window):
+    from frontend_desktop.shortcuts import SHORTCUTS
+    created = sorted(s.key().toString() for s in window._shortcuts)
+    assert created == sorted(s.keys for s in SHORTCUTS if s.action)
+    assert all(hasattr(window, s.action) for s in SHORTCUTS if s.action)
 
-    preferences.settings().clear()
-    window.switch_view(int(ViewId.QUEUE))
-    window.restore_window_state()  # nada salvo: não muda de tela
-    assert window.current_view_id == ViewId.QUEUE
-    preferences.settings().setValue("last_view", "lixo")
-    assert preferences.last_view(3) == 3
-    preferences.settings().clear()
+
+def test_list_pages_use_their_page_settings(window):
+    assert window.view_zerados_grid.sort_combo.currentData() == "finish_date"
+    assert window.view_platinados_grid.sort_combo.currentData() == "platinum_date"
+    assert window.view_queue_grid.sort_combo.currentData() == "name"
+    assert window.view_game_room.filter_panel.is_field_visible("genre")
 
 
 def _sync(monkeypatch):

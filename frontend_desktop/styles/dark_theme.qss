@@ -107,6 +107,11 @@ QLabel[class="empty-state-text"] { color: $text_dim; font-size: $fs_md; padding:
 QLabel[class="form-label"] { color: $text_muted; font-weight: 600; font-size: $fs_sm; }
 QLabel[class="settings-desc"] { color: $text_muted; font-size: $fs_sm; }
 QLabel[class="settings-hint"] { color: $text_dim; font-size: $fs_sm; margin-left: 26px; margin-bottom: 4px; }
+QLabel[class="shortcut-key"] {
+    background-color: $surface_2; color: $text; border: 1px solid $border_strong; border-radius: $r_sm;
+    padding: 3px 10px; font-weight: 600; font-size: $fs_sm;
+}
+QLabel[class="shortcut-desc"] { color: $text; }
 QLabel[class="yearbook-title"] { font-size: $fs_xl; font-weight: 700; color: $text; }
 QLabel[class="yearbook-year"] { color: $text_muted; font-weight: 600; }
 QLabel[class="yearbook-subtitle"] { font-size: $fs_lg; font-weight: 600; color: $text; margin-top: 10px; }

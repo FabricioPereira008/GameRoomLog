@@ -565,19 +565,19 @@ def test_filter_clear_resets_all_fields(qapp):
 def test_scrollable_grid_sorting_by_name_score_and_hours(qapp):
     grid = ScrollableGameGrid()
     grid.set_games([
-        {"id": 1, "title": "banana", "score": 5, "played_hours": 30},
-        {"id": 2, "title": "Abacaxi", "score": None, "played_hours": 10},
+        {"id": 1, "title": "banana", "score": 5, "played_hours": 30, "status": "Zerado"},
+        {"id": 2, "title": "Abacaxi", "score": None, "played_hours": 10, "status": "Zerado"},
         {"id": 3, "title": "Cereja", "score": 9, "hltb_hours": 50},
     ])
-    ids = lambda: [g["id"] for g in grid.grid.games]
-    grid.enable_sorting()
+    ids = lambda: [g["id"] for g in grid.grid.games]  # noqa: E731
+    grid.configure_page("category")
     assert ids() == [2, 1, 3]  # nome A–Z (sem diferenciar maiúsculas)
     grid.sort_dir_btn.setChecked(True)
     assert ids() == [3, 1, 2]
     grid.sort_combo.setCurrentIndex(grid.sort_combo.findData("score"))  # nota: maior primeiro
     assert ids() == [3, 1, 2] and grid.sort_dir_btn.isChecked()
     grid.sort_dir_btn.setChecked(False)
-    assert ids() == [2, 1, 3]  # sem nota vem primeiro (-1) em ordem crescente
+    assert ids() == [1, 3, 2]  # sem nota fica no fim também em ordem crescente
     grid.sort_combo.setCurrentIndex(grid.sort_combo.findData("hours"))
     assert ids() == [3, 1, 2]
     grid.sort_combo.setCurrentIndex(grid.sort_combo.findData("name"))

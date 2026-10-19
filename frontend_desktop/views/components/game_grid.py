@@ -10,12 +10,11 @@ from PySide6.QtWidgets import (
     QToolButton, QVBoxLayout, QWidget
 )
 
-from frontend_desktop import preferences
+from frontend_desktop import page_settings, preferences
 from frontend_desktop.cover_loader import cover_loader
 from frontend_desktop.text_search import fold, fold_query
 from frontend_desktop.models.game_list_model import GameFilterProxy, GameListModel, GameRole
 from frontend_desktop.ui_helpers import add_search_icon
-from frontend_desktop.views.game_status import display_hours
 from frontend_desktop.views.components.filter_panel import FilterPanel
 from frontend_desktop.views.components.game_card_delegate import GameCardDelegate, current_size_mode
 
@@ -277,13 +276,6 @@ class CardSizeSelector(QWidget):
             btn.setChecked(True)
 
 
-SORT_OPTIONS = {
-    "name": ("Nome", lambda g: (g.get("title") or "").casefold()),
-    "score": ("Nota", lambda g: float(g.get("score") if g.get("score") is not None else -1)),
-    "hours": ("Horas", display_hours),  # mesma regra do card: jogadas (concluídos) ou HLTB
-}
-
-
 class ScrollableGameGrid(QWidget):
     """Grade com busca, painel de filtros e rolagem nativa. A busca digitada usa debounce."""
     game_selected = Signal(dict)
@@ -313,14 +305,13 @@ class ScrollableGameGrid(QWidget):
         self.filter_panel.filters_changed.connect(self.apply_filter)
         top_bar_layout.addWidget(self.filter_panel.btn_toggle)
 
-        # Ordenação (opcional): critério + direção; só aparece após enable_sorting()
+        # Ordenação (opcional): critério + direção; só aparece após configure_page()
         self.sort_combo = QComboBox()
         self.sort_combo.setProperty("class", "filter-combo")
-        for key, (label, _fn) in SORT_OPTIONS.items():
-            self.sort_combo.addItem(f"Ordenar: {label}", key)
         self.sort_combo.currentIndexChanged.connect(self._on_sort_key_changed)
         self.sort_combo.setVisible(False)
         self._sorting = False
+        self._sort_touched = False  # o usuário mexeu na ordenação nesta sessão
         top_bar_layout.addWidget(self.sort_combo)
 
         self.sort_dir_btn = QPushButton("A→Z")
@@ -328,7 +319,7 @@ class ScrollableGameGrid(QWidget):
         self.sort_dir_btn.setCheckable(True)
         self.sort_dir_btn.setCursor(Qt.PointingHandCursor)
         self.sort_dir_btn.setToolTip("Alternar direção da ordenação")
-        self.sort_dir_btn.toggled.connect(self._apply_sort)
+        self.sort_dir_btn.toggled.connect(self._on_direction_toggled)
         self.sort_dir_btn.setVisible(False)
         top_bar_layout.addWidget(self.sort_dir_btn)
 
@@ -373,30 +364,58 @@ class ScrollableGameGrid(QWidget):
     def insert_game(self, index: int, game_data: dict) -> None:
         self.grid.insert_game(index, game_data)
 
-    # --- ordenação ---
-    def enable_sorting(self) -> None:
-        """Mostra o seletor de ordenação e aplica o padrão (nome A–Z)."""
-        self._sorting = True
-        self.sort_combo.setVisible(True)
-        self.sort_dir_btn.setVisible(True)
+    # --- ordenação e filtros da página (Configurações → Páginas) ---
+    def configure_page(self, page: str) -> None:
+        """Usa os critérios de ordenação e os campos do Filtro escolhidos para `page`."""
+        self.filter_panel.bind_page(page)
+        self.apply_page_config(page_settings.page_config(page))
+        page_settings.subscribe(page, self.apply_page_config)
+
+    def apply_page_config(self, config) -> None:
+        """Monta o seletor com os critérios visíveis. A escolha feita na página nesta sessão é mantida
+        enquanto o critério continuar disponível; senão (ou se nada foi escolhido) vale o padrão."""
+        current = self.sort_combo.currentData()
+        keep = self._sort_touched and current in config.sorts
+        self.sort_combo.blockSignals(True)
+        self.sort_combo.clear()
+        for key in config.sorts:
+            self.sort_combo.addItem(f"Ordenar: {page_settings.SORT_CRITERIA[key].label}", key)
+        self.sort_combo.setCurrentIndex(self.sort_combo.findData(current if keep else config.default_sort))
+        self.sort_combo.blockSignals(False)
+        if not keep:
+            self._sort_touched = False
+            self._set_direction(config.default_descending)
+        self._sorting = bool(config.sorts)
+        self.sort_combo.setVisible(len(config.sorts) > 1)  # um critério só: fica só a direção
+        self.sort_dir_btn.setVisible(self._sorting)
         self._apply_sort()
 
-    def _on_sort_key_changed(self, *args) -> None:
-        # Nome começa A→Z; nota e horas começam do maior para o menor
+    def _set_direction(self, descending: bool) -> None:
         self.sort_dir_btn.blockSignals(True)
-        self.sort_dir_btn.setChecked(self.sort_combo.currentData() != "name")
+        self.sort_dir_btn.setChecked(descending)
         self.sort_dir_btn.blockSignals(False)
+
+    def _on_sort_key_changed(self, *args) -> None:
+        key = self.sort_combo.currentData()
+        if key is None:
+            return
+        self._sort_touched = True
+        self._set_direction(page_settings.SORT_CRITERIA[key].descending)  # cada critério tem sua direção inicial
+        self._apply_sort()
+
+    def _on_direction_toggled(self, *args) -> None:
+        self._sort_touched = True
         self._apply_sort()
 
     def _apply_sort(self, *args) -> None:
-        descending = self.sort_dir_btn.isChecked()
         key = self.sort_combo.currentData()
-        if key == "name":
-            self.sort_dir_btn.setText("Z→A" if descending else "A→Z")
-        else:
-            self.sort_dir_btn.setText("Menor→Maior" if not descending else "Maior→Menor")
-        if self._sorting:
-            self.grid.proxy.set_sort(SORT_OPTIONS[key][1], descending)
+        if not self._sorting or key is None:
+            self.grid.proxy.set_sort(None)
+            return
+        criterion = page_settings.SORT_CRITERIA[key]
+        descending = self.sort_dir_btn.isChecked()
+        self.sort_dir_btn.setText(criterion.direction_label(descending))
+        self.grid.proxy.set_sort(criterion.key, descending)
 
     # --- busca e filtros ---
     def on_search_changed(self, text: str) -> None:

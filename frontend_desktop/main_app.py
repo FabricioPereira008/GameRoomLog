@@ -5,6 +5,7 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication
 
 from app_logging import setup_logging
+from frontend_desktop import preferences
 from frontend_desktop.theme import apply_theme, setup_live_stylesheet
 from frontend_desktop.views.main_window import MainWindow
 from frontend_desktop.workers import shutdown_workers
@@ -24,11 +25,18 @@ def create_app() -> QApplication:
 
 
 def create_main_window(app: QApplication) -> MainWindow:
+    """Janela principal; ela sempre abre maximizada no Game Room (ver show_main_window)."""
+    preferences.clear_legacy_keys()
     window = MainWindow()
-    # F5 recarrega os estilos manualmente (útil em desenvolvimento)
-    shortcut_f5 = QShortcut(QKeySequence("F5"), window)
-    shortcut_f5.activated.connect(lambda: getattr(app, "_force_reload_qss", lambda: None)())
+    if not getattr(sys, "frozen", False):
+        # Só em desenvolvimento: F5 recarrega os estilos (não é um atalho do app, não aparece na aba Atalhos)
+        shortcut_f5 = QShortcut(QKeySequence("F5"), window)
+        shortcut_f5.activated.connect(lambda: getattr(app, "_force_reload_qss", lambda: None)())
     return window
+
+
+def show_main_window(window: MainWindow) -> None:
+    window.showMaximized()
 
 
 def main():
@@ -36,7 +44,7 @@ def main():
     app = create_app()
     # Se o backend estiver offline, a janela abre e a barra de status informa (carregamento é assíncrono)
     window = create_main_window(app)
-    window.show()
+    show_main_window(window)
     sys.exit(app.exec())
 
 

@@ -35,3 +35,12 @@ def _no_real_backend(monkeypatch):
     def offline(*_args, **_kwargs):
         raise requests.ConnectionError("rede desligada nos testes")
     monkeypatch.setattr(api_client._session, "request", offline)
+
+
+@pytest.fixture(autouse=True)
+def _default_page_settings():
+    """Cada teste começa com a personalização de páginas de fábrica (o QSettings dos testes é compartilhado)."""
+    from frontend_desktop import preferences
+    preferences.settings().remove("pages")
+    yield
+    preferences.settings().remove("pages")

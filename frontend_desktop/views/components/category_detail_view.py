@@ -92,7 +92,7 @@ class CategoryDetailView(QWidget):
 
         # Grid de Cards dos Jogos
         self.game_grid = ScrollableGameGrid()
-        self.game_grid.enable_sorting()
+        self.game_grid.configure_page("category")
         self.game_grid.game_selected.connect(self.game_selected.emit)
         main_layout.addWidget(self.game_grid)
 

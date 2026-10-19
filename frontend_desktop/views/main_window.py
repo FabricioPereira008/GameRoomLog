@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 from app_version import __version__
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMessageBox, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget,
@@ -21,11 +20,11 @@ from frontend_desktop.views.components.game_grid import GameListView
 from frontend_desktop.models.game_list_model import GameRole
 from frontend_desktop.views.dialogs.game_dialog import GameDialog
 from frontend_desktop.views.dialogs.quick_search_dialog import QuickSearchDialog
+from frontend_desktop.shortcuts import SHORTCUTS
 from frontend_desktop.workers import run_async
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.views import game_status as gs
-from frontend_desktop.views.view_ids import NAV_SECTIONS, ViewId, VIEW_META
-from frontend_desktop import preferences
+from frontend_desktop.views.view_ids import ViewId, VIEW_META
 from frontend_desktop.styles.tokens import COLORS
 from frontend_desktop.ui_helpers import set_button_icon
 
@@ -58,7 +57,7 @@ def fetch_all_data():
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, auto_load: bool = True, restore_state: Optional[bool] = None):
+    def __init__(self, auto_load: bool = True):
         super().__init__()
         self.setWindowTitle("GameRoomLog — Backlog & Anuário Gamer")
         self.resize(1260, 790)
@@ -70,8 +69,6 @@ class MainWindow(QMainWindow):
         self._loading = False
         self._refresh_pending = False
         self.init_ui()
-        if auto_load if restore_state is None else restore_state:
-            self.restore_window_state()
         if auto_load:
             self.refresh_all_data()
 
@@ -125,12 +122,14 @@ class MainWindow(QMainWindow):
         self.view_game_room = self._register(ViewId.GAME_ROOM, GameRoomView())
         self.view_game_room.game_selected.connect(self.open_edit_game_dialog)
         self.view_game_room.view_all_requested.connect(self.open_list_view)
+        self.view_game_room.filter_panel.bind_page("game_room")
 
-        self.view_queue_grid = self._new_game_grid(ViewId.QUEUE)
-        self.view_disponiveis_grid = self._new_game_grid(ViewId.AVAILABLE)
-        self.view_zerados_grid = self._new_game_grid(ViewId.FINISHED)  # Zerados + Platinados
-        self.view_platinados_grid = self._new_game_grid(ViewId.PLATINUM)
-        self.view_wishlist_grid = self._new_game_grid(ViewId.WISHLIST)
+        # Ordenação e filtros de cada lista seguem Configurações → Páginas (frontend_desktop/page_settings.py)
+        self.view_queue_grid = self._new_game_grid(ViewId.QUEUE, "queue")
+        self.view_disponiveis_grid = self._new_game_grid(ViewId.AVAILABLE, "available")
+        self.view_zerados_grid = self._new_game_grid(ViewId.FINISHED, "finished")  # Zerados + Platinados
+        self.view_platinados_grid = self._new_game_grid(ViewId.PLATINUM, "platinum")
+        self.view_wishlist_grid = self._new_game_grid(ViewId.WISHLIST, "wishlist")
 
         self.view_table = self._register(ViewId.LIBRARY, GameTable())
         self.view_table.game_selected.connect(self.open_edit_game_dialog)
@@ -157,14 +156,14 @@ class MainWindow(QMainWindow):
 
     # --- atalhos de teclado ---
     def _setup_shortcuts(self):
-        """Ctrl+N novo jogo · Ctrl+F busca rápida · Del exclui o jogo selecionado (Enter abre, nativo das listas)."""
+        """Cria os atalhos do registro (frontend_desktop/shortcuts.py); os nativos só são documentados lá."""
         self._shortcuts = []
-        for keys, handler in ((QKeySequence.New, self.open_add_game_dialog),
-                              ("Ctrl+F", self.open_quick_search),
-                              (QKeySequence.Delete, self.delete_selected_game)):
-            shortcut = QShortcut(QKeySequence(keys), self)
+        for item in SHORTCUTS:
+            if item.action is None:
+                continue
+            shortcut = QShortcut(QKeySequence(item.keys), self)
             shortcut.setContext(Qt.WindowShortcut)
-            shortcut.activated.connect(handler)
+            shortcut.activated.connect(getattr(self, item.action))
             self._shortcuts.append(shortcut)
 
     def open_quick_search(self):
@@ -211,8 +210,9 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(widget)
         return widget
 
-    def _new_game_grid(self, view_id: ViewId) -> ScrollableGameGrid:
+    def _new_game_grid(self, view_id: ViewId, page: str) -> ScrollableGameGrid:
         grid = self._register(view_id, ScrollableGameGrid())
+        grid.configure_page(page)
         grid.game_selected.connect(self.open_edit_game_dialog)
         return grid
 
@@ -338,25 +338,7 @@ class MainWindow(QMainWindow):
     def _on_load_failed(self, message: str):
         self.statusBar().showMessage(f"Erro de conexão com a API: {message}")
 
-    # --- estado da janela (tamanho/posição e última tela) ---
-    RESTORABLE_VIEWS = {int(v) for _section, ids in NAV_SECTIONS for v in ids} | {int(ViewId.SETTINGS)}
-
-    def restore_window_state(self):
-        geometry = preferences.window_geometry()
-        if geometry is not None:
-            self.restoreGeometry(geometry)
-        view = preferences.last_view(int(ViewId.GAME_ROOM))
-        if view in self.RESTORABLE_VIEWS and view != int(ViewId.GAME_ROOM):
-            self.switch_view(view)
-
-    def save_window_state(self):
-        view = int(self.current_view_id)
-        if view not in self.RESTORABLE_VIEWS:  # ex.: detalhe de categoria volta para a lista de origem
-            view = self.previous_nav_index if self.previous_nav_index in self.RESTORABLE_VIEWS else int(ViewId.GAME_ROOM)
-        preferences.save_window_state(self.saveGeometry(), view)
-
     def closeEvent(self, event):
-        self.save_window_state()
         if self._loader is not None and self._loader.isRunning():
             self._loader.wait(5000)
         super().closeEvent(event)

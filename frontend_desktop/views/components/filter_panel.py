@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QComboBox, QSpinBox, QPushButton, QCompleter, QLineEdit, QCheckBox
 )
 from PySide6.QtCore import Signal, Qt, QStringListModel, QTimer
+from frontend_desktop import page_settings
 from frontend_desktop.data_quality import is_incomplete
 from frontend_desktop.text_search import fold_query
 from frontend_desktop.ui_helpers import set_button_icon
@@ -102,6 +103,8 @@ class FilterPanel(QWidget):
         self.platforms_list = []
         self.franchises_list = []
         self._fields = {}  # kind -> (label, campo)
+        self._page_fields = set(page_settings.FILTER_FIELDS)  # campos permitidos pela página (Configurações)
+        self._status_allowed = False  # o status só existe nas páginas de categoria no modo "todos os jogos"
 
         self.init_ui()
 
@@ -154,7 +157,8 @@ class FilterPanel(QWidget):
         self.combo_fran = add_field("franchise", "Franquia / Série:", "Todas as franquias", 1, 2)
 
         # Linha 2: Tempo HLTB e Botão Limpar
-        grid.addWidget(make_label("Tempo HLTB:"), 2, 0)
+        self.hltb_label = make_label("Tempo HLTB:")
+        grid.addWidget(self.hltb_label, 2, 0)
         
         hltb_layout = QHBoxLayout()
         hltb_layout.setContentsMargins(0, 0, 0, 0)
@@ -185,10 +189,10 @@ class FilterPanel(QWidget):
             self.combo_status.addItem(status, status)
         grid.addWidget(self.status_label, 2, 2)
         grid.addWidget(self.combo_status, 2, 3)
-        self.set_status_filter_visible(False)
 
         # Linha 3: rejogadas
-        grid.addWidget(make_label("Jogadas:"), 3, 0)
+        self.plays_label = make_label("Jogadas:")
+        grid.addWidget(self.plays_label, 3, 0)
         self.combo_plays = QComboBox()
         self.combo_plays.setProperty("class", "filter-combo")
         for text, value in PLAYS_OPTIONS:
@@ -226,13 +230,77 @@ class FilterPanel(QWidget):
         self.chk_incomplete.toggled.connect(self._on_any_change)
 
         main_layout.addWidget(self.panel_frame)
+        self._refresh_visibility()  # status começa escondido
 
     def set_status_filter_visible(self, visible: bool) -> None:
-        """Mostra o filtro de status; escondido, ele é zerado e não filtra."""
-        self.status_label.setVisible(visible)
-        self.combo_status.setVisible(visible)
-        if not visible and self.combo_status.currentIndex() != 0:
-            self.combo_status.setCurrentIndex(0)
+        """Mostra o filtro de status (se a página também permitir); escondido, ele é zerado e não filtra."""
+        self._status_allowed = visible
+        self._refresh_visibility()
+
+    # --- campos visíveis (Configurações → Páginas) ---
+    def bind_page(self, page: str) -> None:
+        """Mostra só os campos escolhidos para `page` e acompanha mudanças nas Configurações."""
+        self.set_visible_fields(page_settings.page_config(page).filters)
+        page_settings.subscribe(page, self._on_page_config)
+
+    def _on_page_config(self, config) -> None:
+        self.set_visible_fields(config.filters)
+
+    def set_visible_fields(self, fields) -> None:
+        self._page_fields = set(fields)
+        self._refresh_visibility()
+
+    def _field_widgets(self, kind: str) -> tuple:
+        if kind in self._fields:
+            return self._fields[kind]
+        return {
+            "hltb": (self.hltb_label, self.combo_hltb_op, self.spin_hltb),
+            "plays": (self.plays_label, self.combo_plays),
+            "status": (self.status_label, self.combo_status),
+            "incomplete": (self.chk_incomplete,),
+        }[kind]
+
+    def is_field_visible(self, kind: str) -> bool:
+        return kind in self._page_fields and (kind != "status" or self._status_allowed)
+
+    def _reset_field(self, kind: str) -> bool:
+        """Zera o campo (sem sinais); devolve True se ele estava filtrando."""
+        if kind in self._fields:
+            field = self._fields[kind][1]
+            if not field.isEnabled() or not field.text():
+                return False  # bloqueado pela página de categoria, ou já vazio
+            field.blockSignals(True)
+            field.clear()
+            field._exact = False
+            field.blockSignals(False)
+            return True
+        widget, active, reset = {
+            "hltb": (self.spin_hltb, self.spin_hltb.value() > 0, lambda: self.spin_hltb.setValue(0)),
+            "plays": (self.combo_plays, self.combo_plays.currentIndex() > 0, lambda: self.combo_plays.setCurrentIndex(0)),
+            "status": (self.combo_status, self.combo_status.currentIndex() > 0, lambda: self.combo_status.setCurrentIndex(0)),
+            "incomplete": (self.chk_incomplete, self.chk_incomplete.isChecked(), lambda: self.chk_incomplete.setChecked(False)),
+        }[kind]
+        if active:
+            widget.blockSignals(True)
+            reset()
+            widget.blockSignals(False)
+        return active
+
+    def _refresh_visibility(self) -> None:
+        """Esconde os campos que a página não usa; campo escondido nunca filtra. Sem campos, some o botão."""
+        cleared = False
+        for kind in page_settings.FILTER_FIELDS:
+            visible = self.is_field_visible(kind)
+            for widget in self._field_widgets(kind):
+                widget.setVisible(visible)
+            if not visible:
+                cleared = self._reset_field(kind) or cleared
+        any_visible = any(self.is_field_visible(kind) for kind in page_settings.FILTER_FIELDS)
+        self.btn_toggle.setVisible(any_visible)
+        if not any_visible and self.btn_toggle.isChecked():
+            self.btn_toggle.setChecked(False)
+        if cleared:
+            self._on_any_change()
 
     def on_toggle_panel(self, checked: bool):
         self.panel_frame.setVisible(checked)

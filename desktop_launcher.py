@@ -30,7 +30,7 @@ import uvicorn
 
 from backend.app.main import app as fastapi_app
 from frontend_desktop.api_client.client import api_client
-from frontend_desktop.main_app import create_app, create_main_window
+from frontend_desktop.main_app import create_app, create_main_window, show_main_window
 
 logger = logging.getLogger(__name__)
 
@@ -89,8 +89,7 @@ def main():
     # Inicializar aplicação PySide6
     app = create_app()
     window = create_main_window(app)
-
-    window.show()
+    show_main_window(window)
 
     exit_code = app.exec()
 

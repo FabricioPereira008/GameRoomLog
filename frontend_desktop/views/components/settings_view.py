@@ -1,4 +1,4 @@
-"""Configurações: aparência, repositório de capas e informações do sistema (em abas)."""
+"""Configurações (em abas): aparência, páginas, capas, backup, atalhos e informações do sistema."""
 import logging
 import platform
 import time
@@ -7,7 +7,7 @@ from typing import Optional
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
-    QButtonGroup, QFileDialog, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QProgressBar,
+    QButtonGroup, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QProgressBar,
     QPushButton, QRadioButton, QScrollArea, QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -16,6 +16,9 @@ from frontend_desktop import preferences
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.styles.tokens import COLORS
 from frontend_desktop.ui_helpers import set_button_icon, set_status
+from frontend_desktop.views.components.settings_tabs import (
+    PagesSettingsTab, ShortcutsTab, restore_button, settings_group, settings_page,
+)
 from frontend_desktop.workers import run_async
 
 logger = logging.getLogger(__name__)
@@ -95,9 +98,13 @@ class SettingsView(QWidget):
         self.tabs.setProperty("class", "settings-tabs")
         self.tabs.setDocumentMode(True)
         self.tabs.tabBar().setDrawBase(False)
+        self.pages_tab = PagesSettingsTab()
+        self.shortcuts_tab = ShortcutsTab()
         self.tabs.addTab(self._scrollable(self._build_appearance_tab()), "Aparência")
+        self.tabs.addTab(self._scrollable(self.pages_tab), "Páginas")
         self.tabs.addTab(self._scrollable(self._build_covers_tab()), "Capas")
         self.tabs.addTab(self._scrollable(self._build_backup_tab()), "Backup")
+        self.tabs.addTab(self._scrollable(self.shortcuts_tab), "Atalhos")
         self.tabs.addTab(self._scrollable(self._build_about_tab()), "Sobre")
         outer.addWidget(self.tabs)
 
@@ -112,25 +119,11 @@ class SettingsView(QWidget):
 
     @staticmethod
     def _page() -> tuple:
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 16, 16, 20)
-        layout.setSpacing(20)
-        layout.setAlignment(Qt.AlignTop)
-        return page, layout
+        return settings_page()
 
     @staticmethod
     def _group(title: str, description: str = "") -> tuple:
-        group = QGroupBox(title)
-        group.setProperty("class", "settings-group")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(10)
-        if description:
-            desc = QLabel(description)
-            desc.setWordWrap(True)
-            desc.setProperty("class", "settings-desc")
-            layout.addWidget(desc)
-        return group, layout
+        return settings_group(title, description)
 
     # --- Aparência ---
     def _build_appearance_tab(self) -> QWidget:
@@ -168,7 +161,16 @@ class SettingsView(QWidget):
             scope_layout.addWidget(hint_label)
             rb.clicked.connect(lambda _c=False, sc=scope: self.on_scope_changed(sc))
         layout.addWidget(scope_group)
+        layout.addLayout(restore_button(self.restore_appearance))
         return page
+
+    def restore_appearance(self) -> None:
+        """Cards médios e páginas de categoria só com os concluídos."""
+        scope_before = preferences.category_scope()
+        preferences.reset_appearance()
+        self.scope_buttons[preferences.category_scope()].setChecked(True)
+        if preferences.category_scope() != scope_before:
+            self.settings_changed.emit()
 
     def _sync_card_size(self, size: str) -> None:
         btn = self.size_buttons.get(size)

@@ -20,28 +20,33 @@ class _Notifier(QObject):
 notifier = _Notifier()
 
 
-def subscribe_card_size(slot) -> None:
-    """Chama `slot(size)` (método de um QObject) quando o tamanho dos cards muda.
+def subscribe(signal, deliver, slot) -> None:
+    """Liga `signal` a `slot` (método de um QObject) via `deliver(method, *args)`.
 
-    O aviso é global e vive mais que os widgets: a ligação guarda só uma referência fraca ao dono e é
-    desfeita quando ele é destruído (evita chamar objetos C++ já apagados)."""
+    Os avisos são globais e vivem mais que os widgets: a ligação guarda só uma referência fraca ao dono e
+    é desfeita quando ele é destruído (evita chamar objetos C++ já apagados)."""
     owner = slot.__self__
     method_ref = weakref.WeakMethod(slot)
 
-    def relay(size: str) -> None:
+    def relay(*args) -> None:
         method = method_ref()
         if method is not None and shiboken6.isValid(method.__self__):
-            method(size)
+            deliver(method, *args)
 
-    notifier.card_size_changed.connect(relay)
+    signal.connect(relay)
 
     def drop(*_args) -> None:
         try:
-            notifier.card_size_changed.disconnect(relay)
+            signal.disconnect(relay)
         except (RuntimeError, TypeError):
             pass
 
     owner.destroyed.connect(drop)
+
+
+def subscribe_card_size(slot) -> None:
+    """Chama `slot(size)` quando o tamanho dos cards muda (em qualquer tela)."""
+    subscribe(notifier.card_size_changed, lambda method, size: method(size), slot)
 
 
 def settings() -> QSettings:
@@ -70,21 +75,18 @@ def set_card_size(size: str) -> None:
         notifier.card_size_changed.emit(size)
 
 
-WINDOW_GEOMETRY_KEY = "window_geometry"
-LAST_VIEW_KEY = "last_view"
+def reset_appearance() -> None:
+    """Restaura a aba Aparência: cards médios e páginas de categoria só com concluídos."""
+    set_card_size("medium")
+    set_category_scope(SCOPE_COMPLETED)
 
 
-def window_geometry():
-    return settings().value(WINDOW_GEOMETRY_KEY)
+# Versões até a 1.3 guardavam a geometria da janela e a última página; hoje o app sempre abre
+# maximizado no Game Room
+LEGACY_KEYS = ("window_geometry", "last_view")
 
 
-def last_view(default: int = 0) -> int:
-    try:
-        return int(settings().value(LAST_VIEW_KEY, default))
-    except (TypeError, ValueError):
-        return default
-
-
-def save_window_state(geometry, view: int) -> None:
-    settings().setValue(WINDOW_GEOMETRY_KEY, geometry)
-    settings().setValue(LAST_VIEW_KEY, int(view))
+def clear_legacy_keys() -> None:
+    store = settings()
+    for key in LEGACY_KEYS:
+        store.remove(key)
