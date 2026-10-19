@@ -5,6 +5,26 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [1.4.0] - 2026-10-18
+### Adicionado
+- **Rejogadas vinculadas:** cada rejogada continua sendo um registro próprio, agora ligado ao registro original. O diálogo do jogo ganhou o campo "Rejogada de" (sugere o original pelo título e o número da jogada) e mostra o histórico de jogadas; o filtro "Só jogos rejogados" lista todas as jogadas dos jogos rejogados.
+- A caixa de entrada do app do portátil propõe um registro novo de rejogada quando um jogo já concluído é jogado de novo, em vez de sobrescrever o antigo.
+- **Ordenação em todas as páginas de lista:** Zerados e Platinados por data, nota, horas jogadas, dificuldade ou nome; Fila e Disponíveis por nome, HLTB ou data de adição; Lista de Desejos por nome ou data de adição. Jogos sem o valor ficam sempre no fim.
+- **Configurações → Páginas:** escolha, por página, os critérios de ordenação visíveis, a ordenação padrão e os campos do painel de Filtros.
+- **Configurações → Atalhos:** lista dos atalhos de teclado.
+- Botão "Restaurar padrões" nas abas Aparência e Páginas.
+- **Backup completo:** cada backup guarda também as capas, e a restauração devolve as que sumiram; backups podem ser exportados e importados como `.zip` (banco + capas).
+- Limpeza de capas sem uso em Configurações → Capas; excluir um jogo ou trocar a capa apaga o arquivo antigo quando nenhum outro jogo o usa.
+
+### Modificado
+- Buscas e filtros ignoram acentos e maiúsculas ("pokemon" encontra "Pokémon").
+- O app abre sempre maximizado no Game Room (não guarda mais a última página nem o tamanho da janela).
+- O nome da desenvolvedora vem só do cadastro de desenvolvedoras: renomear ou excluir uma desenvolvedora agora reflete em todos os jogos.
+- A sincronização de lojas e o catálogo do app do portátil tratam um jogo rejogado como um jogo só.
+
+### Corrigido
+- As migrações do banco rodam com as chaves estrangeiras desligadas, evitando que a recriação de uma tabela apague gêneros, vínculos de loja e pódios em cascata.
+
 ## [1.3.0] - 2026-10-18
 ### Adicionado
 - **Anuário mais completo:** pódio do ano (top 3) escolhido por você entre os jogos zerados ou platinados no ano, com sugestão pelas notas enquanto nada for escolhido; gráfico de zerados por mês; gêneros do ano e horas por plataforma; comparação com o ano anterior; estúdio e série do ano, jogo mais longo, melhor nota, mais difícil e médias por jogo.
