@@ -31,7 +31,8 @@ jobs:
       - name: Instalar Dependências Python
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+          # Mesmas versões do executável (o PySide 6.12 derruba o processo ao fim dos testes)
+          pip install -r requirements-dev.txt -c constraints-build.txt
 
       - name: Executar Pytest
         run: |
