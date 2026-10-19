@@ -194,11 +194,16 @@ def test_link_failure_is_reported(qapp, monkeypatch):
 def test_edit_before_import_uses_prefilled_dialog(qapp, monkeypatch):
     view = LibrarySyncView()
     created = []
+    # A busca da desenvolvedora na Steam não pode ir à rede (o app real pode estar em :8000)
+    monkeypatch.setattr(lsv.api_client, "library_details", lambda *a, **k: {"developer": None})
 
     class FakeDialog:
         def __init__(self, data, parent):
             created.append(data)
             self.saved_game, self.is_deleted = {"id": 1}, False
+
+        def suggest_developer(self, name):
+            pass
 
         def setWindowTitle(self, text):
             created.append(text)
