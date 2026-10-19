@@ -1,4 +1,7 @@
+import io
+import json
 import sqlite3
+import zipfile
 
 import pytest
 import sqlalchemy as sa
@@ -7,7 +10,17 @@ from fastapi.testclient import TestClient
 from backend.app.core.migrations import run_migrations
 from backend.app.main import app
 from backend.app.api.v1.endpoints import backups as backups_endpoint
+from backend.app.core.config import settings
 from backend.app.services import backup_service as bs
+
+
+@pytest.fixture(autouse=True)
+def covers_dir(tmp_path, monkeypatch):
+    """Pasta de capas "ao vivo" isolada por teste."""
+    folder = tmp_path / "live-covers"
+    folder.mkdir()
+    monkeypatch.setattr(settings, "COVERS_DIR", folder)
+    return folder
 
 
 def _engine(tmp_path):
@@ -16,11 +29,17 @@ def _engine(tmp_path):
     return engine
 
 
-def _add_game(engine, title):
+def _add_game(engine, title, cover=None):
     with engine.begin() as c:
         c.execute(sa.text(
-            "insert into games (title, status, play_type, play_count, format, is_favorite, created_at, updated_at) "
-            "values (:t, 'FILA', 'PRIMEIRA_JOGADA', 1, 'DIGITAL', 0, '2026-01-01', '2026-01-01')"), {"t": title})
+            "insert into games (title, status, play_type, play_count, format, is_favorite, created_at, updated_at, "
+            "cover_image) values (:t, 'FILA', 'PRIMEIRA_JOGADA', 1, 'DIGITAL', 0, '2026-01-01', '2026-01-01', :c)"),
+            {"t": title, "c": cover})
+
+
+def _cover(folder, name, data=b"img"):
+    (folder / name).write_bytes(data)
+    return name
 
 
 def _titles(engine):
@@ -136,3 +155,155 @@ def test_lifespan_backs_up_before_migrating(tmp_path, monkeypatch):
     with TestClient(main.app):
         pass
     assert [b["reason"] for b in bs.list_backups(engine)] == ["auto"]
+
+
+# --- capas no backup ---
+
+def test_backup_mirrors_covers_and_restore_brings_them_back(tmp_path, covers_dir):
+    engine = _engine(tmp_path)
+    _add_game(engine, "Hades", _cover(covers_dir, "a1.webp", b"capa-hades"))
+    saved = bs.create_backup(engine)
+    mirror = bs.backup_dir(engine) / bs.COVERS_SUBDIR
+    assert (mirror / "a1.webp").read_bytes() == b"capa-hades"
+
+    (covers_dir / "a1.webp").unlink()                       # capa perdida
+    result = bs.restore_backup(engine, saved["name"], run_migrations)
+    assert result["covers_restored"] == 1 and (covers_dir / "a1.webp").read_bytes() == b"capa-hades"
+    again = bs.restore_backup(engine, saved["name"], run_migrations)
+    assert again["covers_restored"] == 0                    # já estava lá: não sobrescreve
+
+
+def test_mirror_drops_covers_no_backup_uses(tmp_path, covers_dir):
+    engine = _engine(tmp_path)
+    _add_game(engine, "Hades", _cover(covers_dir, "usada.png"))
+    _cover(covers_dir, "orfa.png")                          # nenhum jogo usa
+    _cover(covers_dir, "nao-e-capa.txt")
+    bs.create_backup(engine)
+    mirror = bs.backup_dir(engine) / bs.COVERS_SUBDIR
+    assert sorted(p.name for p in mirror.iterdir()) == ["usada.png"]
+
+
+def test_mirror_kept_when_a_backup_is_unreadable(tmp_path, covers_dir):
+    engine = _engine(tmp_path)
+    _add_game(engine, "Hades", _cover(covers_dir, "usada.png"))
+    folder = bs.backup_dir(engine)
+    folder.mkdir()
+    (folder / "gameroom-20200101-000000.db").write_text("lixo")
+    mirror = folder / bs.COVERS_SUBDIR
+    mirror.mkdir()
+    (mirror / "antiga.png").write_bytes(b"x")
+    bs.create_backup(engine)
+    assert (mirror / "antiga.png").exists()                 # na dúvida, não apaga
+
+
+def test_backup_survives_cover_copy_failure(tmp_path, covers_dir, monkeypatch):
+    engine = _engine(tmp_path)
+    _add_game(engine, "Hades")
+    monkeypatch.setattr(bs, "_mirror_covers", lambda folder: (_ for _ in ()).throw(OSError("disco cheio")))
+    assert bs.create_backup(engine)["games_count"] == 1
+
+
+def test_backup_without_covers_folder(tmp_path, covers_dir, monkeypatch):
+    engine = _engine(tmp_path)
+    _add_game(engine, "Hades")
+    monkeypatch.setattr(settings, "COVERS_DIR", tmp_path / "nao-existe")
+    assert bs.create_backup(engine)["games_count"] == 1
+
+
+# --- exportar / importar .zip ---
+
+def _export(engine, name):
+    buffer = io.BytesIO()
+    count = bs.export_backup(engine, name, buffer)
+    buffer.seek(0)
+    return buffer, count
+
+
+def _zip(entries):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for path, data in entries.items():
+            archive.writestr(path, data)
+    buffer.seek(0)
+    return buffer
+
+
+def test_export_contains_database_covers_and_manifest(tmp_path, covers_dir):
+    engine = _engine(tmp_path)
+    _add_game(engine, "Hades", _cover(covers_dir, "a1.webp"))
+    _add_game(engine, "Celeste", "sumiu.png")               # referenciada, mas o arquivo não existe
+    saved = bs.create_backup(engine)
+    buffer, count = _export(engine, saved["name"])
+    with zipfile.ZipFile(buffer) as archive:
+        names = set(archive.namelist())
+        manifest = json.loads(archive.read(bs.ARCHIVE_MANIFEST))
+    assert count == 1 and names == {"manifest.json", "gameroom.db", "covers/a1.webp"}
+    assert manifest["format"] == bs.ARCHIVE_FORMAT and manifest["games_count"] == 2
+    assert manifest["covers_count"] == 1 and manifest["covers_missing"] == 1
+
+
+def test_import_round_trip_on_another_computer(tmp_path, covers_dir, monkeypatch):
+    engine = _engine(tmp_path)
+    _add_game(engine, "Hades", _cover(covers_dir, "a1.webp", b"capa"))
+    buffer, _ = _export(engine, bs.create_backup(engine)["name"])
+
+    other_dir = tmp_path / "outro-pc"
+    other_dir.mkdir()
+    other = _engine(other_dir)
+    new_covers = other_dir / "covers"
+    monkeypatch.setattr(settings, "COVERS_DIR", new_covers)
+    imported = bs.import_backup(other, buffer)
+    assert imported["reason"] == "importado" and imported["reason_label"] == "Importado"
+    assert imported["games_count"] == 1
+    bs.restore_backup(other, imported["name"], run_migrations)
+    assert _titles(other) == ["Hades"] and (new_covers / "a1.webp").read_bytes() == b"capa"
+
+
+@pytest.mark.parametrize("entries, message", [
+    ({"qualquer.txt": "x"}, "não é um backup"),
+    ({"manifest.json": json.dumps({"format": "outro"}), "gameroom.db": "x"}, "não é um backup"),
+    ({"manifest.json": "{quebrado", "gameroom.db": "x"}, "não é um backup"),
+    ({"manifest.json": json.dumps({"format": "gameroom-backup", "version": 99}), "gameroom.db": "x"}, "mais nova"),
+    ({"manifest.json": json.dumps({"format": "gameroom-backup", "version": 1}), "gameroom.db": "x",
+      "covers/../../fora.png": "x"}, "inesperado"),
+    ({"manifest.json": json.dumps({"format": "gameroom-backup", "version": 1}), "gameroom.db": "x",
+      "outra/pasta.png": "x"}, "inesperado"),
+    ({"manifest.json": json.dumps({"format": "gameroom-backup", "version": 1}), "gameroom.db": "não é sqlite"},
+     "banco do GameRoom"),
+])
+def test_import_rejects_bad_archives(tmp_path, entries, message):
+    engine = _engine(tmp_path)
+    with pytest.raises(bs.InvalidBackupError, match=message):
+        bs.import_backup(engine, _zip(entries))
+    assert bs.list_backups(engine) == []
+
+
+def test_import_rejects_non_zip_huge_and_oversized_cover(tmp_path, monkeypatch):
+    engine = _engine(tmp_path)
+    with pytest.raises(bs.InvalidBackupError):
+        bs.import_backup(engine, io.BytesIO(b"nao e zip"))
+    good = {"manifest.json": json.dumps({"format": "gameroom-backup", "version": 1}), "gameroom.db": "x",
+            "covers/a.png": "123456"}
+    monkeypatch.setattr(settings, "MAX_COVER_BYTES", 3)
+    with pytest.raises(bs.InvalidBackupError, match="inesperado"):
+        bs.import_backup(engine, _zip(good))
+    monkeypatch.setattr(settings, "MAX_COVER_BYTES", 100)
+    monkeypatch.setattr(bs, "MAX_ARCHIVE_BYTES", 5)
+    with pytest.raises(bs.InvalidBackupError, match="grande demais"):
+        bs.import_backup(engine, _zip(good))
+    with pytest.raises(bs.InvalidBackupError):
+        bs.import_backup(sa.create_engine("sqlite://"), _zip(good))
+
+
+def test_export_and_import_endpoints(client):
+    http, engine = client
+    name = http.post("/api/v1/backups/").json()["name"]
+    response = http.get(f"/api/v1/backups/{name}/export")
+    assert response.status_code == 200 and response.headers["content-type"] == "application/zip"
+    assert name.removesuffix(".db") + ".zip" in response.headers["content-disposition"]
+    imported = http.post("/api/v1/backups/import", files={"file": ("b.zip", response.content, "application/zip")})
+    assert imported.status_code == 201 and imported.json()["reason"] == "importado"
+    assert http.get("/api/v1/backups/gameroom-20990101-000000.db/export").status_code == 404
+    assert http.get("/api/v1/backups/qualquer.db/export").status_code == 400
+    bad = http.post("/api/v1/backups/import", files={"file": ("b.zip", b"lixo", "application/zip")})
+    assert bad.status_code == 400

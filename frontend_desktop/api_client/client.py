@@ -266,6 +266,23 @@ class ApiClient:
     def restore_backup(self, name: str) -> Dict[str, Any]:
         return self._json("POST", f"backups/{name}/restore", timeout=IMPORT_TIMEOUT)
 
+    def export_backup(self, name: str, destination: str) -> str:
+        """Baixa o backup `name` como .zip (banco + capas) em `destination`."""
+        target = Path(destination)
+        partial = target.with_name(target.name + ".part")
+        with self._session.get(self._url(f"backups/{name}/export"), stream=True, timeout=IMPORT_TIMEOUT) as r:
+            r.raise_for_status()
+            with partial.open("wb") as fh:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    fh.write(chunk)
+        partial.replace(target)  # arquivo pela metade nunca fica com o nome final
+        return str(target)
+
+    def import_backup(self, path: str) -> Dict[str, Any]:
+        with open(path, "rb") as fh:
+            return self._json("POST", "backups/import", timeout=IMPORT_TIMEOUT,
+                              files={"file": (Path(path).name, fh, "application/zip")})
+
     # --- CAIXA DE ENTRADA DO APP DO PORTÁTIL ---
     def inbox_import(self, package: Dict[str, Any]) -> Dict[str, Any]:
         return self._json("POST", "inbox/import", timeout=IMPORT_TIMEOUT, json=package)

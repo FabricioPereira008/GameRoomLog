@@ -2,10 +2,12 @@
 import logging
 import platform
 import time
+from pathlib import Path
+from typing import Optional
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
-    QButtonGroup, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QProgressBar,
+    QButtonGroup, QFileDialog, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QProgressBar,
     QPushButton, QRadioButton, QScrollArea, QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -236,9 +238,10 @@ class SettingsView(QWidget):
     def _build_backup_tab(self) -> QWidget:
         page, layout = self._page()
         group, group_layout = self._group(
-            "Cópias de segurança do banco",
-            "Uma cópia é feita automaticamente ao abrir o app (no máximo uma por dia) e as 10 mais recentes "
-            "são mantidas. Ao restaurar, o estado atual também é guardado antes, então dá para desfazer.",
+            "Cópias de segurança",
+            "Uma cópia do banco e das capas é feita automaticamente ao abrir o app (no máximo uma por dia) e as "
+            "10 mais recentes são mantidas. Ao restaurar, o estado atual também é guardado antes, então dá para "
+            "desfazer. Para guardar fora deste computador, exporte um backup (.zip) e importe-o quando precisar.",
         )
         self.backup_list = QListWidget()
         self.backup_list.setObjectName("backupList")
@@ -258,6 +261,18 @@ class SettingsView(QWidget):
         self.btn_restore.clicked.connect(self.on_restore)
         row.addWidget(self.btn_restore)
         row.addStretch()
+        self.btn_export = QPushButton("Exportar selecionado…")
+        self.btn_export.setProperty("class", "cancel-btn")
+        self.btn_export.setCursor(Qt.PointingHandCursor)
+        self.btn_export.setToolTip("Salva o backup selecionado e as capas num arquivo .zip")
+        self.btn_export.clicked.connect(self.on_export)
+        row.addWidget(self.btn_export)
+        self.btn_import = QPushButton("Importar…")
+        self.btn_import.setProperty("class", "cancel-btn")
+        self.btn_import.setCursor(Qt.PointingHandCursor)
+        self.btn_import.setToolTip("Adiciona à lista um backup .zip exportado antes (depois é só restaurá-lo)")
+        self.btn_import.clicked.connect(self.on_import)
+        row.addWidget(self.btn_import)
         group_layout.addLayout(row)
 
         self.lbl_backup_status = QLabel("")
@@ -272,8 +287,8 @@ class SettingsView(QWidget):
         super().showEvent(event)
         self.load_backups()
 
-    def load_backups(self):
-        run_async(self, api_client.list_backups, self._on_backups_loaded,
+    def load_backups(self, select: Optional[str] = None):
+        run_async(self, api_client.list_backups, lambda data: self._on_backups_loaded(data, select),
                   lambda msg: set_status(self.lbl_backup_status, "error", f"Não foi possível listar os backups: {msg}"))
 
     @staticmethod
@@ -293,20 +308,24 @@ class SettingsView(QWidget):
         parts.append(f"{size_kb:,.0f} KB".replace(",", "."))
         return "   ·   ".join(p for p in parts if p)
 
-    def _on_backups_loaded(self, data: dict):
+    def _on_backups_loaded(self, data: dict, select: Optional[str] = None):
         self.backup_list.clear()
         for info in data.get("backups", []):
             item = QListWidgetItem(self.describe_backup(info))
             item.setData(Qt.UserRole, info["name"])
             self.backup_list.addItem(item)
+            if info["name"] == select:
+                self.backup_list.setCurrentItem(item)
         if not self.backup_list.count():
             set_status(self.lbl_backup_status, "muted", "Nenhum backup ainda.")
-        elif data.get("folder"):
+        elif data.get("folder") and select is None:
             set_status(self.lbl_backup_status, "muted", f"Pasta: {data['folder']}")
         self._update_backup_buttons()
 
     def _update_backup_buttons(self):
-        self.btn_restore.setEnabled(self.backup_list.currentItem() is not None)
+        selected = self.backup_list.currentItem() is not None
+        self.btn_restore.setEnabled(selected)
+        self.btn_export.setEnabled(selected)
 
     def on_backup_now(self):
         self.btn_backup_now.setEnabled(False)
@@ -319,7 +338,8 @@ class SettingsView(QWidget):
 
     def _on_backup_failed(self, message: str):
         self.btn_backup_now.setEnabled(True)
-        self.btn_restore.setEnabled(self.backup_list.currentItem() is not None)
+        self.btn_import.setEnabled(True)
+        self._update_backup_buttons()
         set_status(self.lbl_backup_status, "error", f"Falha: {message}")
 
     def on_restore(self):
@@ -337,10 +357,46 @@ class SettingsView(QWidget):
         run_async(self, api_client.restore_backup, self._on_restored, self._on_backup_failed, item.data(Qt.UserRole))
 
     def _on_restored(self, result: dict):
-        self.load_backups()
-        set_status(self.lbl_backup_status, "ok",
-                   f"Banco restaurado. O estado anterior foi guardado em {result.get('safety_backup')}.")
+        self.load_backups(select=result.get("restored"))
+        message = f"Banco restaurado. O estado anterior foi guardado em {result.get('safety_backup')}."
+        if result.get("covers_restored"):
+            message += f" {result['covers_restored']} capa(s) recuperada(s)."
+        set_status(self.lbl_backup_status, "ok", message)
         self.data_imported.emit()  # recarrega todas as telas
+
+    def on_export(self):
+        item = self.backup_list.currentItem()
+        if item is None:
+            return
+        name = item.data(Qt.UserRole)
+        suggested = str(Path.home() / (name.removesuffix(".db") + ".zip"))
+        path, _ = QFileDialog.getSaveFileName(self, "Exportar backup", suggested, "Backup do GameRoom (*.zip)")
+        if not path:
+            return
+        if not path.lower().endswith(".zip"):
+            path += ".zip"
+        self.btn_export.setEnabled(False)
+        set_status(self.lbl_backup_status, "muted", "Exportando…")
+        run_async(self, api_client.export_backup, self._on_exported, self._on_backup_failed, name, path)
+
+    def _on_exported(self, path: str):
+        self._update_backup_buttons()
+        set_status(self.lbl_backup_status, "ok", f"Backup exportado para {path}")
+
+    def on_import(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Importar backup", str(Path.home()), "Backup do GameRoom (*.zip)")
+        if not path:
+            return
+        self.btn_import.setEnabled(False)
+        set_status(self.lbl_backup_status, "muted", "Importando…")
+        run_async(self, api_client.import_backup, self._on_backup_imported, self._on_backup_failed, path)
+
+    def _on_backup_imported(self, info: dict):
+        self.btn_import.setEnabled(True)
+        self.load_backups(select=info["name"])
+        set_status(self.lbl_backup_status, "ok",
+                   f"Backup importado: {self.describe_backup(info)}. Ele está selecionado na lista; "
+                   "clique em \"Restaurar selecionado\" para usá-lo.")
 
     # --- Sobre ---
     def _build_about_tab(self) -> QWidget:

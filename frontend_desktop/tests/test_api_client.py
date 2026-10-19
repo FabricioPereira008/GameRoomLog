@@ -239,6 +239,24 @@ def test_backup_endpoints(client):
 
 
 @responses.activate
+def test_backup_export_and_import(client, tmp_path):
+    base = "http://test-server:8000/api/v1/backups"
+    responses.add(responses.GET, f"{base}/gameroom-1.db/export", body=b"PK-zip", content_type="application/zip")
+    target = tmp_path / "copia.zip"
+    assert client.export_backup("gameroom-1.db", str(target)) == str(target)
+    assert target.read_bytes() == b"PK-zip" and not (tmp_path / "copia.zip.part").exists()
+
+    responses.add(responses.GET, f"{base}/gameroom-2.db/export", status=404)
+    with pytest.raises(Exception):
+        client.export_backup("gameroom-2.db", str(tmp_path / "falhou.zip"))
+    assert not (tmp_path / "falhou.zip").exists()
+
+    responses.add(responses.POST, f"{base}/import", json={"name": "gameroom-3-importado.db"}, status=201)
+    assert client.import_backup(str(target))["name"] == "gameroom-3-importado.db"
+    assert b"PK-zip" in responses.calls[-1].request.body
+
+
+@responses.activate
 def test_library_details(client):
     responses.add(responses.GET, "http://test-server:8000/api/v1/library/details/steam/220", json={"developer": "Valve"})
     assert client.library_details("steam", "220") == {"developer": "Valve"}

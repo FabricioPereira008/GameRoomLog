@@ -439,6 +439,46 @@ def test_backup_tab_lists_creates_and_restores(qapp, monkeypatch):
     assert sv.SettingsView.describe_backup({"created_at": "x", "reason_label": "Manual", "size_bytes": 0}) == "x   ·   Manual   ·   0 KB"
 
 
+def test_backup_tab_exports_and_imports(qapp, monkeypatch, tmp_path):
+    from frontend_desktop.views.components import settings_view as sv
+    monkeypatch.setattr(sv, "run_async", lambda owner, fn, ok, err, *args: ok(fn(*args)))
+    backups = [{"name": "gameroom-20261018-090000.db", "created_at": "2026-10-18T09:00:00", "reason": "auto",
+                "reason_label": "Automático", "size_bytes": 1024, "games_count": 3}]
+    imported = {"name": "gameroom-20261018-100000-importado.db", "created_at": "2026-10-18T10:00:00",
+                "reason": "importado", "reason_label": "Importado", "size_bytes": 1024, "games_count": 5}
+    calls = []
+    monkeypatch.setattr(sv.api_client, "list_backups", lambda: {"folder": "/b", "max_backups": 10, "backups": backups})
+    monkeypatch.setattr(sv.api_client, "export_backup", lambda name, path: calls.append((name, path)) or path)
+    monkeypatch.setattr(sv.api_client, "import_backup",
+                        lambda path: calls.append(path) or backups.insert(0, imported) or imported)
+    view = sv.SettingsView()
+    view.load_backups()
+    assert not view.btn_export.isEnabled()
+    view.on_export()                                          # nada selecionado
+    view.backup_list.setCurrentRow(0)
+    assert view.btn_export.isEnabled()
+
+    monkeypatch.setattr(sv.QFileDialog, "getSaveFileName", lambda *a, **k: ("", ""))
+    view.on_export()                                          # cancelou
+    assert calls == []
+    monkeypatch.setattr(sv.QFileDialog, "getSaveFileName", lambda *a, **k: (str(tmp_path / "copia"), ""))
+    view.on_export()
+    assert calls == [("gameroom-20261018-090000.db", str(tmp_path / "copia.zip"))]
+    assert "exportado" in view.lbl_backup_status.text() and view.btn_export.isEnabled()
+
+    monkeypatch.setattr(sv.QFileDialog, "getOpenFileName", lambda *a, **k: ("", ""))
+    view.on_import()
+    assert len(calls) == 1
+    monkeypatch.setattr(sv.QFileDialog, "getOpenFileName", lambda *a, **k: ("/x/backup.zip", ""))
+    view.on_import()
+    assert calls[-1] == "/x/backup.zip" and view.btn_import.isEnabled()
+    assert view.backup_list.currentItem().data(sv.Qt.UserRole) == imported["name"]   # já selecionado para restaurar
+    assert "Backup importado" in view.lbl_backup_status.text()
+
+    view._on_restored({"restored": imported["name"], "safety_backup": "s.db", "covers_restored": 4})
+    assert "4 capa(s) recuperada(s)" in view.lbl_backup_status.text()
+
+
 def test_card_size_subscription_is_dropped_with_its_owner(qapp):
     import shiboken6
     from PySide6.QtCore import QObject
