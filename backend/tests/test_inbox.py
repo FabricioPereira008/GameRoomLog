@@ -409,12 +409,13 @@ def test_proposal_404s(db):
 # --- rejogadas como novo registro vinculado ---
 
 def _finished_game(db, title="Hades", **kw):
+    from backend.app.models.developer import Developer
     from backend.app.models.genre import Genre
-    genre = Genre(name="Roguelike")
-    db.add(genre)
+    genre, dev = Genre(name="Roguelike"), Developer(name="Supergiant")
+    db.add_all([genre, dev])
     db.flush()
     game = add_game(db, title, "PC", status=GameStatus.ZERADO, finish_date=date(2023, 1, 1),
-                    play_type=PlayType.PRIMEIRA_JOGADA, play_count=1, developer="Supergiant",
+                    play_type=PlayType.PRIMEIRA_JOGADA, play_count=1, developer_id=dev.id,
                     cover_image="hades.jpg", **kw)
     game.genres = [genre]
     db.commit()

@@ -106,7 +106,7 @@ class GameService:
             query = query.filter(
                 or_(
                     Game.title.ilike(search_term),
-                    Game.developer.ilike(search_term)
+                    Game.developer_rel.has(Developer.name.ilike(search_term))
                 )
             )
 
@@ -140,30 +140,34 @@ class GameService:
         return game
 
     @staticmethod
-    def _sync_developer(db: Session, data: dict) -> None:
-        """Mantém `developer` (nome) e `developer_id` coerentes; developer_id tem precedência.
+    def _find_developer(db: Session, name: str) -> Optional[Developer]:
+        """Desenvolvedora com o mesmo nome, sem diferenciar maiúsculas (inclusive acentuadas)."""
+        found = db.query(Developer).filter(Developer.name.ilike(name)).first()
+        if found is None:  # o ILIKE do SQLite só ignora maiúsculas em ASCII ("ÉTUDE" x "Étude")
+            key = name.casefold()
+            found = next((d for d in db.query(Developer).all() if d.name.casefold() == key), None)
+        return found
 
-        Só age sobre as chaves presentes em `data` (serve para create e update parcial).
+    @staticmethod
+    def _sync_developer(db: Session, data: dict) -> None:
+        """Converte o nome recebido em `developer_id` (o nome mostrado vem sempre da tabela developers).
+
+        `developer_id` tem precedência; nome novo cria a desenvolvedora. Só age sobre as chaves
+        presentes em `data` (serve para create e update parcial).
         """
-        if data.get("developer_id"):
-            dev = db.query(Developer).filter(Developer.id == data["developer_id"]).first()
-            if dev:
-                data["developer"] = dev.name
+        has_name = "developer" in data
+        dev_name = (data.pop("developer", None) or "").strip()
+        if data.get("developer_id") or not has_name:
             return
-        if "developer" not in data and "developer_id" not in data:
-            return
-        dev_name = (data.get("developer") or "").strip()
-        if dev_name:
-            dev = db.query(Developer).filter(Developer.name.ilike(dev_name)).first()
-            if not dev:
-                dev = Developer(name=dev_name)
-                db.add(dev)
-                db.flush()
-            data["developer_id"] = dev.id
-            data["developer"] = dev.name
-        else:
-            data["developer"] = None
+        if not dev_name:
             data["developer_id"] = None
+            return
+        dev = GameService._find_developer(db, dev_name)
+        if dev is None:
+            dev = Developer(name=dev_name)
+            db.add(dev)
+            db.flush()
+        data["developer_id"] = dev.id
 
     @staticmethod
     def _set_genres(db: Session, db_game: Game, genre_ids: List[int]) -> None:

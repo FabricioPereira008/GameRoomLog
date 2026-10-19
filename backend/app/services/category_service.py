@@ -3,7 +3,7 @@ from typing import Any, Callable, List, Optional, Type
 
 from sqlalchemy import case, func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from backend.app.models.developer import Developer
 from backend.app.models.franchise import Franchise
@@ -98,7 +98,7 @@ class CategoryService:
 
     def details(self, db: Session, category_id: int, scope: str = SCOPE_COMPLETED, **extra) -> CategoryDetailResponse:
         obj = self.get(db, category_id)
-        query = db.query(Game).filter(self.game_filter(category_id))
+        query = db.query(Game).options(joinedload(Game.developer_rel)).filter(self.game_filter(category_id))
         if scope != SCOPE_ALL:
             query = query.filter(Game.status.in_(COMPLETED_STATUSES))
         games = query.order_by(Game.finish_date.desc().nullslast(), Game.title.asc()).all()
@@ -254,20 +254,10 @@ class DeveloperService(CategoryService):
         )
 
     def completed_counts(self, db: Session, completed_only: bool = True) -> dict:
-        counts = _group_counts(db, Game.developer_id, completed_only=completed_only)
-        # Jogos legados sem developer_id, associados pelo nome (case-insensitive)
-        by_name = _group_counts(db, func.lower(Game.developer), Game.developer_id.is_(None), completed_only=completed_only)
-        for dev in db.query(Developer).all():
-            counts[dev.id] = counts.get(dev.id, 0) + by_name.get(dev.name.lower(), 0)
-        return counts
+        return _group_counts(db, Game.developer_id, completed_only=completed_only)
 
     def completed_rows(self, db: Session, completed_only: bool = True) -> list:
-        by_name = {d.name.lower(): d.id for d in db.query(Developer).all()}
-        rows = []
-        for dev_id, dev_name, cover, hours, done in _ranked_completed(
-                db, Game.developer_id, Game.developer, completed_only=completed_only).all():
-            rows.append((dev_id if dev_id is not None else by_name.get((dev_name or "").lower()), cover, hours, done))
-        return rows
+        return _ranked_completed(db, Game.developer_id, completed_only=completed_only).all()
 
 
 genre_service = GenreService()

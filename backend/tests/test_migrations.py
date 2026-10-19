@@ -6,7 +6,7 @@ from sqlalchemy import inspect
 from backend.app.core.database import Base
 from backend.app.core.migrations import BASELINE_REVISION, run_migrations
 
-HEAD_REVISION = "0007_replay_links"
+HEAD_REVISION = "0008_developer_from_relation"
 import backend.app.models  # noqa: F401
 
 
@@ -40,6 +40,7 @@ def test_legacy_database_is_adopted_without_losing_data(tmp_path):
         ops.drop_index("ix_games_replay_of_id", table_name="games")  # coluna da 0007
         with ops.batch_alter_table("games") as batch:
             batch.drop_column("replay_of_id")
+        c.execute(sa.text("alter table games add column developer varchar(150)"))  # removida na 0008
         c.execute(sa.text("insert into genres (name, color) values ('RPG', '#fff')"))
     run_migrations(engine)
     with engine.connect() as c:
@@ -113,3 +114,28 @@ def test_upgrade_keeps_rows_that_depend_on_games(tmp_path):
                   for t in ("games", "game_genres", "game_store_links", "yearbook_picks")]
         assert counts == [1, 1, 1, 1]
         assert c.exec_driver_sql("pragma foreign_keys").scalar() == 1  # religadas para o resto do app
+
+
+
+def test_developer_text_becomes_a_link_before_the_column_is_dropped(tmp_path):
+    from alembic import command
+    from backend.app.core.migrations import make_config
+    engine = _engine(tmp_path)
+    with engine.begin() as c:
+        command.upgrade(make_config(c), "0007_replay_links")
+        c.execute(sa.text("insert into developers (id, name) values (1, 'Étude Studio')"))
+        insert = ("insert into games (title, developer, developer_id, status, play_type, play_count, format, "
+                  "is_favorite, created_at, updated_at) values (:t, :d, :i, 'FILA', 'PRIMEIRA_JOGADA', 1, "
+                  "'DIGITAL', 0, '2026-01-01', '2026-01-01')")
+        for title, dev, dev_id in (("A", "ÉTUDE STUDIO", None), ("B", " Nova ", None), ("C", "nova", None),
+                                   ("D", "", None), ("E", "texto velho", 1)):
+            c.execute(sa.text(insert), {"t": title, "d": dev, "i": dev_id})
+    run_migrations(engine)
+    with engine.connect() as c:
+        links = dict(c.execute(sa.text("select title, developer_id from games")).fetchall())
+        names = dict(c.execute(sa.text("select id, name from developers")).fetchall())
+        columns = {col["name"] for col in inspect(engine).get_columns("games")}
+    assert "developer" not in columns
+    assert links["A"] == 1 and links["E"] == 1 and links["D"] is None
+    assert links["B"] == links["C"] and names[links["B"]] == "Nova"   # um registro só, sem espaços
+    assert len(names) == 2

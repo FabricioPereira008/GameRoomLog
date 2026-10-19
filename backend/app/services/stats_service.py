@@ -1,7 +1,7 @@
 from collections import Counter
 from datetime import date
 from typing import Dict, List, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_
 from backend.app.models.game import Game, GameStatus, PlayType
 from backend.app.models.yearbook import YearbookPick
@@ -19,7 +19,7 @@ class StatsService:
     @staticmethod
     def year_games(db: Session, year: int) -> List[Game]:
         """Jogos finalizados no ano (pela data de zeramento; sem data, pelo ano de conclusão)."""
-        return db.query(Game).filter(
+        return db.query(Game).options(joinedload(Game.developer_rel)).filter(
             or_(
                 func.strftime("%Y", Game.finish_date) == str(year),
                 (Game.finish_date.is_(None) & (Game.completion_year == year))

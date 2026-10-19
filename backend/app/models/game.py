@@ -42,7 +42,6 @@ class Game(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(200), nullable=False, index=True)
-    developer = Column(String(150), nullable=True)
     developer_id = Column(Integer, ForeignKey("developers.id"), nullable=True)
     
     # Chaves estrangeiras
@@ -91,3 +90,8 @@ class Game(Base):
 
     # Calculado pelo GameService (não é coluna): quantas rejogadas apontam para este registro
     replays_count = 0
+
+    @property
+    def developer(self):
+        """Nome da desenvolvedora (vem sempre da tabela developers: renomear lá vale para todos os jogos)."""
+        return self.developer_rel.name if self.developer_rel else None

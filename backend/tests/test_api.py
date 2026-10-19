@@ -358,3 +358,15 @@ def test_category_scope_all_counts_every_game_and_keeps_completed_first():
 
     assert client.get("/api/v1/genres/?scope=tudo").status_code == 422
     assert client.get(f"/api/v1/genres/{gen}/details?scope=tudo").status_code == 422
+
+
+def test_developer_rename_and_delete_reach_the_games():
+    game = client.post("/api/v1/games/", json={"title": "Hades", "developer": "Supergiant"}).json()
+    dev_id = game["developer_id"]
+    client.put(f"/api/v1/developers/{dev_id}", json={"name": "Supergiant Games"})
+    assert client.get(f"/api/v1/games/{game['id']}").json()["developer"] == "Supergiant Games"
+    found = client.get("/api/v1/games/", params={"search": "supergiant"}).json()
+    assert [g["id"] for g in found] == [game["id"]]                 # busca pela desenvolvedora
+    client.delete(f"/api/v1/developers/{dev_id}")
+    after = client.get(f"/api/v1/games/{game['id']}").json()
+    assert after["developer"] is None and after["developer_id"] is None
