@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QModelIndex, QPoint, QRect, QRectF, QSize, Qt
+from PySide6.QtCore import QModelIndex, QRect, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 

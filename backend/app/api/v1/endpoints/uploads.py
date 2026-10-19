@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from PIL import Image, ImageFilter
+from PIL import Image
 from backend.app.core.config import settings
 from backend.app.core.database import get_db
 from backend.app.models.game import Game

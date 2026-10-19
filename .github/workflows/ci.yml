@@ -7,8 +7,13 @@ on:
 
 jobs:
   test:
-    name: 🧪 Testes e cobertura
+    name: 🧪 Testes e cobertura (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11: a dos builds empacotados; 3.14: a usada no desenvolvimento
+        python-version: ['3.11', '3.14']
     env:
       PERF_FACTOR: "4"
     steps:
@@ -16,7 +21,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
           cache: 'pip'
 
       - name: Dependências do sistema (Qt headless)
@@ -29,5 +34,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      - name: Lint (ruff)
+        run: ruff check .
+
       - name: Pytest com cobertura mínima
-        run: pytest --cov=backend/app --cov=frontend_desktop --cov-report=term-missing --cov-fail-under=70
+        run: pytest --cov=backend/app --cov=frontend_desktop --cov-report=term-missing --cov-fail-under=85

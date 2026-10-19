@@ -1,4 +1,3 @@
-import pytest
 from frontend_desktop.views.components.management_view import ManagementView
 from frontend_desktop.views.components.yearbook_view import YearbookView
 from frontend_desktop.views.components.category_detail_view import CategoryDetailView

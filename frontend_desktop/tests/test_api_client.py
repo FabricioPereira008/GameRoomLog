@@ -1,5 +1,4 @@
 import json
-import json
 import pytest
 from app_version import __version__
 import responses

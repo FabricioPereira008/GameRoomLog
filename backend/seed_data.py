@@ -1,7 +1,7 @@
 from datetime import date
 from backend.app.core.database import SessionLocal, engine
 from backend.app.core.migrations import run_migrations
-from backend.app.models import Game, Genre, Platform, Franchise, GameStatus, PlayType, GameFormat
+from backend.app.models import Game, Genre, Platform, Franchise, GameStatus, PlayType
 
 def seed():
     run_migrations(engine)

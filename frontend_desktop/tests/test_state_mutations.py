@@ -1,6 +1,6 @@
 import pytest
 from PySide6.QtCore import Qt
-from frontend_desktop.views.components.game_grid import GameGrid, ScrollableGameGrid
+from frontend_desktop.views.components.game_grid import ScrollableGameGrid
 from frontend_desktop.views.components.game_room_view import GameRoomView
 from frontend_desktop.views.components.filter_panel import FilterPanel
 from frontend_desktop.views.dialogs.game_dialog import GameDialog
@@ -482,7 +482,7 @@ def test_edit_dialog_populates_all_fields(qapp, monkeypatch):
 
 
 def test_optional_date_edit_behaviour(qapp):
-    from PySide6.QtCore import QDate, Qt, QEvent, QPoint, QPointF
+    from PySide6.QtCore import QDate, QEvent, QPoint, QPointF
     from PySide6.QtGui import QKeyEvent, QMouseEvent, QWheelEvent
     from frontend_desktop.views.dialogs.game_dialog import OptionalDateEdit
     w = OptionalDateEdit()
@@ -499,7 +499,7 @@ def test_optional_date_edit_behaviour(qapp):
     # Delete limpa
     w.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Delete, Qt.NoModifier))
     assert w.is_blank()
-    w.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, QPointF(2, 2), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    w.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, QPointF(2, 2), QPointF(2, 2), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
     assert w.date() == QDate.currentDate()
     w.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Backspace, Qt.NoModifier))
     w.set_optional_date(QDate(2020, 1, 2))

@@ -1,6 +1,6 @@
 import logging
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QScrollArea, QColorDialog, QMessageBox
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QColorDialog, QMessageBox
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor

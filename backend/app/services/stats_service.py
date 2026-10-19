@@ -1,6 +1,6 @@
 from collections import Counter
 from datetime import date
-from typing import Dict, List, Optional
+from typing import Dict, List
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_
 from backend.app.models.game import Game, GameStatus, PlayType

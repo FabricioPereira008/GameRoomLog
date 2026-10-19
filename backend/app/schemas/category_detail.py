@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Dict, Any, Literal, Optional
+from typing import List, Literal, Optional
 
 # Páginas de categoria: "completed" = só zerados/platinados (padrão), "all" = todos os jogos
 CategoryScope = Literal["completed", "all"]

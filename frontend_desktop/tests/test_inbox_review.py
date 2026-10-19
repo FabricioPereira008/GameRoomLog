@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QMessageBox
 
 from frontend_desktop.views.components import portable_app_view as sv
 from frontend_desktop.views.dialogs import inbox_review_dialog as ird

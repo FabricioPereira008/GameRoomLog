@@ -5,7 +5,6 @@ Atualiza versões nos arquivos, valida a suíte de testes, atualiza o CHANGELOG.
 """
 
 import sys
-import os
 import re
 import subprocess
 from datetime import date

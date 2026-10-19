@@ -8,9 +8,8 @@ from PySide6.QtGui import QColor
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.text_search import fold, fold_query
 from frontend_desktop.workers import run_async
-from frontend_desktop.ui_helpers import add_search_icon, set_button_icon
+from frontend_desktop.ui_helpers import add_search_icon
 from frontend_desktop.views.components.cover_mosaic import CoverMosaic
-from frontend_desktop.styles.tokens import COLORS
 from frontend_desktop.preferences import SCOPE_ALL, SCOPE_COMPLETED, category_scope
 
 logger = logging.getLogger(__name__)

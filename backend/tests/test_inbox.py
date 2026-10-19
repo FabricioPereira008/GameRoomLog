@@ -437,7 +437,7 @@ def test_playing_a_finished_game_proposes_a_linked_replay(db):
 
 
 def test_finishing_again_with_new_date_proposes_finished_replay(db):
-    game = _finished_game(db)
+    _finished_game(db)
     post(ev("a", "finished", "Hades", "PC", day="2026-10-12", score=10))
     cand = pending()["groups"][0]["candidates"][0]
     assert cand["changes"] == {}
@@ -446,7 +446,7 @@ def test_finishing_again_with_new_date_proposes_finished_replay(db):
 
 
 def test_events_before_the_replay_still_update_the_original(db):
-    game = _finished_game(db)
+    _finished_game(db)
     post(ev("a", "platinum", "Hades", "PC", day="2026-01-05"), ev("b", "playing", "Hades", "PC", day="2026-10-01"))
     cand = pending()["groups"][0]["candidates"][0]
     assert cand["changes"]["status"] == "Platinado" and cand["changes"]["platinum_date"] == "2026-01-05"

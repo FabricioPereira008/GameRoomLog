@@ -24,7 +24,7 @@ def main():
 
     print("Iniciando a Interface Desktop (PySide6)...")
     try:
-        frontend_proc = subprocess.run(
+        subprocess.run(
             [python_exec, str(root_dir / "frontend_desktop" / "main_app.py")],
             env=env
         )

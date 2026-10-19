@@ -11,7 +11,7 @@ from PySide6.QtGui import QColor, QFont, QFontDatabase, QPalette
 from PySide6.QtWidgets import QApplication
 
 from frontend_desktop import icons
-from frontend_desktop.styles.tokens import COLORS, FONT_FAMILY, FONT_SIZE, qss_mapping
+from frontend_desktop.styles.tokens import COLORS, FONT_FAMILY, qss_mapping
 
 logger = logging.getLogger(__name__)
 

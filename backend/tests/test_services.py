@@ -4,10 +4,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from backend.app.core.database import Base
-from backend.app.models.game import GameStatus, PlayType
+from backend.app.models.game import GameStatus
 from backend.app.models.platform import Platform
 from backend.app.models.genre import Genre
-from backend.app.models.franchise import Franchise
 from backend.app.models.developer import Developer
 from backend.app.schemas.game import GameCreate, GameUpdate
 from backend.app.services.game_service import GameService

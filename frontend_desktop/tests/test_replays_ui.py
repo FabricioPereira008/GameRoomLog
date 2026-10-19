@@ -1,6 +1,5 @@
 """Rejogadas na GUI: vínculo no GameDialog, filtro, contador do original e revisão da caixa de entrada."""
 import pytest
-from PySide6.QtWidgets import QDialog
 
 from frontend_desktop.views.components.filter_panel import PLAYS_REPLAYED, PLAYS_REPLAYS, FilterPanel
 from frontend_desktop.views.dialogs import game_dialog as gd

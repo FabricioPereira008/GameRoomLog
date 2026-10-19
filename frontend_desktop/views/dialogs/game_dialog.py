@@ -6,8 +6,6 @@ from PySide6.QtWidgets import (
     QCheckBox, QMessageBox, QScrollArea, QWidget, QInputDialog, QCompleter
 )
 from PySide6.QtCore import Qt, QDate, QSettings
-from PySide6.QtGui import QPixmap
-from datetime import date
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.workers import run_async
 from frontend_desktop.cover_loader import cover_loader
@@ -15,7 +13,6 @@ from frontend_desktop.styles.tokens import COLORS
 from frontend_desktop.text_search import fold
 from frontend_desktop.ui_helpers import set_button_icon, set_status
 
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

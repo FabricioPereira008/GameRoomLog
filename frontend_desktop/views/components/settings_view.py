@@ -73,7 +73,7 @@ class CoverFetcherThread(QThread):
                 time.sleep(0.3)
 
             self.batch_finished.emit(total, success_count)
-        except Exception as e:
+        except Exception:
             logger.exception("Erro no worker de capas")
             self.batch_finished.emit(0, 0)
 

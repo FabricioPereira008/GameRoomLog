@@ -11,7 +11,6 @@ sobrescrever o registro antigo. Um grupo de jogadas é tratado como um jogo só,
 jogada mais recente.
 """
 import difflib
-import re
 from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple

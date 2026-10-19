@@ -1,14 +1,12 @@
-import io
 import time
 
-import pytest
 from PySide6.QtCore import QCoreApplication, QEventLoop, QTimer
 from PySide6.QtGui import QImage
 
 from frontend_desktop import cover_loader as cl
 from frontend_desktop.models.game_list_model import GameFilterProxy, GameListModel, GameRole
 from frontend_desktop.views.components.game_card_delegate import (
-    CARD_WIDTHS, CardMetrics, genre_badge_limits, GameCardDelegate, text_color_for
+    CARD_WIDTHS, CardMetrics, genre_badge_limits, text_color_for
 )
 from frontend_desktop.views.components.game_grid import (
     MODE_BUTTON, MODE_FULL, GameGrid, ScrollableGameGrid, make_predicate

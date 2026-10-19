@@ -4,7 +4,7 @@ from alembic.operations import Operations
 from sqlalchemy import inspect
 
 from backend.app.core.database import Base
-from backend.app.core.migrations import BASELINE_REVISION, run_migrations
+from backend.app.core.migrations import run_migrations
 
 HEAD_REVISION = "0008_developer_from_relation"
 import backend.app.models  # noqa: F401

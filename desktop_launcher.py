@@ -1,8 +1,6 @@
 import logging
 from app_logging import setup_logging
 import sys
-import os
-import io
 import time
 import threading
 from urllib.parse import urlparse
@@ -29,12 +27,8 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 import uvicorn
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QTimer
-from PySide6.QtGui import QKeySequence, QShortcut
 
 from backend.app.main import app as fastapi_app
-from frontend_desktop.views.main_window import MainWindow
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.main_app import create_app, create_main_window
 
@@ -62,7 +56,7 @@ class EmbeddedBackendServer(threading.Thread):
     def run(self):
         try:
             self.server.run()
-        except Exception as e:
+        except Exception:
             logger.exception("Erro no backend embutido")
 
     def stop(self):

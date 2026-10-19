@@ -1,6 +1,5 @@
 import io
 import pytest
-from unittest.mock import patch
 from fastapi.testclient import TestClient
 from PIL import Image
 from backend.app.main import app

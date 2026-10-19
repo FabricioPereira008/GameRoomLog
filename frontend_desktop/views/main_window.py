@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from frontend_desktop.views.components.sidebar import Sidebar
 from frontend_desktop.views.components.game_room_view import GameRoomView
-from frontend_desktop.views.components.game_grid import GameGrid, ScrollableGameGrid
+from frontend_desktop.views.components.game_grid import ScrollableGameGrid
 from frontend_desktop.views.components.game_table import GameTable
 from frontend_desktop.views.components.yearbook_view import YearbookView
 from frontend_desktop.views.components.management_view import ManagementView
