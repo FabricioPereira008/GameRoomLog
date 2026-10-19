@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
 from frontend_desktop.api_client.client import api_client
+from frontend_desktop.text_search import fold, fold_query
 from frontend_desktop.workers import run_async
 from frontend_desktop.ui_helpers import add_search_icon, set_button_icon
 from frontend_desktop.views.components.cover_mosaic import CoverMosaic
@@ -248,8 +249,8 @@ class ManagementView(QWidget):
             if widget:
                 widget.deleteLater()
 
-        search_term = self.search_input.text().lower().strip()
-        filtered = [i for i in self.items if search_term in i.get("name", "").lower()]
+        search_term = fold_query(self.search_input.text())
+        filtered = [i for i in self.items if search_term in fold(i.get("name"))]
 
         if not filtered:
             empty = QLabel(f"Nenhum registro encontrado em {self.title}.")

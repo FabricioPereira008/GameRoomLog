@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
 )
 
 from frontend_desktop import preferences
+from frontend_desktop.text_search import fold, fold_query
 from frontend_desktop.models.game_list_model import GameRole
 from frontend_desktop.models.game_table_model import COLUMN_TOOLTIPS, COLUMNS, GameTableModel, GameTableProxy
 from frontend_desktop.ui_helpers import add_search_icon
@@ -150,14 +151,14 @@ class GameTable(QWidget):
 
     # --- filtro ---
     def apply_filter(self, *_):
-        text = self.search_input.text().lower().strip()
+        text = fold_query(self.search_input.text())
         status = self.status_filter.currentData()
 
         def predicate(game: dict) -> bool:
             if status and game.get("status") != status:
                 return False
             if text:
-                return text in (game.get("title") or "").lower() or text in (game.get("developer") or "").lower()
+                return text in fold(game.get("title")) or text in fold(game.get("developer"))
             return True
 
         self.proxy.set_predicate(predicate)

@@ -1,19 +1,13 @@
 """Busca rápida (Ctrl+F): encontra qualquer jogo da biblioteca pelo título e abre a edição."""
-import unicodedata
 from typing import List, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QVBoxLayout
 
+from frontend_desktop.text_search import fold
 from frontend_desktop.ui_helpers import add_search_icon
 
 MAX_RESULTS = 50
-
-
-def fold(text: str) -> str:
-    """Minúsculas e sem acentos ("Pokémon" encontra "pokemon")."""
-    text = unicodedata.normalize("NFKD", text or "")
-    return "".join(c for c in text if not unicodedata.combining(c)).casefold()
 
 
 def search_games(games: List[dict], query: str, limit: int = MAX_RESULTS) -> List[dict]:

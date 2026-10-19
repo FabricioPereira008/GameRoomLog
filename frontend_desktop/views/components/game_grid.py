@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from frontend_desktop import preferences
 from frontend_desktop.cover_loader import cover_loader
+from frontend_desktop.text_search import fold, fold_query
 from frontend_desktop.models.game_list_model import GameFilterProxy, GameListModel, GameRole
 from frontend_desktop.ui_helpers import add_search_icon
 from frontend_desktop.views.game_status import display_hours
@@ -424,10 +425,10 @@ class ScrollableGameGrid(QWidget):
 
 def make_predicate(query: str, panel_matcher: Callable[[dict], bool]) -> Callable[[dict], bool]:
     """Predicado de busca por título + filtros do painel (estado lido uma única vez)."""
-    needle = query.strip().lower()
+    needle = fold_query(query)
 
     def predicate(game: dict) -> bool:
-        if needle and needle not in (game.get("title") or "").lower():
+        if needle and needle not in fold(game.get("title")):
             return False
         return panel_matcher(game)
 

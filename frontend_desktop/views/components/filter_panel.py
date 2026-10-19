@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, Qt, QStringListModel, QTimer
 from frontend_desktop.data_quality import is_incomplete
+from frontend_desktop.text_search import fold_query
 from frontend_desktop.ui_helpers import set_button_icon
 from frontend_desktop.views import game_status as gs
 
@@ -46,10 +47,10 @@ class SuggestField(QLineEdit):
         self.names_model.setStringList(names)
 
     def value(self) -> tuple:
-        """(texto em minúsculas, exato?) — texto vazio significa "sem filtro"."""
+        """(texto normalizado — sem acentos/maiúsculas —, exato?) — texto vazio significa "sem filtro"."""
         if not self.isEnabled():  # bloqueado: mostra o nome da categoria, mas não filtra
             return "", False
-        return self.text().strip().lower(), self._exact
+        return fold_query(self.text()), self._exact
 
     def _on_edited(self, _text: str) -> None:
         self._exact = False
@@ -301,7 +302,7 @@ class FilterPanel(QWidget):
         only_incomplete = self.chk_incomplete.isChecked()
 
         def name_of(value) -> str:
-            return (value.get("name") if isinstance(value, dict) else str(value or "")).strip().lower()
+            return fold_query(value.get("name") if isinstance(value, dict) else str(value or ""))
 
         def hit(wanted: tuple, actual: str) -> bool:
             text, exact = wanted
@@ -310,7 +311,7 @@ class FilterPanel(QWidget):
         def matcher(game: dict) -> bool:
             if gen[0] and not any(hit(gen, name_of(g)) for g in game.get("genres") or []):
                 return False
-            if dev[0] and not hit(dev, (game.get("developer") or "").strip().lower()):
+            if dev[0] and not hit(dev, fold_query(game.get("developer"))):
                 return False
             if plat[0] and not hit(plat, name_of(game.get("platform"))):
                 return False
