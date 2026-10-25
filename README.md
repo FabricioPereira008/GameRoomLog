@@ -7,7 +7,7 @@
 ![PySide6](https://img.shields.io/badge/PySide6-Qt6-41CD52?style=for-the-badge&logo=qt&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
 ![Pytest](https://img.shields.io/badge/Tests-150%20Passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
+![License](https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge)
 
 **Seu gerenciador pessoal de backlog de jogos, histórico de gameplay e anuário gamer definitivo.**
 
@@ -195,4 +195,4 @@ GameRoomLog/
 
 ## 📄 Licença
 
-Este projeto está sob a licença [MIT](LICENSE).
+Este projeto está sob a licença [GNU GPL v3.0](LICENSE).
