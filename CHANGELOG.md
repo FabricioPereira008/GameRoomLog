@@ -5,6 +5,17 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [1.5.0] - 2026-10-31
+### Adicionado
+- **Buscar dados do jogo:** botão "Buscar dados" ao lado do título no cadastro. Ele busca desenvolvedora, franquia, gêneros, plataforma e duração (HowLongToBeat) e abre uma prévia para escolher o jogo certo e marcar o que entra no formulário. Os gêneros são convertidos para a taxonomia do GameRoom, e desenvolvedora, franquia e plataforma reaproveitam a grafia já cadastrada.
+- Fontes: IGDB (com credenciais gratuitas de um app da Twitch, em Configurações → Capas e dados), Steam (sem configuração) e HowLongToBeat.
+
+### Modificado
+- A aba "Capas" das Configurações agora se chama "Capas e dados".
+
+### Corrigido
+- Um teste do campo de data falhava no último dia de cada mês.
+
 ## [1.4.0] - 2026-10-18
 ### Adicionado
 - **Rejogadas vinculadas:** cada rejogada continua sendo um registro próprio, agora ligado ao registro original. O diálogo do jogo ganhou o campo "Rejogada de" (sugere o original pelo título e o número da jogada) e mostra o histórico de jogadas; o filtro "Só jogos rejogados" lista todas as jogadas dos jogos rejogados.
