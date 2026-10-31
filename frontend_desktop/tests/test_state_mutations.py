@@ -484,6 +484,7 @@ def test_edit_dialog_populates_all_fields(qapp, monkeypatch):
 def test_optional_date_edit_behaviour(qapp):
     from PySide6.QtCore import QDate, QEvent, QPoint, QPointF
     from PySide6.QtGui import QKeyEvent, QMouseEvent, QWheelEvent
+    from PySide6.QtWidgets import QDateEdit
     from frontend_desktop.views.dialogs.game_dialog import OptionalDateEdit
     w = OptionalDateEdit()
     assert w.is_blank() and w.date_or_none() is None
@@ -495,7 +496,10 @@ def test_optional_date_edit_behaviour(qapp):
     w.stepBy(1)
     assert w.date() == QDate.currentDate()
     w.stepBy(1)
-    assert w.date() == QDate.currentDate().addDays(1)
+    plain = QDateEdit(QDate.currentDate())  # dali em diante passo normal (no dia 31 o dia não avança)
+    plain.setDisplayFormat("dd/MM/yyyy")
+    plain.stepBy(1)
+    assert w.date() == plain.date()
     # Delete limpa
     w.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Delete, Qt.NoModifier))
     assert w.is_blank()
