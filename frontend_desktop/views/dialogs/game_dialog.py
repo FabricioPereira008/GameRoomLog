@@ -1,4 +1,4 @@
-"""Diálogo de criação/edição de jogo. A capa e o vínculo de rejogada ficam em mixins próprios."""
+"""Diálogo de criação/edição de jogo. Capa, vínculo de rejogada e busca de dados ficam em mixins próprios."""
 import logging
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QFrame, QLineEdit, QComboBox,
@@ -12,6 +12,7 @@ from frontend_desktop.cover_loader import cover_loader
 from frontend_desktop.styles.tokens import COLORS
 from frontend_desktop.ui_helpers import set_button_icon, set_status
 from frontend_desktop.views.dialogs.game_dialog_cover import COVER_PREVIEW_SIZE, NO_COVER_TEXT, CoverMixin  # noqa: F401
+from frontend_desktop.views.dialogs.game_dialog_metadata import MetadataMixin
 from frontend_desktop.views.dialogs.game_dialog_replay import (  # noqa: F401  (reexportados)
     ReplayLinkMixin, brief_label, describe_plays, replay_group,
 )
@@ -24,7 +25,7 @@ STATUSES = ["Disponível", "Fila", "Próximo", "Jogando", "Zerado", "Platinado",
 FORMATS = ["Digital", "Físico", "Emulado"]
 
 
-class GameDialog(CoverMixin, ReplayLinkMixin, QDialog):
+class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
     def __init__(self, game_data: dict = None, parent=None):
         super().__init__(parent)
         self.game_data = game_data or {}
@@ -153,7 +154,11 @@ class GameDialog(CoverMixin, ReplayLinkMixin, QDialog):
 
         self.input_title = QLineEdit()
         self.input_title.setPlaceholderText("Ex: The Legend of Zelda: Tears of the Kingdom")
-        grid.addWidget(self._field("Título", self.input_title, required=True), 0, 0, 1, 2)
+        title_row = QHBoxLayout()
+        title_row.setSpacing(6)
+        title_row.addWidget(self.input_title, 1)
+        title_row.addWidget(self._build_metadata_button())
+        grid.addWidget(self._field("Título", title_row, required=True), 0, 0, 1, 2)
 
         self.combo_developer = self._editable_combo("Selecione ou digite…")
         grid.addWidget(self._field("Desenvolvedora", self.combo_developer), 1, 0)

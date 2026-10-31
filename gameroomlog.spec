@@ -44,6 +44,8 @@ hidden_imports = [
     'backend.app.api.v1.endpoints.developers',
     'backend.app.api.v1.endpoints.stats',
     'backend.app.api.v1.endpoints.uploads',
+    'backend.app.api.v1.endpoints.metadata',
+    'howlongtobeatpy',  # importado só dentro de hltb_main_story
     'backend.app.models.game',
     'backend.app.models.genre',
     'backend.app.models.platform',

@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     COVERS_DIR: Path = _BASE_DATA_DIR / "storage" / "covers"
     
     STEAMGRIDDB_API_KEY: str = ""
+    # App da Twitch para a IGDB (busca automática de dados dos jogos); opcionais
+    IGDB_CLIENT_ID: str = ""
+    IGDB_CLIENT_SECRET: str = ""
 
     # Origens web autorizadas via CORS (o cliente desktop não depende de CORS)
     CORS_ORIGINS: list[str] = ["http://127.0.0.1:8000", "http://localhost:8000"]

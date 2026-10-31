@@ -9,6 +9,7 @@ DEFAULT_TIMEOUT = 5
 UPLOAD_TIMEOUT = 15
 IMPORT_TIMEOUT = 120
 SCAN_TIMEOUT = 90
+METADATA_TIMEOUT = 45  # IGDB/Steam + HowLongToBeat (que pode demorar)
 
 
 def get_default_base_url() -> str:
@@ -176,6 +177,26 @@ class ApiClient:
         if r.status_code == 200:
             return r.json().get("filename")
         return None
+
+    # --- DADOS AUTOMÁTICOS DO JOGO (IGDB / Steam / HowLongToBeat) ---
+    def _metadata(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Erros viram RuntimeError com a mensagem da API (ex.: "Nenhum jogo encontrado...")."""
+        r = self._request("POST", f"metadata/{path}", timeout=METADATA_TIMEOUT, json=payload)
+        if r.status_code != 200:
+            try:
+                detail = r.json().get("detail")
+            except ValueError:
+                detail = None
+            raise RuntimeError(detail if isinstance(detail, str) else f"Erro {r.status_code} na busca de dados.")
+        return r.json()
+
+    def search_game_metadata(self, title: str, igdb: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+        """Candidatos com esse título; `igdb` = {"igdb_client_id", "igdb_client_secret"} (opcional)."""
+        return self._metadata("search", {"title": title, **(igdb or {})})
+
+    def get_game_metadata(self, source: str, source_id: str, title: str,
+                          igdb: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+        return self._metadata("details", {"source": source, "source_id": source_id, "title": title, **(igdb or {})})
 
     # --- GÊNEROS ---
     def get_genres(self, scope: Optional[str] = None) -> List[Dict[str, Any]]:

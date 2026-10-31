@@ -102,7 +102,7 @@ class SettingsView(QWidget):
         self.shortcuts_tab = ShortcutsTab()
         self.tabs.addTab(self._scrollable(self._build_appearance_tab()), "Aparência")
         self.tabs.addTab(self._scrollable(self.pages_tab), "Páginas")
-        self.tabs.addTab(self._scrollable(self._build_covers_tab()), "Capas")
+        self.tabs.addTab(self._scrollable(self._build_covers_tab()), "Capas e dados")
         self.tabs.addTab(self._scrollable(self._build_backup_tab()), "Backup")
         self.tabs.addTab(self._scrollable(self.shortcuts_tab), "Atalhos")
         self.tabs.addTab(self._scrollable(self._build_about_tab()), "Sobre")
@@ -203,6 +203,31 @@ class SettingsView(QWidget):
         key_layout.addWidget(btn_save_key)
         sgdb_layout.addLayout(key_layout)
         layout.addWidget(sgdb_group)
+
+        igdb_group, igdb_layout = self._group(
+            "Dados automáticos dos jogos (IGDB)",
+            "O botão \"Buscar dados\" do cadastro usa a Steam e o HowLongToBeat sem configuração. Para "
+            "jogos de console e dados mais completos (franquia, gêneros, plataformas), crie um app gratuito "
+            "em dev.twitch.tv/console (Register Your Application, categoria \"Application Integration\") e "
+            "informe o Client ID e o Client Secret.",
+        )
+        igdb_fields = QHBoxLayout()
+        self.input_igdb_id = QLineEdit()
+        self.input_igdb_id.setPlaceholderText("Client ID")
+        self.input_igdb_id.setText(self.settings.value("igdb_client_id", ""))
+        self.input_igdb_secret = QLineEdit()
+        self.input_igdb_secret.setPlaceholderText("Client Secret")
+        self.input_igdb_secret.setText(self.settings.value("igdb_client_secret", ""))
+        self.input_igdb_secret.setEchoMode(QLineEdit.PasswordEchoOnEdit)
+        btn_save_igdb = QPushButton("Salvar credenciais")
+        btn_save_igdb.setProperty("class", "cancel-btn")
+        btn_save_igdb.setCursor(Qt.PointingHandCursor)
+        btn_save_igdb.clicked.connect(self.save_igdb_credentials)
+        igdb_fields.addWidget(self.input_igdb_id)
+        igdb_fields.addWidget(self.input_igdb_secret)
+        igdb_fields.addWidget(btn_save_igdb)
+        igdb_layout.addLayout(igdb_fields)
+        layout.addWidget(igdb_group)
 
         batch_group, batch_layout = self._group(
             "Capas faltantes", "Busca, um jogo por vez, as capas de todos os jogos que ainda não têm uma.")
@@ -525,4 +550,10 @@ class SettingsView(QWidget):
         key = self.input_sgdb_key.text().strip()
         self.settings.setValue("steamgriddb_key", key)
         QMessageBox.information(self, "Configurações", "Chave do SteamGridDB salva com sucesso!")
+        self.settings_changed.emit()
+
+    def save_igdb_credentials(self):
+        self.settings.setValue("igdb_client_id", self.input_igdb_id.text().strip())
+        self.settings.setValue("igdb_client_secret", self.input_igdb_secret.text().strip())
+        QMessageBox.information(self, "Configurações", "Credenciais da IGDB salvas com sucesso!")
         self.settings_changed.emit()
