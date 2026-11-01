@@ -63,7 +63,7 @@ class GameTable(QWidget):
         self.status_filter = QComboBox()
         self.status_filter.addItem("Todos os status", None)
         for status in gs.ALL_STATUSES:
-            self.status_filter.addItem(status, status)
+            self.status_filter.addItem(gs.label(status), status)
         self.status_filter.currentIndexChanged.connect(self.apply_filter)
         filter_layout.addWidget(self.status_filter)
 

@@ -123,6 +123,9 @@ def test_yearbook_shows_podium_charts_and_highlights(qapp):
     assert view.compare_text(2, 1, 2025) == "Jogos Zerados · +1 vs 2024"
     assert view.compare_text(1, 1, 2025) == "Jogos Zerados · igual a 2024"
     assert view.compare_text(1, None, 2025) == "Jogos Zerados"
+    assert view.card_platinums.title_label.text() == "Jogos 100%"
+    view._on_year_loaded(1, 2025, _summary(total_all_achievements=1))
+    assert view.card_platinums.title_label.text() == "Jogos 100% (1 com conquistas)"
 
     view._on_year_loaded(1, 2025, _summary(top3_custom=True))
     assert view.podium_hint.text() == "Escolhido por você"

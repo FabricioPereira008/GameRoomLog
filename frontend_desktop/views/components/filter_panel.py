@@ -10,7 +10,8 @@ from frontend_desktop.ui_helpers import set_button_icon
 from frontend_desktop.views import game_status as gs
 
 FIELD_DEBOUNCE_MS = 150
-STATUS_COMPLETED = "__concluidos__"  # opção "Zerados e platinados" do filtro de status
+STATUS_COMPLETED = "__concluidos__"  # opção "Zerados e 100%" do filtro de status
+ACHIEVEMENTS_WITH, ACHIEVEMENTS_WITHOUT = "with", "without"  # filtro Conquistas (aba 100%)
 
 
 def is_replay(game: dict) -> bool:
@@ -102,7 +103,8 @@ class FilterPanel(QWidget):
         self.platforms_list = []
         self.franchises_list = []
         self._fields = {}  # kind -> (label, campo)
-        self._page_fields = set(page_settings.FILTER_FIELDS)  # campos permitidos pela página (Configurações)
+        # campos permitidos pela página (Configurações); Conquistas só aparece onde a página pede (aba 100%)
+        self._page_fields = set(page_settings.FILTER_FIELDS) - {"achievements"}
         self._status_allowed = False  # o status só existe nas páginas de categoria no modo "todos os jogos"
 
         self.init_ui()
@@ -183,11 +185,21 @@ class FilterPanel(QWidget):
         self.combo_status = QComboBox()
         self.combo_status.setProperty("class", "filter-combo")
         self.combo_status.addItem("Todos os status", "")
-        self.combo_status.addItem("Zerados e platinados", STATUS_COMPLETED)
+        self.combo_status.addItem("Zerados e 100%", STATUS_COMPLETED)
         for status in gs.ALL_STATUSES:
-            self.combo_status.addItem(status, status)
+            self.combo_status.addItem(gs.label(status), status)
         grid.addWidget(self.status_label, 2, 2)
         grid.addWidget(self.combo_status, 2, 3)
+
+        # Conquistas (só na aba 100%): com todas as conquistas x jogo sem conquistas
+        self.achievements_label = make_label("Conquistas:")
+        self.combo_achievements = QComboBox()
+        self.combo_achievements.setProperty("class", "filter-combo")
+        self.combo_achievements.addItem("Todos", "")
+        self.combo_achievements.addItem("Com todas as conquistas", ACHIEVEMENTS_WITH)
+        self.combo_achievements.addItem("Sem conquistas", ACHIEVEMENTS_WITHOUT)
+        grid.addWidget(self.achievements_label, 3, 2)
+        grid.addWidget(self.combo_achievements, 3, 3)
 
         # Linha 3: rejogados
         self.chk_replayed = QCheckBox("Só jogos rejogados")
@@ -221,6 +233,7 @@ class FilterPanel(QWidget):
         self.combo_hltb_op.currentIndexChanged.connect(self._on_any_change)
         self.spin_hltb.valueChanged.connect(self._on_any_change)
         self.combo_status.currentIndexChanged.connect(self._on_any_change)
+        self.combo_achievements.currentIndexChanged.connect(self._on_any_change)
         self.chk_replayed.toggled.connect(self._on_any_change)
         self.chk_incomplete.toggled.connect(self._on_any_change)
 
@@ -252,6 +265,7 @@ class FilterPanel(QWidget):
             "hltb": (self.hltb_label, self.combo_hltb_op, self.spin_hltb),
             "plays": (self.chk_replayed,),
             "status": (self.status_label, self.combo_status),
+            "achievements": (self.achievements_label, self.combo_achievements),
             "incomplete": (self.chk_incomplete,),
         }[kind]
 
@@ -273,6 +287,8 @@ class FilterPanel(QWidget):
             "hltb": (self.spin_hltb, self.spin_hltb.value() > 0, lambda: self.spin_hltb.setValue(0)),
             "plays": (self.chk_replayed, self.chk_replayed.isChecked(), lambda: self.chk_replayed.setChecked(False)),
             "status": (self.combo_status, self.combo_status.currentIndex() > 0, lambda: self.combo_status.setCurrentIndex(0)),
+            "achievements": (self.combo_achievements, self.combo_achievements.currentIndex() > 0,
+                             lambda: self.combo_achievements.setCurrentIndex(0)),
             "incomplete": (self.chk_incomplete, self.chk_incomplete.isChecked(), lambda: self.chk_incomplete.setChecked(False)),
         }[kind]
         if active:
@@ -342,6 +358,8 @@ class FilterPanel(QWidget):
             count += 1
         if self.combo_status.currentData():
             count += 1
+        if self.combo_achievements.currentData():
+            count += 1
         if self.chk_replayed.isChecked():
             count += 1
         if self.chk_incomplete.isChecked():
@@ -369,6 +387,7 @@ class FilterPanel(QWidget):
             field.blockSignals(False)
         for widget, reset in ((self.spin_hltb, lambda: self.spin_hltb.setValue(0)),
                               (self.combo_status, lambda: self.combo_status.setCurrentIndex(0)),
+                              (self.combo_achievements, lambda: self.combo_achievements.setCurrentIndex(0)),
                               (self.chk_replayed, lambda: self.chk_replayed.setChecked(False)),
                               (self.chk_incomplete, lambda: self.chk_incomplete.setChecked(False))):
             widget.blockSignals(True)
@@ -385,6 +404,7 @@ class FilterPanel(QWidget):
         op = self.combo_hltb_op.currentText()
         at_least, at_most = "≥" in op, "≤" in op
         status = self.combo_status.currentData() or ""  # escondido = sempre "Todos os status"
+        achievements = self.combo_achievements.currentData() or ""
         only_replayed = self.chk_replayed.isChecked()
         only_incomplete = self.chk_incomplete.isChecked()
 
@@ -407,6 +427,8 @@ class FilterPanel(QWidget):
             if status == STATUS_COMPLETED and game.get("status") not in (gs.ZERADO, gs.PLATINADO):
                 return False
             if status and status != STATUS_COMPLETED and game.get("status") != status:
+                return False
+            if achievements and gs.has_all_achievements(game) != (achievements == ACHIEVEMENTS_WITH):
                 return False
             if only_replayed and not was_replayed(game):
                 return False

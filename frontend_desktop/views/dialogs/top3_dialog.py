@@ -27,7 +27,7 @@ class Top3Dialog(QDialog):
         title = QLabel(f"Os melhores jogos de {year}")
         title.setProperty("class", "section-header")
         layout.addWidget(title)
-        hint = QLabel("Escolha entre os jogos zerados ou platinados no ano. Deixe uma posição vazia se quiser menos de três.")
+        hint = QLabel("Escolha entre os jogos zerados ou 100% no ano. Deixe uma posição vazia se quiser menos de três.")
         hint.setWordWrap(True)
         hint.setProperty("class", "settings-desc")
         layout.addWidget(hint)

@@ -6,7 +6,7 @@ from sqlalchemy import inspect
 from backend.app.core.database import Base
 from backend.app.core.migrations import run_migrations
 
-HEAD_REVISION = "0008_developer_from_relation"
+HEAD_REVISION = "0009_all_achievements"
 import backend.app.models  # noqa: F401
 
 
@@ -41,6 +41,7 @@ def test_legacy_database_is_adopted_without_losing_data(tmp_path):
         with ops.batch_alter_table("games") as batch:
             batch.drop_column("replay_of_id")
         c.execute(sa.text("alter table games add column developer varchar(150)"))  # removida na 0008
+        c.execute(sa.text("alter table games drop column all_achievements"))  # coluna da 0009
         c.execute(sa.text("insert into genres (name, color) values ('RPG', '#fff')"))
     run_migrations(engine)
     with engine.connect() as c:

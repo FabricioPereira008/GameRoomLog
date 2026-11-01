@@ -14,6 +14,7 @@ class YearbookSummary(BaseModel):
     year: int
     total_games_finished: int
     total_platinums: int
+    total_all_achievements: int = 0  # dos 100%, quantos com todas as conquistas
     total_hours_played: float
     total_hltb_hours: float
     average_score: Optional[float] = None

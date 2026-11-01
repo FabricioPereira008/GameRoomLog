@@ -75,6 +75,7 @@ class StatsService:
             year=year,
             total_games_finished=len(games),
             total_platinums=sum(1 for g in games if g.status == GameStatus.PLATINADO),
+            total_all_achievements=sum(1 for g in games if g.status == GameStatus.PLATINADO and g.all_achievements),
             total_hours_played=round(sum(hours.values()), 1),
             total_hltb_hours=round(total_hltb, 1),
             average_score=round(sum(scores) / len(scores), 1) if scores else None,

@@ -21,6 +21,7 @@ class GameBase(BaseModel):
     difficulty: Optional[float] = Field(default=None, ge=0, le=10)
     finish_date: Optional[date] = None
     platinum_date: Optional[date] = None
+    all_achievements: bool = False
     completion_year: Optional[int] = None
     play_type: PlayType = PlayType.PRIMEIRA_JOGADA
     play_count: int = Field(default=1, ge=1)
@@ -49,6 +50,7 @@ class GameUpdate(BaseModel):
     difficulty: Optional[float] = Field(default=None, ge=0, le=10)
     finish_date: Optional[date] = None
     platinum_date: Optional[date] = None
+    all_achievements: Optional[bool] = None
     completion_year: Optional[int] = None
     play_type: Optional[PlayType] = None
     play_count: Optional[int] = Field(default=None, ge=1)

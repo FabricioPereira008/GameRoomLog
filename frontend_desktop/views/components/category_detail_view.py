@@ -85,7 +85,7 @@ class CategoryDetailView(QWidget):
         main_layout.addLayout(stats_layout)
 
         # Subtítulo da Lista de Jogos
-        self.section_label = QLabel("Jogos Zerados / Platinados")
+        self.section_label = QLabel("Jogos Zerados / 100%")
         self.section_label.setProperty("class", "section-header-small")
         main_layout.addWidget(self.section_label)
 
@@ -144,7 +144,7 @@ class CategoryDetailView(QWidget):
         self.card_all_games.set_value(str(data.get("total_games", 0)))
         completed = data.get("completed_games", data.get("total_games", 0)) if show_all else data.get("total_games", 0)
         self.card_total_games.set_value(str(completed))
-        self.section_label.setText("Todos os jogos" if show_all else "Jogos Zerados / Platinados")
+        self.section_label.setText("Todos os jogos" if show_all else "Jogos Zerados / 100%")
         self.card_total_hours.set_value(f"{data.get('total_hours_played', 0)}h")
         self.game_grid.set_games(data.get("games", []))
 

@@ -259,6 +259,29 @@ def test_card_paints_both_genres_and_platform(qapp, monkeypatch):
     grid.close()
 
 
+def test_card_marks_100_percent_with_all_achievements(qapp, monkeypatch):
+    from PySide6.QtCore import Qt
+    from frontend_desktop.views.components import game_card_delegate as gcd
+    marked = []
+    original = gcd.GameCardDelegate._achievements_mark
+    monkeypatch.setattr(gcd.GameCardDelegate, "_achievements_mark",
+                        staticmethod(lambda painter, rect: marked.append(rect) or original(painter, rect)))
+    games = [{"id": 1, "title": "Dragon's Dogma 2", "status": "Platinado", "all_achievements": True},
+             {"id": 2, "title": "Pokémon Sword", "status": "Platinado", "all_achievements": False}]
+    grid = GameGrid(mode=MODE_FULL)
+    grid.resize(700, 500)
+    grid.set_games(games)
+    grid.show()
+    qapp.processEvents()
+    grid.grab()
+    assert {(r.x(), r.y()) for r in marked} == {(marked[0].x(), marked[0].y())}  # só o card com conquistas
+    grid.close()
+    model = GameListModel()
+    model.set_games(games)
+    assert "100% com todas as conquistas" in model.data(model.index(0), Qt.ToolTipRole)
+    assert "conquistas" not in model.data(model.index(1), Qt.ToolTipRole)
+
+
 def test_text_color_contrast_for_genre_badges():
     assert text_color_for("#ffffff").name() == "#000000"
     assert text_color_for("#111111").name() == "#ffffff"

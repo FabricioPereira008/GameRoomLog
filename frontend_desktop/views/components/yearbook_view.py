@@ -224,7 +224,7 @@ class YearbookView(QWidget):
         stats_layout.setContentsMargins(0, 0, 0, 0)
         stats_layout.setSpacing(12)
         self.card_finished = StatCard("Jogos Zerados", "0", "circle-check")
-        self.card_platinums = StatCard("Platinas", "0", "trophy")
+        self.card_platinums = StatCard("Jogos 100%", "0", "trophy")
         self.card_hours = StatCard("Horas Jogadas", "0h", "clock")
         self.card_avg = StatCard("Média de Nota", "N/A", "star")
         for card in (self.card_finished, self.card_platinums, self.card_hours, self.card_avg):
@@ -371,6 +371,8 @@ class YearbookView(QWidget):
         self.card_finished.set_value(str(fin_count))
         self.card_finished.set_title(self.compare_text(fin_count, summary.get("previous_year_finished"), year))
         self.card_platinums.set_value(str(summary.get("total_platinums", 0)))
+        with_achievements = summary.get("total_all_achievements", 0)
+        self.card_platinums.set_title(f"Jogos 100% ({with_achievements} com conquistas)" if with_achievements else "Jogos 100%")
         self.card_hours.set_value(hours_text(summary.get("total_hours_played", 0)))
         self.card_avg.set_value(f"{avg:.1f}/10" if avg is not None else "N/A")
 

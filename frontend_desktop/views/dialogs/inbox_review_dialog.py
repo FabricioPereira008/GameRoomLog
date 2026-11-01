@@ -11,19 +11,20 @@ from PySide6.QtWidgets import (
 
 from frontend_desktop.api_client.client import api_client
 from frontend_desktop.ui_helpers import set_status
+from frontend_desktop.views import game_status as gs
 from frontend_desktop.views.dialogs.game_dialog import GameDialog
 from frontend_desktop.workers import run_async
 
 logger = logging.getLogger(__name__)
 
-EVENT_LABELS = {"playing": "Jogando", "finished": "Zerado", "platinum": "Platinado"}
+EVENT_LABELS = {"playing": "Jogando", "finished": "Zerado", "platinum": "100%"}
 MATCH_MARKS = {"exact": "✓", "confirm": "?", "none": "+"}
 FIELD_LABELS = {
     "status": "Status",
     "play_type": "Tipo de jogada",
     "play_count": "Nº de jogadas",
     "finish_date": "Zerado em",
-    "platinum_date": "Platinado em",
+    "platinum_date": "100% em",
     "played_hours": "Horas jogadas",
     "score": "Nota",
     "difficulty": "Dificuldade",
@@ -40,6 +41,8 @@ def format_value(field: str, value) -> str:
         return f"{d}/{m}/{y}"
     if isinstance(value, float):
         return f"{value:g}"
+    if field == "status":
+        return gs.label(value)
     return str(value)
 
 
@@ -59,7 +62,7 @@ def describe_event(event: dict) -> str:
 
 def candidate_label(cand: dict) -> str:
     platform = f" ({cand['platform']})" if cand.get("platform") else ""
-    label = f"{cand['title']}{platform} — {cand['status']} · {cand['similarity']}%"
+    label = f"{cand['title']}{platform} — {gs.label(cand['status'])} · {cand['similarity']}%"
     if not cand.get("platform_matches"):
         label += "  ⚠ plataforma diferente"
     return label

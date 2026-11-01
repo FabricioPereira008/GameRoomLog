@@ -51,7 +51,7 @@ class SortCriterion:
 
 SORT_CRITERIA: Dict[str, SortCriterion] = {
     "finish_date": SortCriterion("Data de zeramento", lambda g: _present(g.get("finish_date")), True, "date"),
-    "platinum_date": SortCriterion("Data de platina", lambda g: _present(g.get("platinum_date")), True, "date"),
+    "platinum_date": SortCriterion("Data do 100%", lambda g: _present(g.get("platinum_date")), True, "date"),
     "score": SortCriterion("Nota", lambda g: _present(g.get("score")), True),
     "played_hours": SortCriterion("Horas jogadas", lambda g: _positive(g.get("played_hours")), True),
     "difficulty": SortCriterion("Dificuldade", lambda g: _present(g.get("difficulty")), True),
@@ -69,6 +69,7 @@ FILTER_FIELDS: Dict[str, str] = {
     "hltb": "Tempo HLTB",
     "plays": "Só jogos rejogados",
     "status": "Status",
+    "achievements": "Conquistas",
     "incomplete": "Só jogos com dados faltando",
 }
 _COMMON_FILTERS = ("genre", "developer", "platform", "franchise", "hltb", "plays", "incomplete")
@@ -86,7 +87,8 @@ PAGES: Dict[str, PageSpec] = {
     "queue": PageSpec("Fila", ("name", "hltb", "created")),
     "available": PageSpec("Disponíveis", ("name", "hltb", "created")),
     "finished": PageSpec("Zerados", ("finish_date", "score", "played_hours", "difficulty", "name")),
-    "platinum": PageSpec("Platinados", ("platinum_date", "score", "played_hours", "difficulty", "name")),
+    "platinum": PageSpec("100%", ("platinum_date", "score", "played_hours", "difficulty", "name"),
+                         _COMMON_FILTERS + ("achievements",)),
     "wishlist": PageSpec("Lista de Desejos", ("name", "created")),
     "category": PageSpec("Páginas de categoria", ("name", "score", "hours"), _COMMON_FILTERS + ("status",)),
 }

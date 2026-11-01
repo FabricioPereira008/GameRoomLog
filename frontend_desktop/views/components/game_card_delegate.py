@@ -137,6 +137,8 @@ class GameCardDelegate(QStyledItemDelegate):
         painter.drawPixmap(cover_rect, pixmap or placeholder_pixmap(m.cover_width, m.cover_height))
         if is_incomplete(game):  # aviso discreto: o tooltip do card lista o que falta
             self._incomplete_mark(painter, cover_rect)
+        if gs.has_all_achievements(game):  # 100% com todas as conquistas
+            self._achievements_mark(painter, cover_rect)
 
         # título
         y = cover_rect.bottom() + 1 + 8
@@ -203,6 +205,18 @@ class GameCardDelegate(QStyledItemDelegate):
                 self._badge(painter, small, small_fm, px, y, text, QColor(COLORS["surface_3"]), QColor(COLORS["text_muted"]), meta_right)
 
         painter.restore()
+
+    @staticmethod
+    def _achievements_mark(painter, cover_rect: QRect) -> None:
+        """Troféu no canto inferior direito da capa (o aviso de dados faltando fica no superior)."""
+        size = 22
+        r = QRectF(cover_rect.right() - size - 5, cover_rect.bottom() - size - 5, size, size)
+        path = QPainterPath()
+        path.addEllipse(r)
+        painter.fillPath(path, QColor(0, 0, 0, 170))
+        icon = 14
+        painter.drawPixmap(QRect(int(r.x() + (size - icon) / 2), int(r.y() + (size - icon) / 2), icon, icon),
+                           icons.pixmap("trophy", COLORS["warning"], icon))
 
     @staticmethod
     def _incomplete_mark(painter, cover_rect: QRect) -> None:

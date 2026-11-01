@@ -6,7 +6,7 @@ from PySide6.QtCore import QAbstractListModel, QModelIndex, QSortFilterProxyMode
 from frontend_desktop.cover_loader import cover_loader
 from frontend_desktop.data_quality import missing_fields
 from frontend_desktop.text_search import fold
-from frontend_desktop.views.game_status import display_hours, is_completed
+from frontend_desktop.views.game_status import display_hours, has_all_achievements, is_completed
 
 GameRole = Qt.UserRole + 1
 
@@ -34,6 +34,8 @@ class GameListModel(QAbstractListModel):
             hours = display_hours(game)
             if hours:
                 lines.append(f"{hours:g}h jogadas" if is_completed(game.get("status")) else f"{hours:g}h estimadas (HLTB)")
+            if has_all_achievements(game):
+                lines.append("100% com todas as conquistas")
             missing = missing_fields(game)
             if missing:
                 lines.append("Faltando: " + ", ".join(missing))

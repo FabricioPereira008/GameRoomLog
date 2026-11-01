@@ -23,9 +23,9 @@ O **GameRoomLog** é um aplicativo desktop nativo e moderno desenvolvido para ge
 
 ## ✨ Funcionalidades Principais
 
-- 🎮 **Game Room Visual:** Visão geral dos jogos que você está jogando agora, próximos na lista, fila de espera, zerados e platinados.
+- 🎮 **Game Room Visual:** Visão geral dos jogos que você está jogando agora, próximos na lista, fila de espera, zerados e 100%.
 - 🔍 **Busca & Filtros Avançados:** Busca instantânea por título e painel retrátil de filtros em tempo real (Gênero, Desenvolvedora, Plataforma, Franquia e Tempo HLTB).
-- 📅 **Anuário Gamer (Yearbook):** Estatísticas detalhadas por ano (horas jogadas, jogos finalizados, platinas conquistadas e médias de avaliação).
+- 📅 **Anuário Gamer (Yearbook):** Estatísticas detalhadas por ano (horas jogadas, jogos finalizados, jogos 100% e médias de avaliação).
 - ⚡ **Performance Zero-Stutter:** Cache inteligente em memória para capas (`QPixmap`), rolagem antecipada suave e carregamento sob demanda em lotes dinâmicos.
 - 🏷️ **Gestão Completa de Categorias:** Organização por Plataformas, Gêneros, Desenvolvedoras e Franquias com autocompletar inteligente e auto-criação.
 - 🧪 **Bem testado:** mais de 400 testes automatizados (API, services, migrações, backups, segurança de uploads, ApiClient, models/grades virtualizadas, tema e performance), com ~93% de cobertura, mínimo de 85% exigido no CI e lint com ruff.

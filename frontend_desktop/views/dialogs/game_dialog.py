@@ -11,6 +11,7 @@ from frontend_desktop.workers import run_async
 from frontend_desktop.cover_loader import cover_loader
 from frontend_desktop.styles.tokens import COLORS
 from frontend_desktop.ui_helpers import set_button_icon, set_status
+from frontend_desktop.views import game_status as gs
 from frontend_desktop.views.dialogs.game_dialog_cover import COVER_PREVIEW_SIZE, NO_COVER_TEXT, CoverMixin  # noqa: F401
 from frontend_desktop.views.dialogs.game_dialog_metadata import MetadataMixin
 from frontend_desktop.views.dialogs.game_dialog_replay import (  # noqa: F401  (reexportados)
@@ -188,7 +189,7 @@ class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
 
         self.combo_status = QComboBox()
         for s in STATUSES:
-            self.combo_status.addItem(s, s)
+            self.combo_status.addItem(gs.label(s), s)  # texto da interface, valor da API
         self._blank_combo(self.combo_status, "Selecione o status…")
         grid.addWidget(self._field("Status", self.combo_status, required=True), 3, 1)
 
@@ -216,7 +217,7 @@ class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
         return spin
 
     def _build_progress_card(self) -> QFrame:
-        """Horas, avaliação e datas (os campos de conclusão só aparecem para Zerado/Platinado)."""
+        """Horas, avaliação e datas (os campos de conclusão só aparecem para Zerado/100%)."""
         card, grid = self._card("Progresso")
 
         self.spin_hltb = self._hours_spin()
@@ -239,11 +240,17 @@ class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
         grid.addWidget(self.field_finish, 2, 0)
 
         self.date_plat = OptionalDateEdit()
-        self.field_plat = self._field("Platinou em", self.date_plat)
+        self.field_plat = self._field("100% em", self.date_plat)
         grid.addWidget(self.field_plat, 2, 1)
 
-        self.combo_status.currentTextChanged.connect(self.on_status_changed)
-        self.on_status_changed(self.combo_status.currentText())
+        self.chk_achievements = QCheckBox("Com conquistas")
+        self.chk_achievements.setToolTip(
+            "Marcado: o 100% inclui todas as conquistas do jogo.\n"
+            "Desmarcado: você fez tudo o que o jogo oferece (jogo sem sistema de conquistas).")
+        grid.addWidget(self.chk_achievements, 3, 1)
+
+        self.combo_status.currentIndexChanged.connect(lambda *_: self.on_status_changed(self.status_value()))
+        self.on_status_changed(self.status_value())
         return card
 
     def _build_play_card(self) -> QFrame:
@@ -310,11 +317,16 @@ class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
 
         main_layout.addLayout(btn_box)
 
+    def status_value(self) -> str:
+        """Valor da API do status escolhido ("" sem escolha); o texto do combo é só o rótulo."""
+        return self.combo_status.currentData() or ""
+
     def on_status_changed(self, status: str):
-        is_finished = status in ("Zerado", "Platinado")
+        is_finished = gs.is_completed(status)
         for field in (self.field_played, self.field_score, self.field_diff, self.field_finish):
             field.setVisible(is_finished)
-        self.field_plat.setVisible(status == "Platinado")
+        self.field_plat.setVisible(status == gs.PLATINADO)
+        self.chk_achievements.setVisible(status == gs.PLATINADO)
 
     def on_play_type_changed(self, *_):
         is_replay = self.chk_replay.isChecked()
@@ -393,7 +405,7 @@ class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
 
         status = self.game_data.get("status")
         if status:
-            idx = self.combo_status.findText(status)
+            idx = self.combo_status.findData(status)
             if idx >= 0:
                 self.combo_status.setCurrentIndex(idx)
 
@@ -434,8 +446,9 @@ class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
             self.date_finish.set_optional_date(QDate.fromString(self.game_data["finish_date"], "yyyy-MM-dd"))
         if self.game_data.get("platinum_date"):
             self.date_plat.set_optional_date(QDate.fromString(self.game_data["platinum_date"], "yyyy-MM-dd"))
+        self.chk_achievements.setChecked(bool(self.game_data.get("all_achievements")))
 
-        self.on_status_changed(self.combo_status.currentText())
+        self.on_status_changed(self.status_value())
 
 
         # Play type e Play count
@@ -494,7 +507,7 @@ class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
         payload = {
             "title": title,
             "developer": self.combo_developer.currentText().strip() or None,
-            "status": self.combo_status.currentText(),
+            "status": self.status_value(),
             "platform_id": self.combo_platform.currentData(),
             "hltb_hours": float(self.spin_hltb.value()),
             "played_hours": float(self.spin_played.value()),
@@ -517,7 +530,7 @@ class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
             payload["finish_date"] = fmt(finish)
             payload["completion_year"] = finish.year() if finish else None
             payload["platinum_date"] = None
-        elif st == "Platinado":
+        elif st == gs.PLATINADO:
             payload["finish_date"] = fmt(finish)
             payload["platinum_date"] = fmt(plat)
             reference = plat or finish
@@ -526,6 +539,7 @@ class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
             payload["finish_date"] = None
             payload["platinum_date"] = None
             payload["completion_year"] = None
+        payload["all_achievements"] = st == gs.PLATINADO and self.chk_achievements.isChecked()
         return payload
 
     @staticmethod

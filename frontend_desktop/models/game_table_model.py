@@ -6,6 +6,7 @@ from PySide6.QtGui import QColor
 
 from frontend_desktop.models.game_list_model import GameRole
 from frontend_desktop.styles.tokens import COLORS
+from frontend_desktop.views import game_status as gs
 
 SortRole = Qt.UserRole + 2
 
@@ -29,7 +30,7 @@ def cell_text(game: dict, column: int) -> str:
     if column == 0:
         return game.get("title", "")
     if column == 1:
-        return game.get("status", "")
+        return "100% · conquistas" if gs.has_all_achievements(game) else gs.label(game.get("status"))
     if column == 2:
         return ", ".join(g.get("name", "") for g in game.get("genres") or [])
     if column == 3:

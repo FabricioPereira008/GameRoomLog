@@ -40,7 +40,7 @@ def test_missing_fields_basic_and_completed_requirements():
     done = {**COMPLETE, "status": "Zerado"}
     assert missing_fields(done) == ["horas jogadas", "nota", "data de zeramento"]
     plat = {**COMPLETE, "status": "Platinado", "played_hours": 30, "score": 0, "finish_date": "2026-01-01"}
-    assert missing_fields(plat) == ["data da platina"]  # nota 0 conta como preenchida
+    assert missing_fields(plat) == ["data do 100%"]  # nota 0 conta como preenchida
     assert is_incomplete(plat)
 
 
@@ -97,6 +97,39 @@ def test_filter_panel_status_and_incomplete(qapp):
     assert panel.combo_status.currentIndex() == 0 and panel.count_active_filters() == 0
 
 
+def test_status_label_and_all_achievements_helpers():
+    from frontend_desktop.views import game_status as gs
+    assert gs.label("Platinado") == "100%" and gs.label("Zerado") == "Zerado" and gs.label(None) == ""
+    assert gs.has_all_achievements({"status": "Platinado", "all_achievements": True})
+    assert not gs.has_all_achievements({"status": "Platinado"})
+    assert not gs.has_all_achievements({"status": "Zerado", "all_achievements": True})
+
+
+def test_filter_panel_achievements_only_where_the_page_allows(qapp):
+    from frontend_desktop.views.components.filter_panel import ACHIEVEMENTS_WITH, ACHIEVEMENTS_WITHOUT, FilterPanel
+    panel = FilterPanel()
+    assert panel.combo_achievements.isHidden()  # sem página: fica fora
+    assert panel.combo_status.itemText(panel.combo_status.findData("Platinado")) == "100%"
+    panel.bind_page("platinum")
+    assert not panel.combo_achievements.isHidden() and not panel.achievements_label.isHidden()
+
+    with_ach = {**COMPLETE, "status": "Platinado", "all_achievements": True}
+    without = {**COMPLETE, "status": "Platinado", "all_achievements": False}
+    panel.combo_achievements.setCurrentIndex(panel.combo_achievements.findData(ACHIEVEMENTS_WITH))
+    match = panel.build_matcher()
+    assert match(with_ach) and not match(without)
+    assert panel.count_active_filters() == 1
+    panel.combo_achievements.setCurrentIndex(panel.combo_achievements.findData(ACHIEVEMENTS_WITHOUT))
+    match = panel.build_matcher()
+    assert match(without) and not match(with_ach)
+
+    panel.clear_filters()
+    assert panel.combo_achievements.currentIndex() == 0 and panel.count_active_filters() == 0
+    panel.combo_achievements.setCurrentIndex(1)
+    panel.bind_page("finished")  # página sem o campo: esconde e zera
+    assert panel.combo_achievements.isHidden() and panel.combo_achievements.currentIndex() == 0
+
+
 # --- páginas de categoria ---
 def test_card_count_text_by_scope():
     from frontend_desktop.views.components.management_view import card_count_text
@@ -138,7 +171,7 @@ def test_category_detail_all_scope_shows_totals_and_status_filter(qapp, monkeypa
     view.load_category("genre", 1)
     _wait(view, qapp)
     assert view.card_all_games.isHidden() and view.game_grid.filter_panel.combo_status.isHidden()
-    assert view.section_label.text() == "Jogos Zerados / Platinados"
+    assert view.section_label.text() == "Jogos Zerados / 100%"
     preferences.set_category_scope("all")
     view.load_category("genre", 1)
     _wait(view, qapp)

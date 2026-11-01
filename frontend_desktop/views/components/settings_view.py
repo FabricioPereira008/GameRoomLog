@@ -30,7 +30,7 @@ CARD_SIZE_OPTIONS = (
 )
 SCOPE_OPTIONS = (
     (preferences.SCOPE_COMPLETED, "Só jogos concluídos",
-     "Contagens, capas e listas mostram apenas os jogos zerados e platinados."),
+     "Contagens, capas e listas mostram apenas os jogos zerados e 100%."),
     (preferences.SCOPE_ALL, "Todos os jogos",
      "Mostra todos os jogos da categoria, com quantos foram zerados; a página da categoria ganha o filtro de status."),
 )

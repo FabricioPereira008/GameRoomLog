@@ -19,6 +19,11 @@ def test_cell_text_formats_every_column():
     assert cell_text(GAMES[1], 8) == "22h" and cell_text(GAMES[2], 9) == ""
 
 
+def test_status_column_shows_100_percent_label():
+    assert cell_text({"status": "Platinado"}, 1) == "100%"
+    assert cell_text({"status": "Platinado", "all_achievements": True}, 1) == "100% · conquistas"
+
+
 def test_model_crud_in_place(qapp):
     m = GameTableModel()
     m.set_games(GAMES)

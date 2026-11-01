@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, Date, DateTime, 
-    ForeignKey, Table, Text, Enum as SQLEnum
+    ForeignKey, Table, Text, Enum as SQLEnum, false
 )
 from sqlalchemy.orm import relationship
 from backend.app.core.database import Base
@@ -63,6 +63,8 @@ class Game(Base):
     # Datas
     finish_date = Column(Date, nullable=True)
     platinum_date = Column(Date, nullable=True)
+    # No 100% (status Platinado): True = pegou todas as conquistas; False = fez tudo num jogo sem conquistas
+    all_achievements = Column(Boolean, default=False, nullable=False, server_default=false())
     completion_year = Column(Integer, nullable=True, index=True)
 
     # Metadados adicionais

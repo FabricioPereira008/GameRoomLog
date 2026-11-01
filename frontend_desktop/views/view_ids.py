@@ -33,7 +33,7 @@ VIEW_META = {
     ViewId.QUEUE: ViewMeta("Fila de espera", "Fila de espera", "list-ordered"),
     ViewId.AVAILABLE: ViewMeta("Jogos disponíveis", "Disponíveis", "library"),
     ViewId.FINISHED: ViewMeta("Jogos zerados", "Zerados", "circle-check"),
-    ViewId.PLATINUM: ViewMeta("Jogos platinados", "Platinados", "trophy"),
+    ViewId.PLATINUM: ViewMeta("Jogos 100%", "100%", "trophy"),
     ViewId.WISHLIST: ViewMeta("Lista de desejos", "Lista de desejos", "gift"),
     ViewId.LIBRARY: ViewMeta("Biblioteca de jogos", "Biblioteca (tabela)", "table-2"),
     ViewId.YEARBOOK: ViewMeta("Anuário gamer", "Anuário", "calendar-days"),

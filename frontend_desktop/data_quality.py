@@ -5,7 +5,7 @@ from frontend_desktop.views import game_status as gs
 
 
 def missing_fields(game: dict) -> List[str]:
-    """Nomes legíveis dos campos vazios; jogos zerados/platinados também precisam dos dados da jogada."""
+    """Nomes legíveis dos campos vazios; jogos zerados/100% também precisam dos dados da jogada."""
     missing = []
     if not (game.get("developer") or "").strip():
         missing.append("desenvolvedora")
@@ -26,7 +26,7 @@ def missing_fields(game: dict) -> List[str]:
         if not game.get("finish_date"):
             missing.append("data de zeramento")
     if status == gs.PLATINADO and not game.get("platinum_date"):
-        missing.append("data da platina")
+        missing.append("data do 100%")
     return missing
 
 

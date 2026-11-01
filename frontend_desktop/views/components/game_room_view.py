@@ -127,7 +127,7 @@ class GameRoomView(QWidget):
         self.grid_finished, self.sec_finished, self.line_finished = create_section(
             "Zerados", "finishedSection", MODE_STRIP, "zerados")
         self.grid_platinum, self.sec_platinum, self.line_platinum = create_section(
-            "Platinados", "platinumSection", MODE_STRIP, "platinados")
+            "100%", "platinumSection", MODE_STRIP, "platinados")
         container_layout.addStretch()
 
         for grid, _sec, _line in self._sections():
@@ -215,7 +215,7 @@ class GameRoomView(QWidget):
         return removed
 
     def insert_game_by_status(self, game_data: dict):
-        """Insere o jogo no topo das seções correspondentes ao status (Platinado entra em duas)."""
+        """Insere o jogo no topo das seções correspondentes ao status (100% entra em duas)."""
         status = game_data.get("status")
         targets = []
         if status == "Jogando":

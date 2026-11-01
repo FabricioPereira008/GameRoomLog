@@ -191,6 +191,7 @@ def test_overall_stats_and_yearbook():
     yb = yb_res.json()
     assert yb["total_games_finished"] == 2
     assert yb["total_platinums"] == 1
+    assert yb["total_all_achievements"] == 0
     assert yb["total_hours_played"] == 39.0
 
     # Test Overall stats
@@ -201,6 +202,21 @@ def test_overall_stats_and_yearbook():
     assert overall["status_counts"]["zerados"] == 1
     assert overall["status_counts"]["platinados"] == 1
     assert overall["total_hours"] == 39.0
+
+
+def test_all_achievements_defaults_false_updates_and_counts_in_yearbook():
+    game = client.post("/api/v1/games/", json={"title": "Dragon's Dogma 2", "status": "Platinado",
+                                                "platinum_date": "2026-03-10"}).json()
+    assert game["all_achievements"] is False
+    res = client.put(f"/api/v1/games/{game['id']}", json={"all_achievements": True})
+    assert res.status_code == 200 and res.json()["all_achievements"] is True
+    assert client.get(f"/api/v1/games/{game['id']}").json()["all_achievements"] is True
+    # Zerado marcado por engano não conta: só 100% com conquistas entra no Anuário
+    client.post("/api/v1/games/", json={"title": "Outro", "status": "Zerado", "finish_date": "2026-04-01",
+                                        "all_achievements": True})
+    yb = client.get("/api/v1/stats/yearbook/2026").json()
+    assert yb["total_platinums"] == 1 and yb["total_all_achievements"] == 1
+    assert client.put(f"/api/v1/games/{game['id']}", json={"all_achievements": "talvez"}).status_code == 422
 
 
 # --- Categorias: erros, contagens e integridade ---

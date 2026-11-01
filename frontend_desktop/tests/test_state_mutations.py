@@ -419,8 +419,9 @@ def test_conditional_fields_follow_status(qapp, monkeypatch):
     d.combo_status.setCurrentText("Zerado")
     assert all(f.isVisible() for f in (d.field_played, d.field_score, d.field_diff, d.field_finish))
     assert not d.field_plat.isVisible()
-    d.combo_status.setCurrentText("Platinado")
-    assert d.field_plat.isVisible()
+    assert not d.chk_achievements.isVisible()
+    d.combo_status.setCurrentText("100%")
+    assert d.field_plat.isVisible() and d.chk_achievements.isVisible()
     assert not d.field_play_count.isVisible()
     d.chk_replay.setChecked(True)
     assert d.field_play_count.isVisible()
@@ -443,12 +444,23 @@ def test_payload_for_blank_new_game_omits_format_and_dates(qapp, monkeypatch):
 def test_payload_platinum_year_prefers_platinum_date(qapp, monkeypatch):
     from PySide6.QtCore import QDate
     _, d = _dialog(qapp, monkeypatch)
-    d.combo_status.setCurrentText("Platinado")
+    d.combo_status.setCurrentText("100%")
+    assert d.status_value() == "Platinado"  # o combo mostra "100%", a API continua recebendo Platinado
     d.date_finish.setDate(QDate(2023, 12, 30))
     assert d._build_payload("X")["completion_year"] == 2023
     d.date_plat.setDate(QDate(2024, 1, 5))
     p = d._build_payload("X")
     assert p["completion_year"] == 2024 and p["platinum_date"] == "2024-01-05"
+
+
+def test_payload_all_achievements_only_for_100_percent(qapp, monkeypatch):
+    _, d = _dialog(qapp, monkeypatch)
+    d.combo_status.setCurrentText("100%")
+    assert d._build_payload("X")["all_achievements"] is False
+    d.chk_achievements.setChecked(True)
+    assert d._build_payload("X")["all_achievements"] is True
+    d.combo_status.setCurrentText("Zerado")  # deixou de ser 100%: a marcação não vale mais
+    assert d._build_payload("X")["all_achievements"] is False
 
 
 def test_payload_replay(qapp, monkeypatch):
@@ -467,10 +479,12 @@ def test_edit_dialog_populates_all_fields(qapp, monkeypatch):
         "genres": [{"id": 3, "name": "RPG"}], "hltb_hours": 60, "played_hours": 120,
         "score": 9.5, "difficulty": 7, "finish_date": "2024-03-01", "platinum_date": "2024-04-02",
         "play_type": "Rejogada", "play_count": 3, "format": "Físico", "is_favorite": True, "notes": "ótimo",
+        "all_achievements": True,
     }
     _, d = _dialog(qapp, monkeypatch, data)
     assert d.input_title.text() == "Elden Ring" and d.combo_developer.currentText() == "Capcom"
-    assert d.combo_status.currentText() == "Platinado" and d.combo_platform.currentText() == "PC"
+    assert d.combo_status.currentText() == "100%" and d.combo_platform.currentText() == "PC"
+    assert d.chk_achievements.isChecked() and d.chk_achievements.isVisibleTo(d)
     assert d.combo_franchise.currentText() == "Saga" and d.combo_genre.currentText() == "RPG"
     assert (d.spin_hltb.value(), d.spin_played.value()) == (60, 120)
     assert d.spin_score.value() == 9.5 and d.spin_diff.value() == 7
