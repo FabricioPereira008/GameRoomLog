@@ -5,7 +5,7 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
-## [Unreleased]
+## [1.6.0] - 2026-11-01
 ### Adicionado
 - **Com conquistas:** jogos 100% ganham a caixa "Com conquistas" no cadastro. Marcada, quer dizer que você pegou todas as conquistas do jogo; desmarcada, que fez tudo o que um jogo sem conquistas oferece. O card mostra um troféu na capa, a aba 100% ganha o filtro "Conquistas" e o Anuário conta quantos 100% do ano tiveram todas as conquistas.
 
