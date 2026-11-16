@@ -67,12 +67,16 @@ FILTER_FIELDS: Dict[str, str] = {
     "platform": "Plataforma",
     "franchise": "Franquia / Série",
     "hltb": "Tempo HLTB",
+    "favorites": "Só jogos favoritos",
     "plays": "Só jogos rejogados",
     "status": "Status",
     "achievements": "Conquistas",
     "incomplete": "Só jogos com dados faltando",
 }
-_COMMON_FILTERS = ("genre", "developer", "platform", "franchise", "hltb", "plays", "incomplete")
+_COMMON_FILTERS = ("genre", "developer", "platform", "franchise", "hltb", "favorites", "plays", "incomplete")
+# Campos criados depois que a personalização já existia: configurações salvas antes deles não os
+# conheciam, então eles entram visíveis (em vez de sumir só porque não estavam na lista salva).
+LATER_FILTERS = frozenset({"favorites"})
 
 
 @dataclass(frozen=True)
@@ -129,8 +133,11 @@ def page_config(page: str) -> PageConfig:
         return default_config(page)
     try:
         data = json.loads(str(raw))
+        filters = tuple(data["filters"])
+        known = set(data.get("known_filters") or set(PAGES[page].filters) - LATER_FILTERS)
+        filters += tuple(f for f in PAGES[page].filters if f not in known)  # campo novo: visível
         config = PageConfig(tuple(data["sorts"]), data.get("default_sort"), bool(data.get("default_descending")),
-                            tuple(data["filters"]))
+                            filters)
     except (ValueError, KeyError, TypeError):
         return default_config(page)
     return normalize(page, config)
@@ -148,6 +155,7 @@ def set_page_config(page: str, config: PageConfig) -> PageConfig:
     preferences.settings().setValue(_key(page), json.dumps({
         "sorts": list(config.sorts), "default_sort": config.default_sort,
         "default_descending": config.default_descending, "filters": list(config.filters),
+        "known_filters": list(PAGES[page].filters),  # campos que existiam quando o usuário escolheu
     }))
     notifier.changed.emit(page)
     return config

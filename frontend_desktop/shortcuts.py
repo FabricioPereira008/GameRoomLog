@@ -21,4 +21,5 @@ SHORTCUTS = (
     Shortcut("Esc", "Fechar a janela de diálogo aberta", GROUP_GENERAL),
     Shortcut("Enter", "Abrir o jogo selecionado", GROUP_LISTS),
     Shortcut("Del", "Excluir o jogo selecionado (pede confirmação)", GROUP_LISTS, "delete_selected_game"),
+    Shortcut("Ctrl+D", "Marcar/desmarcar o jogo selecionado como favorito", GROUP_LISTS, "toggle_favorite_selected"),
 )

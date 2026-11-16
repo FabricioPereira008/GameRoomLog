@@ -11,7 +11,7 @@ from frontend_desktop.ui_helpers import add_search_icon
 from frontend_desktop.views import game_status as gs
 
 # A coluna 0 (título) ocupa o espaço que sobrar; as demais têm largura inicial ajustável
-COLUMN_WIDTHS = {1: 92, 2: 180, 3: 92, 4: 150, 5: 60, 6: 52, 7: 60, 8: 62, 9: 72, 10: 120}
+COLUMN_WIDTHS = {1: 92, 2: 180, 3: 92, 4: 150, 5: 60, 6: 52, 7: 60, 8: 62, 9: 72, 10: 120, 11: 44}
 HIDDEN_COLUMNS_KEY = "table_hidden_columns"
 DEFAULT_HIDDEN_COLUMNS = {10}  # "Tipo"
 
@@ -102,6 +102,9 @@ class GameTable(QWidget):
 
         self.table.doubleClicked.connect(self.on_row_activated)
         self.table.activated.connect(self.on_row_activated)
+        # Clique direito numa linha: menu do jogo (abrir, favoritar, adicionar a ranking)
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self.show_game_menu)
         layout.addWidget(self.table)
 
     # --- colunas ---
@@ -167,6 +170,14 @@ class GameTable(QWidget):
     def update_count_label(self, *_):
         total = self.proxy.rowCount()
         self.count_label.setText(f"{total} {'jogo' if total == 1 else 'jogos'}")
+
+    def show_game_menu(self, pos) -> None:
+        index = self.table.indexAt(pos)
+        game = index.sibling(index.row(), 0).data(GameRole) if index.isValid() else None
+        window = self.window()
+        if game and hasattr(window, "show_game_menu"):
+            self.table.selectRow(index.row())
+            window.show_game_menu(game, self.table.viewport().mapToGlobal(pos))
 
     def on_row_activated(self, index: QModelIndex):
         game = index.sibling(index.row(), 0).data(GameRole)

@@ -59,6 +59,18 @@ class GameListView(QListView):
         if game:
             self.game_clicked.emit(game)
 
+    def contextMenuEvent(self, event):
+        """Clique direito num card: menu do jogo, montado pela janela principal (show_game_menu)."""
+        index = self.indexAt(event.pos())
+        game = index.data(GameRole) if index.isValid() else None
+        window = self.window()
+        if not game or not hasattr(window, "show_game_menu"):
+            event.ignore()
+            return
+        self.setCurrentIndex(index)
+        window.show_game_menu(game, event.globalPos())
+        event.accept()
+
     def wheelEvent(self, event):
         if self._strip:
             # Faixa: rolagem horizontal (trackpad ou Shift+roda); a roda comum continua rolando a página

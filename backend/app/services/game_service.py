@@ -261,7 +261,10 @@ class GameService:
             for replay in others:
                 replay.replay_of_id = new_root.id
             db.flush()
+        from backend.app.services.ranking_service import RankingService  # evita import circular
+        rankings = RankingService.ranking_ids_with_game(db, game_id)
         db.delete(db_game)
         db.commit()
+        RankingService.compact(db, rankings)
         discard_cover_if_unused(db, cover)
         return True

@@ -1,7 +1,7 @@
 import logging
 from app_version import __version__
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QMessageBox, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget,
+    QApplication, QMainWindow, QMenu, QMessageBox, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget,
     QPushButton, QLabel, QStatusBar
 )
 from PySide6.QtCore import Qt, QThread, Signal
@@ -16,6 +16,9 @@ from frontend_desktop.views.components.category_detail_view import CategoryDetai
 from frontend_desktop.views.components.settings_view import SettingsView
 from frontend_desktop.views.components.library_sync_view import LibrarySyncView
 from frontend_desktop.views.components.portable_app_view import PortableAppView
+from frontend_desktop.views.components.favorites_view import FavoritesView, with_detail
+from frontend_desktop.rankings import add_block_reason, entry_ids
+from frontend_desktop import icons
 from frontend_desktop.views.components.game_grid import GameListView
 from frontend_desktop.models.game_list_model import GameRole
 from frontend_desktop.views.dialogs.game_dialog import GameDialog
@@ -137,6 +140,7 @@ class MainWindow(QMainWindow):
         # Telas pesadas/analíticas: criadas na primeira visita
         self._lazy_factories = {
             ViewId.YEARBOOK: self._create_yearbook,
+            ViewId.FAVORITES: self._create_favorites,
             ViewId.GENRES: lambda: self._create_management("genre", "Gênero"),
             ViewId.PLATFORMS: lambda: self._create_management("platform", "Plataforma"),
             ViewId.FRANCHISES: lambda: self._create_management("franchise", "Série / Franquia"),
@@ -197,6 +201,68 @@ class MainWindow(QMainWindow):
                   lambda msg: QMessageBox.critical(self, "Erro", f"Erro ao excluir jogo: {msg}"),
                   game["id"])
 
+    # --- favoritos e rankings ---
+    def toggle_favorite_selected(self):
+        game = self.selected_game_in(QApplication.focusWidget())
+        if game:
+            self.toggle_favorite(game)
+
+    def toggle_favorite(self, game: dict):
+        """Marca/desmarca o favorito sem abrir o diálogo; a mudança entra in-place em todas as telas."""
+        value = not game.get("is_favorite")
+        run_async(self, api_client.update_game,
+                  lambda saved: self._on_favorite_toggled(saved, value),
+                  lambda msg: QMessageBox.critical(self, "Erro", f"Erro ao atualizar o favorito: {msg}"),
+                  game["id"], {"is_favorite": value})
+
+    def _on_favorite_toggled(self, saved: dict, value: bool):
+        self.apply_game_mutation(saved, old_status=saved.get("status"))
+        self.statusBar().showMessage(
+            f"'{saved.get('title')}' {'marcado como favorito' if value else 'removido dos favoritos'}.")
+
+    def fetch_rankings(self) -> list:
+        """Rankings para o menu de contexto (chamada local e rápida; vazio se a API falhar)."""
+        try:
+            return api_client.get_rankings()
+        except Exception:
+            logger.warning("Rankings indisponíveis para o menu", exc_info=True)
+            return []
+
+    def build_game_menu(self, game: dict) -> QMenu:
+        menu = QMenu(self)
+        menu.addAction("Abrir", lambda: self.open_edit_game_dialog(game))
+        favorite = bool(game.get("is_favorite"))
+        action = menu.addAction(icons.icon("heart", COLORS["danger"], 16),
+                                "Remover dos favoritos" if favorite else "Favoritar",
+                                lambda: self.toggle_favorite(game))
+        action.setShortcut(QKeySequence("Ctrl+D"))
+        submenu = menu.addMenu("Adicionar ao ranking")
+        rankings = self.fetch_rankings()
+        for ranking in rankings:
+            reason = add_block_reason(ranking, game)
+            label = ranking["name"] + (f"  ({reason})" if reason else "")
+            act = submenu.addAction(label, lambda r=ranking: self.add_to_ranking(r, game))
+            act.setEnabled(reason is None)
+        if not rankings:
+            submenu.addAction("Nenhum ranking criado").setEnabled(False)
+        submenu.addSeparator()
+        submenu.addAction("Ver rankings...", lambda: self.switch_view(int(ViewId.FAVORITES)))
+        return menu
+
+    def show_game_menu(self, game: dict, global_pos):
+        self.build_game_menu(game).exec(global_pos)
+
+    def add_to_ranking(self, ranking: dict, game: dict):
+        def done(saved: dict):
+            position = entry_ids(saved).index(game["id"]) + 1 if game["id"] in entry_ids(saved) else None
+            self.statusBar().showMessage(f"'{game.get('title')}' entrou em '{saved['name']}' na posição {position}.")
+            view = self._favorites_view()
+            if view is not None:
+                view.load_data()
+        run_async(self, with_detail(api_client.set_ranking_entries), done,
+                  lambda msg: QMessageBox.critical(self, "Rankings", f"Não foi possível adicionar: {msg}"),
+                  ranking["id"], entry_ids(ranking) + [game["id"]])
+
     LIST_VIEWS = {"queue": ViewId.QUEUE, "zerados": ViewId.FINISHED, "platinados": ViewId.PLATINUM}
 
     def open_list_view(self, list_key: str):
@@ -225,6 +291,17 @@ class MainWindow(QMainWindow):
         view = YearbookView()
         view.game_selected.connect(self.open_edit_game_dialog)
         return view
+
+    def _create_favorites(self):
+        view = FavoritesView(games_provider=lambda: self.all_games)
+        view.game_selected.connect(self.open_edit_game_dialog)
+        if self._filter_options:
+            view.set_filter_options(*self._filter_options)
+        return view
+
+    def _favorites_view(self):
+        """A tela de Favoritos, se já foi criada (None caso contrário; não a cria)."""
+        return self._views.get(ViewId.FAVORITES)
 
     def _create_management(self, category_type: str, title: str):
         view = ManagementView(category_type, title)
@@ -268,6 +345,7 @@ class MainWindow(QMainWindow):
         return view
 
     view_yearbook = property(lambda self: self._ensure_view(ViewId.YEARBOOK))
+    view_favorites = property(lambda self: self._ensure_view(ViewId.FAVORITES))
     view_genres = property(lambda self: self._ensure_view(ViewId.GENRES))
     view_platforms = property(lambda self: self._ensure_view(ViewId.PLATFORMS))
     view_franchises = property(lambda self: self._ensure_view(ViewId.FRANCHISES))
@@ -283,7 +361,7 @@ class MainWindow(QMainWindow):
         return ViewId.GAME_ROOM
 
     # --- navegação ---
-    DYNAMIC_VIEWS = (ViewId.YEARBOOK, ViewId.GENRES, ViewId.PLATFORMS, ViewId.FRANCHISES)
+    DYNAMIC_VIEWS = (ViewId.YEARBOOK, ViewId.FAVORITES, ViewId.GENRES, ViewId.PLATFORMS, ViewId.FRANCHISES)
 
     def switch_view(self, index: int):
         view_id = ViewId(index)
@@ -352,6 +430,8 @@ class MainWindow(QMainWindow):
                 self._filter_options = options
                 if ViewId.CATEGORY_DETAIL in self._views:
                     self.view_category_detail.set_filter_options(*options)
+                if self._favorites_view() is not None:
+                    self._favorites_view().set_filter_options(*options)
                 for view in [
                     self.view_game_room, self.view_queue_grid, self.view_disponiveis_grid,
                     self.view_zerados_grid, self.view_platinados_grid, self.view_wishlist_grid
@@ -423,6 +503,9 @@ class MainWindow(QMainWindow):
         for _, grid in self._list_grids():
             grid.remove_game(game_id)
         self.view_table.remove_game(game_id)
+        if self._favorites_view() is not None:
+            self._favorites_view().remove_game(game_id)
+        self._sync_category_detail(None, deleted)
         self.statusBar().showMessage(f"Jogo removido com sucesso. Total: {len(self.all_games)}")
 
     def _refresh_replay_originals(self, game_ids) -> None:
@@ -435,6 +518,29 @@ class MainWindow(QMainWindow):
                       lambda game, status=original.get("status"): self.apply_game_mutation(game, old_status=status),
                       lambda msg: logger.warning("Falha ao atualizar o original da rejogada: %s", msg),
                       original_id)
+
+    # Campos que mudam quais jogos a página de categoria mostra ou os números dela
+    CATEGORY_FIELDS = ("status", "played_hours", "platform_id", "franchise_id", "developer_id")
+
+    @classmethod
+    def _category_signature(cls, game: dict) -> tuple:
+        genres = tuple(sorted(g.get("id") for g in game.get("genres") or []))
+        return tuple(game.get(f) for f in cls.CATEGORY_FIELDS) + (genres,)
+
+    def _sync_category_detail(self, saved: dict = None, previous: dict = None) -> None:
+        """Página de um gênero/plataforma/franquia: o card muda in-place (ex.: favoritar); se a mudança afeta
+        quem pertence à categoria ou as estatísticas e a página está aberta, ela é recarregada."""
+        view = self._views.get(ViewId.CATEGORY_DETAIL)
+        if view is None or not view.category_id:
+            return
+        if saved is None:  # exclusão
+            removed = view.game_grid.remove_game((previous or {}).get("id"))
+            changed = removed
+        else:
+            view.game_grid.update_game(saved)
+            changed = self._category_signature(saved) != self._category_signature(previous or {})
+        if changed and self.stack.currentWidget() is view:
+            view.load_category(view.category_type, view.category_id)
 
     def _list_grids(self):
         """Pares (chave da lista, grid) alimentados por status; ver game_status.LIST_STATUSES."""
@@ -454,6 +560,9 @@ class MainWindow(QMainWindow):
         previous = {} if is_new else next((g for g in self.all_games if g.get("id") == game_id), {})
         if previous.get("replay_of_id") != saved_game.get("replay_of_id"):
             self._refresh_replay_originals({previous.get("replay_of_id"), saved_game.get("replay_of_id")})
+        if self._favorites_view() is not None:
+            self._favorites_view().apply_game(saved_game)
+        self._sync_category_detail(saved_game, previous)
 
         if is_new:
             self.all_games.insert(0, saved_game)

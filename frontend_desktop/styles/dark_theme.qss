@@ -393,6 +393,15 @@ QListWidget#ignoredList::item:selected { background-color: $accent_soft; color: 
 /* ===== Anuário ===== */
 QFrame[class="podium-card"] { background-color: $surface_2; border: 1px solid $border; border-radius: $r_lg; }
 QFrame[class="podium-card"]:hover { border: 1px solid $accent_border; }
+QFrame[class="ranking-row"] { background-color: $surface_2; border: 1px solid $border; border-radius: $r_md; }
+QFrame[class="ranking-row"]:hover { border: 1px solid $accent_border; }
+QListWidget[class="ranking-list"] { background: transparent; border: none; }
+QListWidget[class="ranking-list"]::item { background: transparent; border: none; padding: 0; }
+QListWidget[class="ranking-list"]::item:selected { background: transparent; }
+QListWidget[class="ranking-nav"] { background: transparent; border: none; outline: none; }
+QListWidget[class="ranking-nav"]::item { padding: 8px 10px; margin-bottom: 2px; border-radius: $r_md; color: $text_muted; }
+QListWidget[class="ranking-nav"]::item:hover { background-color: $surface_2; color: $text; }
+QListWidget[class="ranking-nav"]::item:selected { background-color: $accent_soft; color: $accent_text; font-weight: 600; }
 QLabel[class="podium-title"] { font-size: $fs_md; font-weight: 700; color: $text; }
 QFrame[class="highlight-tile"] { background-color: $surface_2; border: 1px solid $border; border-radius: $r_md; }
 QLabel[class="highlight-value"] { font-size: $fs_md; font-weight: 600; color: $text; }

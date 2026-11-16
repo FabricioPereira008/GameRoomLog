@@ -89,7 +89,7 @@ class SuggestField(QLineEdit):
 class FilterPanel(QWidget):
     """
     Componente retrátil de filtros avançados em tempo real (Gênero, Desenvolvedora, Plataforma, Franquia, HLTB,
-    status — opcional — e só incompletos).
+    status — opcional —, só favoritos, só rejogados e só incompletos).
     """
     filters_changed = Signal()
 
@@ -201,17 +201,23 @@ class FilterPanel(QWidget):
         grid.addWidget(self.achievements_label, 3, 2)
         grid.addWidget(self.combo_achievements, 3, 3)
 
-        # Linha 3: rejogados
+        # Linha 3: favoritos
+        self.chk_favorites = QCheckBox("Só jogos favoritos")
+        self.chk_favorites.setToolTip("Mostra só os jogos marcados com o coração.")
+        self.chk_favorites.setCursor(Qt.PointingHandCursor)
+        grid.addWidget(self.chk_favorites, 3, 0, 1, 2)
+
+        # Linha 4: rejogados
         self.chk_replayed = QCheckBox("Só jogos rejogados")
         self.chk_replayed.setToolTip("Mostra todas as jogadas dos jogos rejogados: a original e as rejogadas.")
         self.chk_replayed.setCursor(Qt.PointingHandCursor)
-        grid.addWidget(self.chk_replayed, 3, 0, 1, 2)
+        grid.addWidget(self.chk_replayed, 4, 0, 1, 2)
 
-        # Linha 4: só incompletos e Limpar
+        # Linha 5: só incompletos e Limpar
         self.chk_incomplete = QCheckBox("Só jogos com dados faltando")
         self.chk_incomplete.setToolTip("Sem desenvolvedora, gênero, plataforma, capa ou HLTB; zerados também sem horas, nota ou data.")
         self.chk_incomplete.setCursor(Qt.PointingHandCursor)
-        grid.addWidget(self.chk_incomplete, 4, 0, 1, 2)
+        grid.addWidget(self.chk_incomplete, 5, 0, 1, 2)
 
         actions_layout = QHBoxLayout()
         actions_layout.setContentsMargins(0, 0, 0, 0)
@@ -225,7 +231,7 @@ class FilterPanel(QWidget):
         self.btn_clear.clicked.connect(self.clear_filters)
         actions_layout.addWidget(self.btn_clear)
 
-        grid.addLayout(actions_layout, 4, 2, 1, 2)
+        grid.addLayout(actions_layout, 5, 2, 1, 2)
 
         # Conectar eventos de mudança para disparo em tempo real
         for _label, field in self._fields.values():
@@ -234,6 +240,7 @@ class FilterPanel(QWidget):
         self.spin_hltb.valueChanged.connect(self._on_any_change)
         self.combo_status.currentIndexChanged.connect(self._on_any_change)
         self.combo_achievements.currentIndexChanged.connect(self._on_any_change)
+        self.chk_favorites.toggled.connect(self._on_any_change)
         self.chk_replayed.toggled.connect(self._on_any_change)
         self.chk_incomplete.toggled.connect(self._on_any_change)
 
@@ -263,6 +270,7 @@ class FilterPanel(QWidget):
             return self._fields[kind]
         return {
             "hltb": (self.hltb_label, self.combo_hltb_op, self.spin_hltb),
+            "favorites": (self.chk_favorites,),
             "plays": (self.chk_replayed,),
             "status": (self.status_label, self.combo_status),
             "achievements": (self.achievements_label, self.combo_achievements),
@@ -285,6 +293,8 @@ class FilterPanel(QWidget):
             return True
         widget, active, reset = {
             "hltb": (self.spin_hltb, self.spin_hltb.value() > 0, lambda: self.spin_hltb.setValue(0)),
+            "favorites": (self.chk_favorites, self.chk_favorites.isChecked(),
+                          lambda: self.chk_favorites.setChecked(False)),
             "plays": (self.chk_replayed, self.chk_replayed.isChecked(), lambda: self.chk_replayed.setChecked(False)),
             "status": (self.combo_status, self.combo_status.currentIndex() > 0, lambda: self.combo_status.setCurrentIndex(0)),
             "achievements": (self.combo_achievements, self.combo_achievements.currentIndex() > 0,
@@ -360,6 +370,8 @@ class FilterPanel(QWidget):
             count += 1
         if self.combo_achievements.currentData():
             count += 1
+        if self.chk_favorites.isChecked():
+            count += 1
         if self.chk_replayed.isChecked():
             count += 1
         if self.chk_incomplete.isChecked():
@@ -388,6 +400,7 @@ class FilterPanel(QWidget):
         for widget, reset in ((self.spin_hltb, lambda: self.spin_hltb.setValue(0)),
                               (self.combo_status, lambda: self.combo_status.setCurrentIndex(0)),
                               (self.combo_achievements, lambda: self.combo_achievements.setCurrentIndex(0)),
+                              (self.chk_favorites, lambda: self.chk_favorites.setChecked(False)),
                               (self.chk_replayed, lambda: self.chk_replayed.setChecked(False)),
                               (self.chk_incomplete, lambda: self.chk_incomplete.setChecked(False))):
             widget.blockSignals(True)
@@ -405,6 +418,7 @@ class FilterPanel(QWidget):
         at_least, at_most = "≥" in op, "≤" in op
         status = self.combo_status.currentData() or ""  # escondido = sempre "Todos os status"
         achievements = self.combo_achievements.currentData() or ""
+        only_favorites = self.chk_favorites.isChecked()
         only_replayed = self.chk_replayed.isChecked()
         only_incomplete = self.chk_incomplete.isChecked()
 
@@ -429,6 +443,8 @@ class FilterPanel(QWidget):
             if status and status != STATUS_COMPLETED and game.get("status") != status:
                 return False
             if achievements and gs.has_all_achievements(game) != (achievements == ACHIEVEMENTS_WITH):
+                return False
+            if only_favorites and not game.get("is_favorite"):
                 return False
             if only_replayed and not was_replayed(game):
                 return False

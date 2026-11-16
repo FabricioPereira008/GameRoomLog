@@ -139,6 +139,8 @@ class GameCardDelegate(QStyledItemDelegate):
             self._incomplete_mark(painter, cover_rect)
         if gs.has_all_achievements(game):  # 100% com todas as conquistas
             self._achievements_mark(painter, cover_rect)
+        if game.get("is_favorite"):
+            self._favorite_mark(painter, cover_rect)
 
         # título
         y = cover_rect.bottom() + 1 + 8
@@ -217,6 +219,18 @@ class GameCardDelegate(QStyledItemDelegate):
         icon = 14
         painter.drawPixmap(QRect(int(r.x() + (size - icon) / 2), int(r.y() + (size - icon) / 2), icon, icon),
                            icons.pixmap("trophy", COLORS["warning"], icon))
+
+    @staticmethod
+    def _favorite_mark(painter, cover_rect: QRect) -> None:
+        """Coração no canto superior esquerdo da capa (os outros avisos ficam à direita)."""
+        size = 22
+        r = QRectF(cover_rect.left() + 5, cover_rect.top() + 5, size, size)
+        path = QPainterPath()
+        path.addEllipse(r)
+        painter.fillPath(path, QColor(0, 0, 0, 170))
+        icon = 13
+        painter.drawPixmap(QRect(int(r.x() + (size - icon) / 2), int(r.y() + (size - icon) / 2 + 1), icon, icon),
+                           icons.pixmap("heart-filled", COLORS["danger"], icon))
 
     @staticmethod
     def _incomplete_mark(painter, cover_rect: QRect) -> None:

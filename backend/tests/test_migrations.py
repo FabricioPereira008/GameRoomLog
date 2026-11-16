@@ -6,7 +6,7 @@ from sqlalchemy import inspect
 from backend.app.core.database import Base
 from backend.app.core.migrations import run_migrations
 
-HEAD_REVISION = "0009_all_achievements"
+HEAD_REVISION = "0010_rankings"
 import backend.app.models  # noqa: F401
 
 
@@ -32,7 +32,8 @@ def test_migrations_are_idempotent(tmp_path):
 def test_legacy_database_is_adopted_without_losing_data(tmp_path):
     engine = _engine(tmp_path)
     # como versões antigas criavam o banco (sem as tabelas posteriores à baseline)
-    later = {"game_store_links", "ignored_store_games", "inbox_events", "yearbook_picks"}
+    later = {"game_store_links", "ignored_store_games", "inbox_events", "yearbook_picks",
+             "rankings", "ranking_entries"}
     Base.metadata.create_all(engine, tables=[t for n, t in Base.metadata.tables.items() if n not in later])
     with engine.begin() as c:
         c.execute(sa.text("alter table game_genres drop column position"))  # coluna da 0004

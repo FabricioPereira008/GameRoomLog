@@ -9,6 +9,9 @@ from backend.app.core.migrations import run_migrations
 from backend.app.services.backup_service import auto_backup
 from backend.app.api.v1.api_router import api_router
 from backend.app.services.category_service import CategoryConflictError, CategoryNotFoundError
+from backend.app.services.ranking_service import (
+    InvalidRankingError, RankingConflictError, RankingNotFoundError,
+)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -41,6 +44,18 @@ async def category_not_found_handler(request: Request, exc: CategoryNotFoundErro
 @app.exception_handler(CategoryConflictError)
 async def category_conflict_handler(request: Request, exc: CategoryConflictError):
     return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+@app.exception_handler(RankingNotFoundError)
+async def ranking_not_found_handler(request: Request, exc: RankingNotFoundError):
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+@app.exception_handler(RankingConflictError)
+async def ranking_conflict_handler(request: Request, exc: RankingConflictError):
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+@app.exception_handler(InvalidRankingError)
+async def invalid_ranking_handler(request: Request, exc: InvalidRankingError):
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 # Montar diretório estático para capas
 app.mount("/static/covers", StaticFiles(directory=settings.COVERS_DIR), name="covers")

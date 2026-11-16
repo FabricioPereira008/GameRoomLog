@@ -19,6 +19,7 @@ class ViewId(IntEnum):
     CATEGORY_DETAIL = 12
     SYNC = 13
     PORTABLE = 14
+    FAVORITES = 15
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ VIEW_META = {
     ViewId.AVAILABLE: ViewMeta("Jogos disponíveis", "Disponíveis", "library"),
     ViewId.FINISHED: ViewMeta("Jogos zerados", "Zerados", "circle-check"),
     ViewId.PLATINUM: ViewMeta("Jogos 100%", "100%", "trophy"),
+    ViewId.FAVORITES: ViewMeta("Favoritos e rankings", "Favoritos", "heart"),
     ViewId.WISHLIST: ViewMeta("Lista de desejos", "Lista de desejos", "gift"),
     ViewId.LIBRARY: ViewMeta("Biblioteca de jogos", "Biblioteca (tabela)", "table-2"),
     ViewId.YEARBOOK: ViewMeta("Anuário gamer", "Anuário", "calendar-days"),
@@ -49,7 +51,7 @@ VIEW_META = {
 # Grupos exibidos na sidebar, na ordem
 NAV_SECTIONS = [
     ("Biblioteca", [ViewId.GAME_ROOM, ViewId.QUEUE, ViewId.AVAILABLE, ViewId.FINISHED,
-                    ViewId.PLATINUM, ViewId.WISHLIST, ViewId.LIBRARY]),
+                    ViewId.PLATINUM, ViewId.FAVORITES, ViewId.WISHLIST, ViewId.LIBRARY]),
     ("Explorar", [ViewId.YEARBOOK, ViewId.GENRES, ViewId.PLATFORMS, ViewId.FRANCHISES]),
     ("Importar", [ViewId.SYNC, ViewId.PORTABLE]),
 ]

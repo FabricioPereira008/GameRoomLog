@@ -266,6 +266,31 @@ class ApiClient:
     def set_yearbook_top3(self, year: int, game_ids: List[int]) -> Dict[str, Any]:
         return self._json("PUT", f"stats/yearbook/{year}/top3", json={"game_ids": game_ids})
 
+    # --- RANKINGS DE FAVORITOS ---
+    def get_rankings(self) -> List[Dict[str, Any]]:
+        return self._json("GET", "rankings/")
+
+    def get_ranking(self, ranking_id: int) -> Dict[str, Any]:
+        return self._json("GET", f"rankings/{ranking_id}")
+
+    def create_ranking(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self._json("POST", "rankings/", json=data)
+
+    def update_ranking(self, ranking_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self._json("PUT", f"rankings/{ranking_id}", json=data)
+
+    def delete_ranking(self, ranking_id: int) -> bool:
+        return self._delete(f"rankings/{ranking_id}")
+
+    def set_ranking_entries(self, ranking_id: int, game_ids: List[int]) -> Dict[str, Any]:
+        return self._json("PUT", f"rankings/{ranking_id}/entries", json={"game_ids": game_ids})
+
+    def reorder_rankings(self, ranking_ids: List[int]) -> List[Dict[str, Any]]:
+        return self._json("PUT", "rankings/order", json={"ranking_ids": ranking_ids})
+
+    def get_game_rankings(self, game_id: int) -> List[Dict[str, Any]]:
+        return self._json("GET", f"rankings/by-game/{game_id}")
+
     def get_overall_stats(self) -> Dict[str, Any]:
         return self._json("GET", "stats/overall")
 

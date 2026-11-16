@@ -12,9 +12,11 @@ SortRole = Qt.UserRole + 2
 
 COLUMNS = [
     "Jogo", "Status", "Gênero", "Plataforma", "Desenvolvedora",
-    "Ano", "Nota", "Dific.", "HLTB", "Jogadas", "Tipo",
+    "Ano", "Nota", "Dific.", "HLTB", "Jogadas", "Tipo", "♥",
 ]
-COLUMN_TOOLTIPS = {7: "Dificuldade", 8: "Duração estimada (HowLongToBeat)", 9: "Horas jogadas", 10: "Tipo de jogada"}
+FAVORITE_COLUMN = 11  # no fim: as colunas escondidas salvas no QSettings continuam com o mesmo índice
+COLUMN_TOOLTIPS = {7: "Dificuldade", 8: "Duração estimada (HowLongToBeat)", 9: "Horas jogadas", 10: "Tipo de jogada",
+                   FAVORITE_COLUMN: "Favorito"}
 NUMERIC_COLUMNS = {5, 6, 7, 8, 9}
 
 STATUS_COLORS = {
@@ -47,6 +49,8 @@ def cell_text(game: dict, column: int) -> str:
         return _hours(game.get("hltb_hours"))
     if column == 9:
         return _hours(game.get("played_hours"))
+    if column == FAVORITE_COLUMN:
+        return "♥" if game.get("is_favorite") else ""
     return game.get("play_type", "")
 
 
@@ -61,6 +65,8 @@ def sort_key(game: dict, column: int):
         return game.get("hltb_hours") or 0
     if column == 9:
         return game.get("played_hours") or 0
+    if column == FAVORITE_COLUMN:
+        return 1 if game.get("is_favorite") else 0
     return cell_text(game, column).lower()
 
 
@@ -95,6 +101,10 @@ class GameTableModel(QAbstractTableModel):
             return sort_key(game, col)
         if role == Qt.TextAlignmentRole and col in NUMERIC_COLUMNS:
             return int(Qt.AlignRight | Qt.AlignVCenter)
+        if role == Qt.TextAlignmentRole and col == FAVORITE_COLUMN:
+            return int(Qt.AlignCenter)
+        if role == Qt.ForegroundRole and col == FAVORITE_COLUMN:
+            return QColor(COLORS["danger"])
         if role == Qt.ForegroundRole and col == 1:
             color = STATUS_COLORS.get(game.get("status"))
             return QColor(color) if color else None

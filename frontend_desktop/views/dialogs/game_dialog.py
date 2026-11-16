@@ -26,6 +26,13 @@ STATUSES = ["Disponível", "Fila", "Próximo", "Jogando", "Zerado", "Platinado",
 FORMATS = ["Digital", "Físico", "Emulado"]
 
 
+def rankings_text(positions: list) -> str:
+    """Ex.: "Nos rankings: #2 em Top Soulslike · #5 em Top de todos os tempos" ("" se nenhum)."""
+    if not positions:
+        return ""
+    return "Nos rankings: " + " · ".join(f"#{p['position']} em {p['name']}" for p in positions)
+
+
 class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
     def __init__(self, game_data: dict = None, parent=None):
         super().__init__(parent)
@@ -283,7 +290,23 @@ class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
 
         self.chk_favorite = QCheckBox("Favorito")
         grid.addWidget(self.chk_favorite, 3, 0)
+
+        # Em quais rankings de favoritos o jogo está (só na edição; preenchido em background)
+        self.lbl_rankings = QLabel("")
+        self.lbl_rankings.setWordWrap(True)
+        self.lbl_rankings.setProperty("class", "settings-desc")
+        self.lbl_rankings.setVisible(False)
+        grid.addWidget(self.lbl_rankings, 4, 0, 1, 2)
         return card
+
+    def load_rankings(self) -> None:
+        run_async(self, api_client.get_game_rankings, self._on_rankings_loaded,
+                  lambda msg: logger.info("Rankings do jogo indisponíveis: %s", msg), self.game_data["id"])
+
+    def _on_rankings_loaded(self, positions: list) -> None:
+        text = rankings_text(positions)
+        self.lbl_rankings.setText(text)
+        self.lbl_rankings.setVisible(bool(text))
 
     def _build_notes_card(self) -> QFrame:
         card, grid = self._card("Anotações")
@@ -461,6 +484,8 @@ class GameDialog(CoverMixin, ReplayLinkMixin, MetadataMixin, QDialog):
 
         self.combo_format.setCurrentText(self.game_data.get("format") or "Digital")
         self.chk_favorite.setChecked(bool(self.game_data.get("is_favorite")))
+        if self.game_data.get("id"):
+            self.load_rankings()
         self.input_notes.setText(self.game_data.get("notes") or "")
 
         self.update_cover_preview()
