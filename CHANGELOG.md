@@ -5,6 +5,17 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [1.7.0] - 2026-11-16
+### Adicionado
+- **Favoritos e rankings:** nova página Favoritos, com rankings pessoais como "Top 10 de todos os tempos" ou "Top Soulslike". Cada ranking tem nome, tamanho (Top 1 a 50) e um filtro opcional por gênero, franquia ou plataforma; a ordem muda arrastando ou pelas setas. Embaixo, a grade "Todos os favoritos".
+- Coração na capa dos jogos favoritos e coluna ♥ na tabela.
+- Clique direito numa capa ou linha da tabela: abrir, favoritar/remover dos favoritos e adicionar a um ranking. Ctrl+D marca ou desmarca o favorito do jogo selecionado.
+- O diálogo do jogo mostra em quais rankings ele está (ex.: "#2 em Top Soulslike").
+- Filtro "Só jogos favoritos" em todas as páginas.
+
+### Corrigido
+- As páginas de gênero, plataforma e franquia não atualizavam ao favoritar ou editar um jogo; agora o card muda na hora e a página recarrega quando a mudança afeta a categoria.
+
 ## [1.6.0] - 2026-11-01
 ### Adicionado
 - **Com conquistas:** jogos 100% ganham a caixa "Com conquistas" no cadastro. Marcada, quer dizer que você pegou todas as conquistas do jogo; desmarcada, que fez tudo o que um jogo sem conquistas oferece. O card mostra um troféu na capa, a aba 100% ganha o filtro "Conquistas" e o Anuário conta quantos 100% do ano tiveram todas as conquistas.
